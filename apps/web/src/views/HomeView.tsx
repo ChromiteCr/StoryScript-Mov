@@ -1,6 +1,6 @@
-import { useMemo, useState, type FormEvent } from 'react';
-import { FrameFormat } from '@storyscript/contracts';
-import { FolderOpen, FolderPlus } from 'lucide-react';
+import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { FrameFormat, type RecentProject } from '@storyscript/contracts';
+import { FolderOpen, FolderPlus, Plus, X } from 'lucide-react';
 import { useCreateProject, useOpenProject, useRecentProjects } from '../lib/queries.ts';
 import {
   basename,
@@ -13,7 +13,12 @@ import {
 } from '../lib/format.ts';
 import { ErrorNotice } from '../components/ErrorNotice.tsx';
 import { FolderField } from '../components/FolderField.tsx';
-import { Button, Field, SectionHeading, Spinner, TextInput } from '../components/ui.tsx';
+import { Button, Field, IconButton, SelectInput, Spinner, TextInput } from '../components/ui.tsx';
+
+/**
+ * Home = project manager: recent projects as 2.39 frames on graphite, the
+ * first tile creates a new one. Forms open in a right-hand drawer.
+ */
 
 type Aspect = FrameFormat;
 const ASPECTS: readonly Aspect[] = FrameFormat.options;
@@ -29,79 +34,99 @@ const ASPECT_BOX: Record<Aspect, string> = {
   '1.43': 'aspect-[1.43/1]',
 };
 
-/** Title card: a 2.39 frame with the 1.43 centre-safe guides the boards also use. */
-function TitleCard() {
+// -------------------------------------------------------------------- tiles
+
+/** A 2.39 frame with the dashed 1.43 centre-safe guides the boards also use. */
+function FrameThumb({ kind }: { kind: 'project' | 'new' }) {
+  if (kind === 'new') {
+    return (
+      <span className="flex aspect-[2.39/1] w-full items-center justify-center rounded-control border border-dashed border-graphite-500 text-graphite-300 group-hover:border-graphite-300 group-hover:text-graphite-100">
+        <Plus aria-hidden className="size-5" strokeWidth={1.5} />
+      </span>
+    );
+  }
   return (
-    <figure className="relative">
-      <div className="relative aspect-[2.39/1] w-full border border-graphite bg-sheet">
-        <div aria-hidden className="absolute inset-y-0 left-[20.08%] w-[59.84%] border-x border-dashed border-rule-strong" />
-        <div className="absolute inset-0 flex flex-col items-center justify-center px-6 text-center">
-          <p className="text-[26px] leading-tight font-semibold tracking-tight">StoryScript-Mov</p>
-          <p className="mt-1.5 text-[13px] text-ink-2">实拍分镜工作台</p>
-        </div>
-      </div>
-      <figcaption className="mt-1.5 flex justify-between text-[11px] text-ink-3 tabular-nums">
-        <span>2.39 : 1</span>
-        <span>虚线内为 1.43 : 1 保护区</span>
-      </figcaption>
-    </figure>
+    <span className="relative block aspect-[2.39/1] w-full rounded-control border border-graphite-700 bg-graphite-900 group-hover:border-graphite-500">
+      <span aria-hidden className="absolute inset-y-0 left-[20.08%] w-[59.84%] border-x border-dashed border-graphite-700" />
+    </span>
   );
 }
 
-function RecentProjects() {
-  const recent = useRecentProjects();
-  const open = useOpenProject();
-  const [target, setTarget] = useState<string | null>(null);
+const TILE =
+  'group flex w-full min-w-0 flex-col gap-2 rounded-panel p-1.5 text-left hover:bg-graphite-900 ' +
+  'focus-visible:outline-offset-0 disabled:cursor-wait';
 
+function NewProjectTile({ onClick }: { onClick: () => void }) {
   return (
-    <section aria-labelledby="recent-title">
-      <h2 id="recent-title" className="text-[15px] font-semibold">
-        最近项目
-      </h2>
-      <div className="mt-3">
-        {recent.isPending ? <Spinner label="正在读取…" /> : null}
-        {recent.isError ? <ErrorNotice error={recent.error} /> : null}
-        {recent.data && recent.data.length === 0 ? (
-          <p className="border-y border-rule py-4 text-[13px] text-ink-3">还没有打开过项目。新建一个，或打开已有的项目目录。</p>
-        ) : null}
-        {recent.data && recent.data.length > 0 ? (
-          <ul className="divide-y divide-rule border-y border-rule">
-            {recent.data.map((p) => {
-              const busy = open.isPending && target === p.dir;
-              return (
-                <li key={p.dir}>
-                  <button
-                    type="button"
-                    disabled={open.isPending}
-                    aria-busy={busy || undefined}
-                    onClick={() => {
-                      setTarget(p.dir);
-                      open.mutate(p.dir);
-                    }}
-                    className="group flex w-full items-baseline gap-3 px-2 py-2.5 text-left hover:bg-sheet-sunk disabled:cursor-wait"
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-medium text-ink group-hover:underline">{p.name}</span>
-                      <span className="block truncate font-mono text-[12px] text-ink-3" title={p.dir}>
-                        {p.dir}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-xs text-ink-3 tabular-nums">
-                      {busy ? '正在打开…' : <time dateTime={p.opened_at}>{formatOpenedAt(p.opened_at)}</time>}
-                    </span>
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : null}
-        {open.isError && target ? (
-          <ErrorNotice className="mt-3" error={open.error} context="open" />
-        ) : null}
-      </div>
-    </section>
+    <button type="button" onClick={onClick} aria-haspopup="dialog" className={TILE}>
+      <FrameThumb kind="new" />
+      <span className="min-w-0 px-0.5">
+        <span className="block truncate text-sm font-medium text-graphite-100">新建项目</span>
+        <span className="block truncate text-xs text-graphite-300">选一个文件夹作为项目目录</span>
+      </span>
+    </button>
   );
 }
+
+function ProjectTile({ project, busy, disabled, onOpen }: { project: RecentProject; busy: boolean; disabled: boolean; onOpen: () => void }) {
+  return (
+    <button type="button" onClick={onOpen} disabled={disabled} aria-busy={busy || undefined} title={project.dir} className={TILE}>
+      <FrameThumb kind="project" />
+      <span className="min-w-0 px-0.5">
+        <span className="block truncate text-sm font-medium text-graphite-100">{project.name}</span>
+        <span className="block truncate text-xs text-graphite-300 tabular-nums">
+          {busy ? '正在打开…' : <time dateTime={project.opened_at}>{formatOpenedAt(project.opened_at)}</time>}
+        </span>
+      </span>
+    </button>
+  );
+}
+
+// ------------------------------------------------------------------- drawer
+
+/** Right-hand modal drawer (native <dialog>: focus trap and Escape for free). */
+function Drawer({ title, onClose, children }: { title: string; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const titleId = useId();
+
+  useEffect(() => {
+    const d = ref.current;
+    if (!d) return;
+    if (!d.open) d.showModal();
+    d.querySelector<HTMLInputElement>('input')?.focus();
+    return () => d.close();
+  }, []);
+
+  return (
+    <dialog
+      ref={ref}
+      aria-labelledby={titleId}
+      onCancel={(e) => {
+        e.preventDefault();
+        onClose();
+      }}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose(); // backdrop
+      }}
+      className={
+        'fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-[min(440px,100vw)] max-w-none p-0 ' +
+        '[border-width:0_0_0_1px] border-graphite-700 bg-graphite-900 text-graphite-100'
+      }
+    >
+      <div className="flex h-full flex-col">
+        <header className="flex h-10 shrink-0 items-center justify-between gap-2 border-b border-graphite-800 bg-graphite-800 pr-2 pl-4">
+          <h2 id={titleId} className="text-sm font-medium">
+            {title}
+          </h2>
+          <IconButton icon={X} label="关闭" onClick={onClose} />
+        </header>
+        <div className="min-h-0 flex-1 overflow-auto px-4 py-4">{children}</div>
+      </div>
+    </dialog>
+  );
+}
+
+// -------------------------------------------------------------------- forms
 
 interface CreateErrors {
   dir?: string;
@@ -110,7 +135,7 @@ interface CreateErrors {
   duration?: string;
 }
 
-function CreateProjectForm() {
+function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
   const create = useCreateProject();
   const [dir, setDir] = useState('');
   const [name, setName] = useState('');
@@ -189,7 +214,7 @@ function CreateProjectForm() {
         )}
       </Field>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3">
         <Field label="时区" hint="默认取本机时区。排期时间按它输入和显示。" error={errors.timezone}>
           {({ id, describedBy, invalid }) => (
             <>
@@ -235,21 +260,22 @@ function CreateProjectForm() {
       <Field label="默认画幅" hint="新镜头默认使用这个画幅，单个镜头可以另设。">
         {({ id, describedBy }) => (
           <div className="flex items-center gap-4">
-            <select
+            <SelectInput
               id={id}
               aria-describedby={describedBy}
               value={aspect}
               onChange={(e) => setAspect(e.target.value as Aspect)}
-              className="h-8 w-44 rounded-control border border-rule-strong bg-sheet px-2 text-sm text-ink tabular-nums focus-visible:border-focus"
+              className="w-44 tabular-nums"
             >
               {ASPECTS.map((a) => (
                 <option key={a} value={a}>
                   {a} : 1{ASPECT_NOTE[a] ? `（${ASPECT_NOTE[a]}）` : ''}
                 </option>
               ))}
-            </select>
-            <div aria-hidden className="flex h-[52px] w-[72px] items-center justify-center">
-              <div className={`w-full border border-graphite bg-board-paper ${ASPECT_BOX[aspect]}`} />
+            </SelectInput>
+            {/* live frame preview: a filled shape, so it does not read as another input */}
+            <div aria-hidden className="flex h-8 w-14 items-center justify-center">
+              <div className={`w-full rounded-[1px] bg-graphite-500 ${ASPECT_BOX[aspect]}`} />
             </div>
           </div>
         )}
@@ -257,7 +283,10 @@ function CreateProjectForm() {
 
       {create.isError ? <ErrorNotice error={create.error} context="create" /> : null}
 
-      <div>
+      <div className="flex justify-end gap-2 border-t border-graphite-800 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          取消
+        </Button>
         <Button type="submit" variant="primary" busy={create.isPending}>
           {create.isPending ? null : <FolderPlus aria-hidden className="size-3.5" />}
           创建项目
@@ -267,7 +296,7 @@ function CreateProjectForm() {
   );
 }
 
-function OpenProjectForm() {
+function OpenProjectForm({ onCancel }: { onCancel: () => void }) {
   const open = useOpenProject();
   const [dir, setDir] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -285,6 +314,7 @@ function OpenProjectForm() {
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
+      <p className="text-sm text-graphite-300">列表里没有的项目，从这里打开。</p>
       <Field label="项目目录" hint="包含 project.json 的那个目录。" error={error}>
         {(ids) => (
           <FolderField
@@ -298,8 +328,11 @@ function OpenProjectForm() {
         )}
       </Field>
       {open.isError ? <ErrorNotice error={open.error} context="open" /> : null}
-      <div>
-        <Button type="submit" busy={open.isPending}>
+      <div className="flex justify-end gap-2 border-t border-graphite-800 pt-4">
+        <Button variant="ghost" onClick={onCancel}>
+          取消
+        </Button>
+        <Button type="submit" variant="primary" busy={open.isPending}>
           {open.isPending ? null : <FolderOpen aria-hidden className="size-3.5" />}
           打开项目
         </Button>
@@ -308,32 +341,71 @@ function OpenProjectForm() {
   );
 }
 
+// --------------------------------------------------------------------- page
+
 export function HomeView() {
+  const recent = useRecentProjects();
+  const open = useOpenProject();
+  const [target, setTarget] = useState<string | null>(null);
+  const [drawer, setDrawer] = useState<'create' | 'open' | null>(null);
+  const close = () => setDrawer(null);
+
+  const empty = recent.data !== undefined && recent.data.length === 0;
+
   return (
-    <div className="grid grid-cols-1 gap-x-12 gap-y-10 lg:grid-cols-[minmax(0,5fr)_minmax(0,6fr)]">
-      <div className="flex flex-col gap-8">
-        <TitleCard />
-        <p className="max-w-[46ch] text-[13px] leading-relaxed text-ink-2">
-          项目就是这台电脑上的一个文件夹，原片只读取、不改动。只有在你配置了模型并使用 AI 功能时，才会把相关内容发给你指定的模型服务。
-        </p>
-        <RecentProjects />
+    <div className="mx-auto w-full max-w-[1120px] px-4 py-6 md:px-8 md:py-8">
+      <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+        <div className="min-w-0">
+          <h1 className="text-xl font-medium">项目</h1>
+          <p className="mt-0.5 text-sm text-graphite-300">
+            {empty ? '还没有打开过项目。新建一个，或打开已有的项目目录。' : '最近打开的项目，新的在前。'}
+          </p>
+        </div>
+        <Button onClick={() => setDrawer('open')} aria-haspopup="dialog">
+          <FolderOpen aria-hidden className="size-3.5" />
+          打开已有项目
+        </Button>
       </div>
 
-      <div className="flex flex-col gap-6">
-        <section aria-labelledby="create-title" className="rounded-sheet border border-rule bg-sheet px-5 py-5 sm:px-6">
-          <SectionHeading id="create-title" title="新建项目" description="选一个文件夹作为项目目录。" />
-          <div className="mt-4">
-            <CreateProjectForm />
-          </div>
-        </section>
+      <ul className="mt-6 grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-x-3 gap-y-4 md:grid-cols-[repeat(auto-fill,minmax(184px,1fr))]">
+        <li>
+          <NewProjectTile onClick={() => setDrawer('create')} />
+        </li>
+        {(recent.data ?? []).map((p) => (
+          <li key={p.dir}>
+            <ProjectTile
+              project={p}
+              busy={open.isPending && target === p.dir}
+              disabled={open.isPending}
+              onOpen={() => {
+                setTarget(p.dir);
+                open.mutate(p.dir);
+              }}
+            />
+          </li>
+        ))}
+      </ul>
 
-        <section aria-labelledby="open-title" className="rounded-sheet border border-rule bg-sheet px-5 py-5 sm:px-6">
-          <SectionHeading id="open-title" title="打开已有项目" description="列表里没有的项目，从这里打开。" />
-          <div className="mt-4">
-            <OpenProjectForm />
-          </div>
-        </section>
+      <div className="mt-4 flex flex-col gap-3">
+        {recent.isPending ? <Spinner label="正在读取最近项目…" /> : null}
+        {recent.isError ? <ErrorNotice error={recent.error} /> : null}
+        {open.isError && target ? <ErrorNotice error={open.error} context="open" /> : null}
       </div>
+
+      <p className="mt-10 max-w-[64ch] border-t border-graphite-800 pt-4 text-xs text-graphite-300">
+        项目就是这台电脑上的一个文件夹，原片只读取、不改动。只有在你配置了模型并使用 AI 功能时，才会把相关内容发给你指定的模型服务。
+      </p>
+
+      {drawer === 'create' ? (
+        <Drawer title="新建项目" onClose={close}>
+          <CreateProjectForm onCancel={close} />
+        </Drawer>
+      ) : null}
+      {drawer === 'open' ? (
+        <Drawer title="打开已有项目" onClose={close}>
+          <OpenProjectForm onCancel={close} />
+        </Drawer>
+      ) : null}
     </div>
   );
 }

@@ -8,6 +8,7 @@ export const keys = {
   health: ['health'] as const,
   recent: ['projects', 'recent'] as const,
   project: ['project'] as const,
+  jobs: ['jobs', 'active'] as const,
 };
 
 function onAnyError(error: unknown): void {
@@ -85,10 +86,27 @@ export function useCloseProject() {
     mutationFn: () => api.call('closeProject'),
     onSuccess: () => {
       qc.setQueryData(keys.project, null);
+      qc.removeQueries({ queryKey: keys.jobs });
       void qc.invalidateQueries({ queryKey: keys.recent });
       void qc.invalidateQueries({ queryKey: keys.health });
       navigate(null);
     },
+  });
+}
+
+/**
+ * Active background jobs of the open project, polled once a second (FR-11).
+ * Polling stops after an error (e.g. a server without the jobs route yet) and
+ * resumes on the next explicit refetch.
+ */
+export function useActiveJobs(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.jobs,
+    queryFn: ({ signal }) => api.call('listActiveJobs', undefined, { signal }),
+    enabled,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 1000),
   });
 }
 

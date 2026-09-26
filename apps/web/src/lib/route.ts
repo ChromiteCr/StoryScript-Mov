@@ -1,8 +1,11 @@
 import { useSyncExternalStore } from 'react';
 
-/** Hash routing without a router library: `#/script`, `#/boards`, … */
+/**
+ * Hash routing without a router library: `#/script`, `#/boards`, …
+ * The six workflow stages (order and labels in stages.ts) plus settings.
+ */
 
-export const VIEWS = ['script', 'boards', 'plan', 'media', 'settings'] as const;
+export const VIEWS = ['script', 'boards', 'plan', 'set', 'media', 'deliver', 'settings'] as const;
 export type View = (typeof VIEWS)[number];
 
 const NAVIGATE_EVENT = 'storyscript:navigate';

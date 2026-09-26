@@ -12,3 +12,5 @@ export * from './export/index.ts';
 export { DEFAULT_SLATE_FORMAT, compileSlateFormat, formatSlate, parseSlate, slateRegexSource, type SlateCode } from './media/slate.ts';
 export { validateSourceRange, checkSourceRangeShape, wholeStreamRange, type SourceRangeCheck, type SourceRangeProblem } from './media/source-range.ts';
 export { buildCandidates, compileUserRegex, type BuildCandidatesInput, type BuildCandidatesResult, type CandidateAsset, type CandidateError, type CandidateShot } from './media/candidates.ts';
+export * from './board/index.ts';
+export * from './i18n/index.ts';

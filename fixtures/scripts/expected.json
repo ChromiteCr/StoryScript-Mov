@@ -1,0 +1,105 @@
+{
+  "_note": "拆镜评测期望清单。在首次调用任何真实模型之前提交（2026-09-26），用于防止自评。规则切场部分由 core/script 测试严格断言；拆镜部分按条目计分，目标通过率 ≥80%，低于 60% 触发止损 K4。",
+  "scripts": [
+    {
+      "file": "01-bookshop.txt",
+      "format": "txt",
+      "scenes": [
+        { "display_no": "1", "heading_contains": "旧书店", "time_label": "日" },
+        { "display_no": "2", "heading_contains": "后屋", "time_label": "日" }
+      ],
+      "characters": [
+        { "name": "周明远", "aliases_any": ["老周"] },
+        { "name": "林晓", "aliases_any": [] }
+      ],
+      "mentioned_not_present": ["沈映秋"],
+      "breakdown": [
+        {
+          "scene": "1",
+          "min_shots": 5,
+          "max_shots": 16,
+          "must_include": [
+            { "id": "1a", "desc": "交代书店空间的较大景别镜头", "any_of_sizes": ["EWS", "WS", "FS", "MLS"] },
+            { "id": "1b", "desc": "林晓进门", "quote_contains_any": ["推门进来", "门铃响了"] },
+            { "id": "1c", "desc": "日记本的插入或特写", "any_of_sizes": ["INSERT", "CU", "ECU"], "quote_contains_any": ["日记本", "拆开报纸", "报纸包着"] },
+            { "id": "1d", "desc": "对话覆盖：至少一个过肩或双人镜头", "any_of_templates": ["ots", "two_shot"] },
+            { "id": "1e", "desc": "老周摘眼镜的反应近景", "any_of_sizes": ["MCU", "CU", "ECU"], "quote_contains_any": ["摘下眼镜", "按了按眼角"] },
+            { "id": "1f", "desc": "老周把日记本推回（动作镜头）", "quote_contains_any": ["推回林晓面前", "合上日记本"] }
+          ]
+        },
+        {
+          "scene": "2",
+          "min_shots": 2,
+          "max_shots": 8,
+          "must_include": [
+            { "id": "2a", "desc": "合影的插入或特写", "any_of_sizes": ["INSERT", "CU", "ECU", "MCU"], "quote_contains_any": ["合影", "照片"] },
+            { "id": "2b", "desc": "老周回避目光的反应", "quote_contains_any": ["避开她的目光", "整理一只"] }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "02-last-train.fountain",
+      "format": "fountain",
+      "scenes": [
+        { "display_no": "1", "heading_contains": "站台", "time_label": "NIGHT" },
+        { "display_no": "2", "heading_contains": "出口", "time_label": "NIGHT" },
+        { "display_no": "3", "heading_contains": "站台", "time_label": "NIGHT" }
+      ],
+      "characters": [{ "name": "阿哲", "aliases_any": [] }],
+      "mentioned_not_present": ["妈妈"],
+      "breakdown": [
+        {
+          "scene": "1",
+          "min_shots": 2,
+          "max_shots": 8,
+          "must_include": [
+            { "id": "t1a", "desc": "阿哲冲下楼梯的运动镜头", "any_of_motion": ["l2r", "r2l", "toward", "away"], "quote_contains_any": ["冲下来", "楼梯口"] },
+            { "id": "t1b", "desc": "电子屏的插入", "any_of_sizes": ["INSERT", "CU", "ECU"], "quote_contains_any": ["电子屏", "00:02"] }
+          ]
+        },
+        {
+          "scene": "2",
+          "min_shots": 1,
+          "max_shots": 6,
+          "must_include": [
+            { "id": "t2a", "desc": "手机未接来电的插入", "any_of_sizes": ["INSERT", "CU", "ECU"], "quote_contains_any": ["未接来电", "手机屏幕"] },
+            { "id": "t2b", "desc": "跑进雨里的运动镜头", "any_of_motion": ["l2r", "r2l", "toward", "away"], "quote_contains_any": ["跑进雨里"] }
+          ]
+        },
+        {
+          "scene": "3",
+          "min_shots": 2,
+          "max_shots": 8,
+          "must_include": [
+            { "id": "t3a", "desc": "跨进车厢", "quote_contains_any": ["跨进车厢", "车门在他身后合上"] },
+            { "id": "t3b", "desc": "打电话的近景（含对白）", "any_of_sizes": ["MS", "MCU", "CU"], "dialogue_contains_any": ["赶上了"] }
+          ]
+        }
+      ]
+    },
+    {
+      "file": "03-two-places.md",
+      "format": "md",
+      "scenes": [
+        { "display_no": "1", "heading_contains": "医院走廊", "time_label": "夜" },
+        { "display_no": "2", "heading_contains": "服务区", "time_label": "夜" },
+        { "display_no": "3", "heading_contains": "医院走廊", "time_label": "夜" },
+        { "display_no": "4", "heading_contains": "服务区", "time_label": "夜" },
+        { "display_no": "5", "heading_contains": "病房", "time_label": "夜" },
+        { "display_no": "6", "heading_contains": "服务区", "time_label": "夜" }
+      ],
+      "characters": [
+        { "name": "小陈", "aliases_any": [] },
+        { "name": "老马", "aliases_any": [] }
+      ],
+      "mentioned_not_present": ["儿子"],
+      "breakdown": [
+        { "scene": "1", "min_shots": 1, "max_shots": 5, "must_include": [{ "id": "p1a", "desc": "墙上钟的插入", "any_of_sizes": ["INSERT", "CU", "ECU"], "quote_contains_any": ["墙上的钟", "23:40"] }] },
+        { "scene": "2", "min_shots": 1, "max_shots": 5, "must_include": [{ "id": "p2a", "desc": "保温袋里凉面的插入或特写", "any_of_sizes": ["INSERT", "CU", "ECU"], "quote_contains_any": ["保温袋", "凉了的面"] }] },
+        { "scene": "5", "min_shots": 2, "max_shots": 6, "must_include": [{ "id": "p5a", "desc": "手机来电显示的插入", "any_of_sizes": ["INSERT", "CU", "ECU"], "quote_contains_any": ["儿子", "正在震动的手机"] }] },
+        { "scene": "6", "min_shots": 1, "max_shots": 4, "must_include": [{ "id": "p6a", "desc": "老马反应（含对白）", "dialogue_contains_any": ["怎么了"] }] }
+      ]
+    }
+  ]
+}

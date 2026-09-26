@@ -34,6 +34,8 @@ export const RENDERER_VERSION = 'board-m1.0';
 const FONT = 'PingFang SC, Hiragino Sans GB, Noto Sans CJK SC, Microsoft YaHei, sans-serif';
 const C = {
   paper: gray(255),
+  // far-side limbs of a turned figure: a light tone separates them from near limbs
+  paperFar: gray(228),
   ink: gray(0),
   line: gray(26),
   envLine: gray(118),
@@ -127,23 +129,41 @@ function subjectStroke(it: SubjectItem): { out: number; inner: number } {
 function subjectSvg(it: SubjectItem): string {
   const { out, inner } = subjectStroke(it);
   const g: string[] = [`<g${attrs({ 'data-subject': it.id, 'data-view': it.view })}>`];
+  // 1. bold outer contour: union of the silhouette parts
   const sil = it.parts.filter((p) => p.silhouette).map((p) => polyPath(p.pts));
   if (sil.length) g.push(el('path', { d: sil.join(''), fill: C.ink, stroke: C.ink, 'stroke-width': out, 'stroke-linejoin': 'round' }));
-  it.parts.forEach((p, i) => {
-    const fill = p.fill === 'none' ? 'none' : p.fill === 'hair' ? C.hair : C.paper;
-    g.push(
-      el('path', {
-        d: polyPath(p.pts),
-        fill,
-        stroke: p.stroke ? C.inner : 'none',
-        'stroke-width': p.stroke ? inner : null,
-        'stroke-linejoin': p.stroke ? 'round' : null,
-      }),
-    );
+  // 2. per group (back → front): outlines first, fills on top. Inside a group the
+  //    fills hide the segment seams (one continuous limb, no knee circles); a
+  //    nearer group still draws its contour over a farther one.
+  const linesAfter = (i: number) => {
     for (const l of it.lines) {
       if (l.after === i) g.push(el('path', { d: polyPath(l.pts, false), fill: 'none', stroke: C.inner, 'stroke-width': inner, 'stroke-linecap': 'round' }));
     }
-  });
+  };
+  let i = 0;
+  while (i < it.parts.length) {
+    let j = i;
+    while (j < it.parts.length && it.parts[j]!.group === it.parts[i]!.group) j++;
+    const grp = it.parts.slice(i, j);
+    const outlined = grp.filter((p) => p.stroke).map((p) => polyPath(p.pts));
+    if (outlined.length) {
+      g.push(el('path', { d: outlined.join(''), fill: 'none', stroke: C.inner, 'stroke-width': inner * 2, 'stroke-linejoin': 'round' }));
+    }
+    for (let k = i; k < j; k++) {
+      const p = it.parts[k]!;
+      if (p.fill !== 'none') {
+        const fill = p.fill === 'hair' ? C.hair : p.far ? C.paperFar : C.paper;
+        g.push(el('path', { d: polyPath(p.pts), fill, stroke: 'none' }));
+      }
+    }
+    // a stroke-only part (head outline) redraws its line above the group's fills
+    for (let k = i; k < j; k++) {
+      const p = it.parts[k]!;
+      if (p.fill === 'none' && p.stroke) g.push(el('path', { d: polyPath(p.pts), fill: 'none', stroke: C.inner, 'stroke-width': inner, 'stroke-linejoin': 'round' }));
+    }
+    for (let k = i; k < j; k++) linesAfter(k);
+    i = j;
+  }
   g.push('</g>');
   return g.join('');
 }
@@ -719,7 +739,7 @@ export function renderPuppetPreview(
     order: 0,
     view,
     mirror,
-    parts: shape.parts.map((p) => ({ pts: p.pts.map(px), fill: p.fill, stroke: p.stroke, silhouette: p.silhouette })),
+    parts: shape.parts.map((p) => ({ pts: p.pts.map(px), fill: p.fill, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far })),
     lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1 })),
     heightPx: figure,
     bbox: null,

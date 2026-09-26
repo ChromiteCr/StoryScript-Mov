@@ -117,3 +117,50 @@ describe('puppet geometry', () => {
     }
   });
 });
+
+describe('limb layering (whole limbs, outline-then-fill groups)', () => {
+  const POSES = ['stand', 'walk', 'run', 'sit', 'point', 'crouch'] as const;
+  const VIEWS = ['front', '3q', 'side', 'back'] as const;
+
+  test('every group is contiguous in draw order, so segments of two limbs never interleave', () => {
+    for (const pose of POSES)
+      for (const view of VIEWS) {
+        const groups = buildPuppet(pose, view, false, 'regular').parts.map((p) => p.group);
+        const seen = new Set<string>();
+        for (let i = 0; i < groups.length; i++) {
+          if (i > 0 && groups[i] !== groups[i - 1]) {
+            expect(seen.has(groups[i]!), `${pose}/${view}: group ${groups[i]} reappears`).toBe(false);
+          }
+          seen.add(groups[i]!);
+        }
+      }
+  });
+
+  test('a leg is thigh → shin → foot inside one group unless the thigh points at the viewer', () => {
+    const walk = buildPuppet('walk', 'front', false, 'regular').parts;
+    for (const s of ['A', 'B']) {
+      const g = walk.filter((p) => p.group === `leg${s}`).map((p) => p.key);
+      expect(g).toEqual([`thigh${s}`, `shin${s}`, `foot${s}`]);
+    }
+    const sit = buildPuppet('sit', 'front', false, 'regular').parts;
+    expect(sit.find((p) => p.key === 'thighA')!.group).toBe('torso');
+    expect(sit.filter((p) => p.group === 'legA').map((p) => p.key)).toEqual(['shinA', 'footA']);
+  });
+
+  test('turned figures flag and draw far limbs behind; frontal ones have no far limbs', () => {
+    for (const pose of POSES) {
+      expect(buildPuppet(pose, 'front', false, 'regular').parts.some((p) => p.far)).toBe(false);
+      const side = buildPuppet(pose, 'side', false, 'regular').parts;
+      const far = side.filter((p) => p.far);
+      expect(far.length, pose).toBeGreaterThan(0);
+      const torso = side.findIndex((p) => p.key === 'torso');
+      for (const p of far) expect(side.indexOf(p), `${pose} ${p.key}`).toBeLessThan(torso);
+    }
+  });
+
+  test('mirroring keeps groups and far flags', () => {
+    const a = buildPuppet('walk', '3q', false, 'coat').parts;
+    const b = buildPuppet('walk', '3q', true, 'coat').parts;
+    expect(b.map((p) => [p.key, p.group, p.far])).toEqual(a.map((p) => [p.key, p.group, p.far]));
+  });
+});

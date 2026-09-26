@@ -1,0 +1,20 @@
+{
+  "id": "openrouter",
+  "name": "OpenRouter（/images + input_references）",
+  "host_patterns": ["openrouter.ai"],
+  "dialect": "generations-ref",
+  "path": "/images",
+  "ref_field": "input_references",
+  "ref_format": "data_url",
+  "ref_is_array": true,
+  "size_mode": "aspect_enum",
+  "size_field": "aspect_ratio",
+  "aspect_values": ["21:9", "16:9", "3:2", "4:3", "5:4", "1:1", "4:5", "3:4", "2:3", "9:16"],
+  "response_path": "data.0.b64_json",
+  "response_kind": "b64",
+  "extra_body": {},
+  "optional_params": [],
+  "verified": false,
+  "verified_at": null,
+  "notes": "base_url 通常为 https://openrouter.ai/api/v1。只接受比例枚举，最宽 21:9：更宽的画幅（2.39）按 21:9 出图，控制图同比例补边，出图后本地裁回画框。另有未写进文档的 /images/generations 别名，这里不用。大陆能否直连未验证。未用真实 key 验证。"
+}

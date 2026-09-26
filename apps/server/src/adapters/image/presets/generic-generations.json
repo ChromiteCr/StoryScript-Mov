@@ -1,0 +1,22 @@
+{
+  "id": "generic-generations",
+  "name": "通用 generations + 参考图（主机未匹配任何 preset 时的兜底）",
+  "host_patterns": [],
+  "dialect": "generations-ref",
+  "path": "/images/generations",
+  "ref_field": "image",
+  "ref_format": "data_url",
+  "ref_is_array": true,
+  "size_mode": "pixels",
+  "size_field": "size",
+  "aspect_values": [],
+  "response_path": "data.0.b64_json",
+  "response_kind": "b64",
+  "extra_body": {
+    "response_format": "b64_json"
+  },
+  "optional_params": ["response_format"],
+  "verified": false,
+  "verified_at": null,
+  "notes": "只在手动把方言切到 generations-ref、而主机又不匹配任何 preset 时使用：POST {base_url}/images/generations，参考图放 image 数组（data URL），size 为像素 WxH。未对任何真实服务验证。"
+}

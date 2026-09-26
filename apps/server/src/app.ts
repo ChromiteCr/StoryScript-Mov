@@ -25,6 +25,7 @@ import { registerTakeRoutes } from './routes/takes.ts';
 import { registerMediaRoutes } from './routes/media.ts';
 import { registerLinkRoutes } from './routes/links.ts';
 import { registerCoverageRoutes } from './routes/coverage.ts';
+import { registerRasterRoutes } from './routes/rasters.ts';
 
 export interface CreateAppOptions {
   mode: ServerMode;
@@ -99,6 +100,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerMediaRoutes(app, deps);
   registerLinkRoutes(app, deps);
   registerCoverageRoutes(app, deps);
+  registerRasterRoutes(app, deps);
 
   if (opts.mode === 'production') registerStaticRoutes(app, opts.webDir);
 

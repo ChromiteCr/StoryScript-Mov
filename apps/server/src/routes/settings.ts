@@ -1,21 +1,24 @@
 import type { Hono } from 'hono';
-import { Api, ProviderTestResult, ProvidersView, SaveTextProviderInput } from '@storyscript/contracts';
+import { Api, ProviderTestResult, ProvidersView, SaveImageProviderInput, SaveTextProviderInput, TestImageProviderInput } from '@storyscript/contracts';
 import { redactSecrets } from '../adapters/llm/redact.ts';
+import { imageProviderView, resolveImageProvider, saveImageProvider } from '../config/image-provider.ts';
 import { resolveTextProvider, saveTextProvider, textProviderView } from '../config/text-provider.ts';
 import type { AppDeps } from '../deps.ts';
 import { AppError } from '../http/errors.ts';
 import { respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
+import { testImageProvider } from '../services/raster/provider-test.ts';
 
 /**
- * Provider settings (M3: text only). The key is write-only: responses carry
- * base_url, model, the last 4 characters of the key and where it came from.
+ * Provider settings (M3: text, M8: image). The key is write-only: responses
+ * carry base_url, model, the last 4 characters of the key and where it came
+ * from; the image view adds the detected dialect / preset and host warnings.
  */
 
 const MODELS_TIMEOUT_MS = 10_000;
 
 function view(deps: AppDeps) {
-  return { text: textProviderView(deps.stateDir, deps.env), image: null };
+  return { text: textProviderView(deps.stateDir, deps.env), image: imageProviderView(deps.stateDir, deps.env) };
 }
 
 export function registerSettingsRoutes(app: Hono, deps: AppDeps): void {
@@ -89,5 +92,23 @@ export function registerSettingsRoutes(app: Hono, deps: AppDeps): void {
       model_listed: listed,
       message: listed ? `连接成功，模型 ${r.model} 可用` : `连接成功，但模型列表中没有 ${r.model}，请核对模型名`,
     });
+  });
+
+  // ---- M8: image provider -------------------------------------------------
+
+  app.put(Api.saveImageProvider.path, async (c) => {
+    const input = await parseBody(c, SaveImageProviderInput);
+    saveImageProvider(deps.stateDir, input);
+    const r = resolveImageProvider(deps.stateDir, deps.env);
+    const notice = r.env_fields.length
+      ? `已保存到 credentials.json；但环境变量 ${r.env_fields.map((f) => `STORYSCRIPT_IMAGE_${f.toUpperCase()}`).join('、')} 优先生效`
+      : undefined;
+    return respond(c, ProvidersView, view(deps), 200, notice ? { notice } : undefined);
+  });
+
+  /** paid=false: GET {base}/models only; paid=true: one smallest, lowest-quality image (confirmed by the caller). */
+  app.post(Api.testImageProvider.path, async (c) => {
+    const input = await parseBody(c, TestImageProviderInput);
+    return respond(c, ProviderTestResult, await testImageProvider(deps, input.paid));
   });
 }

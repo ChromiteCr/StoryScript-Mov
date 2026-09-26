@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"]
+  },
+  "include": [
+    "packages/contracts/test",
+    "packages/core/test",
+    "apps/server/src",
+    "apps/server/test",
+    "scripts",
+    "e2e",
+    "vitest.config.ts",
+    "playwright.config.ts"
+  ]
+}

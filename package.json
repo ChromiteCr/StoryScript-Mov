@@ -1,0 +1,35 @@
+{
+  "name": "storyscript-mov-monorepo",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "workspaces": [
+    "packages/contracts",
+    "packages/core",
+    "apps/web",
+    "apps/server"
+  ],
+  "engines": {
+    "node": ">=24.15"
+  },
+  "scripts": {
+    "dev": "npm run dev -w storyscript-mov",
+    "start": "npm run build -w @storyscript/web && npm run start -w storyscript-mov",
+    "build": "npm run build -w @storyscript/web && npm run build -w storyscript-mov",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
+    "look": "tsx scripts/look.ts",
+    "e2e": "playwright test",
+    "licenses": "node scripts/check-licenses.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "24.19.0",
+    "fast-check": "4.10.2",
+    "tsdown": "0.23.0",
+    "tsx": "4.23.15",
+    "typescript": "6.0.3",
+    "vitest": "5.0.2"
+  }
+}

@@ -1,0 +1,55 @@
+import { z } from 'zod';
+
+export const CONTRACTS_VERSION = '1.0.0';
+
+export const Uuid = z.uuid();
+export type Uuid = z.infer<typeof Uuid>;
+
+/** UTC ISO-8601 timestamp, e.g. 2026-09-26T08:00:00.000Z */
+export const IsoTime = z.iso.datetime({ offset: false });
+export type IsoTime = z.infer<typeof IsoTime>;
+
+export const Origin = z.enum(['ai', 'manual']);
+export type Origin = z.infer<typeof Origin>;
+
+export const ErrorCode = z.enum([
+  'VALIDATION_ERROR',
+  'NOT_FOUND',
+  'REVISION_CONFLICT',
+  'LOCKED_SHOT',
+  'SOURCE_OFFLINE',
+  'SOURCE_CHANGED',
+  'PATH_NOT_ALLOWED',
+  'MISSING_CONFIRMATION',
+  'UNSUPPORTED_MEDIA',
+  'UNSUPPORTED_TIMEBASE',
+  'PROVIDER_NOT_CONFIGURED',
+  'PROVIDER_ERROR',
+  'PROVIDER_OUTCOME_UNKNOWN',
+  'PROVIDER_REFUSED',
+  'ATTEMPTS_EXHAUSTED',
+  'FFMPEG_MISSING',
+  'PROJECT_LOCKED',
+  'NO_PROJECT_OPEN',
+  'SCHEMA_VERSION_UNSUPPORTED',
+  'UNAUTHORIZED',
+  'FORBIDDEN',
+  'INTERNAL',
+]);
+export type ErrorCode = z.infer<typeof ErrorCode>;
+
+export const ApiError = z.object({
+  error: z.object({
+    code: ErrorCode,
+    message: z.string(),
+    details: z.unknown().optional(),
+    retryable: z.boolean(),
+  }),
+});
+export type ApiError = z.infer<typeof ApiError>;
+
+/** Wraps a data schema in the success envelope `{ data }`. */
+export const ok = <T extends z.ZodType>(data: T) => z.object({ data });
+
+export const JobAccepted = z.object({ job_id: Uuid });
+export type JobAccepted = z.infer<typeof JobAccepted>;

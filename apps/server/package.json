@@ -1,0 +1,37 @@
+{
+  "name": "storyscript-mov",
+  "version": "0.0.0",
+  "description": "开源、本地运行的实拍分镜工作台：剧本拆镜、宽银幕铅笔分镜、拍摄顺序、场记与素材回链。",
+  "license": "MIT",
+  "type": "module",
+  "engines": {
+    "node": ">=24.15"
+  },
+  "bin": {
+    "storyscript-mov": "./dist/cli.mjs"
+  },
+  "files": [
+    "dist",
+    "web"
+  ],
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/cli.ts start --dev",
+    "start": "tsx src/cli.ts start",
+    "build": "tsdown"
+  },
+  "dependencies": {
+    "@hono/node-server": "2.1.1",
+    "@resvg/resvg-wasm": "2.6.2",
+    "hono": "4.13.9",
+    "jsonrepair": "3.15.0",
+    "open": "11.0.4",
+    "openai": "7.23.0",
+    "zod": "4.6.5"
+  },
+  "devDependencies": {
+    "@storyscript/contracts": "*",
+    "@storyscript/core": "*",
+    "@storyscript/web": "*",
+    "vite": "8.3.1"
+  }
+}

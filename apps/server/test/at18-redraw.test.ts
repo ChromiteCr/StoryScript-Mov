@@ -290,7 +290,7 @@ describe('AT-18 AI pencil redraw (FakeImage)', () => {
     configureImage(app.handle.deps, { timeoutMs: 250 });
     fake.enqueue(imageReply.hang());
     const unknown = await redrawOk({ confirmed: true, quality: 'medium' });
-    expect(unknown.status).toBe('failed');
+    expect(unknown.status).toBe('outcome_unknown');
     expect(unknown.error?.code).toBe('PROVIDER_OUTCOME_UNKNOWN');
     expect(unknown.attempts).toBe(1);
     expect(fake.imageRequests()).toHaveLength(2);

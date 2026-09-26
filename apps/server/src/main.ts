@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util';
-import { readRuntime, resolveStateDir } from './config/paths.ts';
+import { clearRuntime, readRuntime, resolveStateDir } from './config/paths.ts';
 import { runDoctor } from './doctor.ts';
 import { isPidAlive } from './project/lock.ts';
 import { startServer } from './server.ts';
@@ -23,6 +23,9 @@ const HELP = `StoryScript-Mov ${APP_VERSION} — 本地运行的实拍分镜工�
   -v, --version 显示版本
 
 环境变量：STORYSCRIPT_HOME 指定状态目录（默认 ~/.config/storyscript-mov）`;
+
+/** How long a graceful shutdown may take before the process exits anyway. */
+const SHUTDOWN_GRACE_MS = 5_000;
 
 function parsePort(raw: string | undefined): number | null {
   if (raw === undefined) return 0;
@@ -60,11 +63,24 @@ async function cmdStart(opts: { port: number; noOpen: boolean; dev: boolean; dem
     open: !opts.noOpen,
     demo: opts.demo,
   });
+  // One graceful close (runtime.json removed, project lock released). Ctrl+C
+  // reaches the server more than once when it runs under npm/npx/tsx (the
+  // terminal signals the whole group and the wrappers forward it again), so
+  // repeats are ignored instead of killing the process mid-cleanup; a close
+  // that hangs is cut off after SHUTDOWN_GRACE_MS.
+  let stopping = false;
   const shutdown = (signal: NodeJS.Signals) => {
-    void server.close().finally(() => process.exit(signal === 'SIGINT' ? 130 : 0));
+    if (stopping) return;
+    stopping = true;
+    const code = signal === 'SIGINT' ? 130 : 0;
+    setTimeout(() => {
+      clearRuntime(server.stateDir);
+      process.exit(code);
+    }, SHUTDOWN_GRACE_MS).unref();
+    void server.close().finally(() => process.exit(code));
   };
-  process.once('SIGINT', shutdown);
-  process.once('SIGTERM', shutdown);
+  process.on('SIGINT', shutdown);
+  process.on('SIGTERM', shutdown);
   return undefined;
 }
 

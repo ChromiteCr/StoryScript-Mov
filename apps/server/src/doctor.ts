@@ -1,16 +1,18 @@
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { pickH264Encoder } from './adapters/media/ffmpeg.ts';
-import { ensureStateDir, resolveStateDir } from './config/paths.ts';
+import { credentialsPath, ensureStateDir, resolveStateDir } from './config/paths.ts';
 import { detectTools } from './diagnostics.ts';
 import { MIN_NODE_TEXT, nodeVersionOk } from './node-version.ts';
+import { resolveWebDir } from './server.ts';
 import { APP_VERSION } from './version.ts';
 
 /**
  * `storyscript-mov doctor` — environment report.
  * Exit code 0 when Node, SQLite and the state directory are usable;
- * missing ffmpeg/ffprobe is only a warning (media import is disabled).
+ * missing ffmpeg/ffprobe, a missing frontend build (source checkout before
+ * `npm run build`) or a too-open credentials.json are warnings only.
  */
 
 type Level = 'ok' | 'warn' | 'error';
@@ -18,6 +20,8 @@ const TAG: Record<Level, string> = { ok: '[正常]', warn: '[警告]', error: '[
 
 export interface DoctorOptions {
   stateDir?: string;
+  /** built frontend to look for (default: the one `start` would serve) */
+  webDir?: string;
   log?: (line: string) => void;
 }
 
@@ -53,6 +57,26 @@ function checkStateDir(stateDir: string): { level: Level; line: string } {
   }
 }
 
+function checkWebBuild(webDir: string): { level: Level; line: string } {
+  if (existsSync(join(webDir, 'index.html'))) return { level: 'ok', line: `前端产物：${webDir}` };
+  return {
+    level: 'warn',
+    line: `未找到前端产物（${join(webDir, 'index.html')}）：源码运行请用 npm start（会先构建前端），或先执行 npm run build`,
+  };
+}
+
+/** credentials.json holds API keys: it must stay readable by the owner only (0600). */
+function checkCredentials(stateDir: string): { level: Level; line: string } | null {
+  const file = credentialsPath(stateDir);
+  if (process.platform === 'win32' || !existsSync(file)) return null;
+  const mode = statSync(file).mode & 0o777;
+  if ((mode & 0o077) === 0) return { level: 'ok', line: `credentials.json 权限 ${mode.toString(8).padStart(4, '0')}（仅本人可读）` };
+  return {
+    level: 'warn',
+    line: `credentials.json 权限过宽（${mode.toString(8).padStart(4, '0')}），其他用户可能读到 API key：请执行 chmod 600 ${file}`,
+  };
+}
+
 export async function runDoctor(opts: DoctorOptions = {}): Promise<number> {
   const log = opts.log ?? ((line: string) => console.log(line));
   const stateDir = opts.stateDir ?? resolveStateDir();
@@ -84,6 +108,11 @@ export async function runDoctor(opts: DoctorOptions = {}): Promise<number> {
 
   const dir = checkStateDir(stateDir);
   add(dir.level, dir.line);
+  const creds = checkCredentials(stateDir);
+  if (creds) add(creds.level, creds.line);
+
+  const web = checkWebBuild(opts.webDir ?? resolveWebDir());
+  add(web.level, web.line);
 
   const errors = results.filter((r) => r.level === 'error').length;
   const warnings = results.filter((r) => r.level === 'warn').length;

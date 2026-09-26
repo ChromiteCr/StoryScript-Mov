@@ -1,9 +1,13 @@
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import type { BoardView, Project, Scene, Shot } from '@storyscript/contracts';
+import { frameSize } from '@storyscript/core';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { paginateBoards, paginateTopviews, type PrintCell, type PrintPage } from '../../lib/print-boards.ts';
+import { rasterImageUrl, readAiLabelPref } from '../../lib/queries-raster.ts';
 import { Button, SelectInput } from '../../components/ui.tsx';
+import { AiBadge } from './AiLayer.tsx';
 import { boardUrl } from './images.ts';
+import { overlayOnlyUrl } from './raster-layers.ts';
 
 /**
  * Print views (FR-10, browser print CSS): the board PDF — frames of aspect
@@ -12,6 +16,10 @@ import { boardUrl } from './images.ts';
  * print; white paper, black ink, greyscale pictures, the app's Chinese font
  * stack. A page is marked 草案 unless all its shots are locked and current.
  * Printing waits until every picture has loaded.
+ *
+ * A frame whose board version has an adopted AI raster (FR-12) prints the
+ * raster plus the vector annotation layer, with the "AI 生成" corner mark
+ * unless the export preference turned it off (default on).
  */
 
 export type PrintKind = 'boards' | 'topview';
@@ -58,9 +66,37 @@ function PageHead({ page, total, project, scriptVersion, title }: { page: PrintP
   );
 }
 
-function Picture({ cell, mode, onLoad }: { cell: PrintCell; mode: 'pencil' | 'topview'; onLoad: (key: string) => void }) {
+/** Adopted AI raster + annotation layer (+ corner mark); loaded once both images decoded. */
+function AiPicture({ cell, rasterId, label, onLoad }: { cell: PrintCell; rasterId: string; label: boolean; onLoad: (key: string) => void }) {
+  const spec = cell.board.spec;
+  const code = cell.board.shot_code;
+  const overlayUrl = useMemo(() => overlayOnlyUrl(spec, code), [spec, code]);
+  const { W, H } = frameSize(spec.frame.aspect);
+  const key = `${cell.board.id}:pencil`;
+  const count = useRef(0);
+  const done = () => {
+    count.current += 1;
+    if (count.current >= 2) onLoad(key);
+  };
+  return (
+    <div className="relative border border-ink/60" data-ai-raster={rasterId}>
+      <img src={rasterImageUrl(rasterId)} alt={`镜 ${cell.caption.code}（AI 生成，已人工采用）`} onLoad={done} onError={done} className="block h-auto w-full print:grayscale" />
+      <img src={overlayUrl} alt="" onLoad={done} onError={done} className="absolute inset-0 block h-full w-full" />
+      {label ? (
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" role="img" aria-label="AI 生成" className="pointer-events-none absolute inset-0 h-full w-full">
+          <AiBadge spec={spec} code={code} />
+        </svg>
+      ) : null}
+    </div>
+  );
+}
+
+function Picture({ cell, mode, onLoad, aiLabel }: { cell: PrintCell; mode: 'pencil' | 'topview'; onLoad: (key: string) => void; aiLabel: boolean }) {
   const url = useMemo(() => boardUrl({ spec: cell.board.spec, mode, overlay: true, code: cell.board.shot_code }), [cell.board, mode]);
   const key = `${cell.board.id}:${mode}`;
+  if (mode === 'pencil' && cell.board.adopted_raster_id) {
+    return <AiPicture cell={cell} rasterId={cell.board.adopted_raster_id} label={aiLabel} onLoad={onLoad} />;
+  }
   return (
     <img
       src={url}
@@ -110,6 +146,7 @@ export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion
   const ready = loaded >= total;
   const title = kind === 'boards' ? '分镜' : '俯视站位';
   const sceneIds = [...new Set(boards.map((b) => b.scene_id))];
+  const aiLabel = useMemo(() => readAiLabelPref(project.id), [project.id]);
 
   return (
     <div className="flex min-h-full flex-col gap-1 p-1 print:block print:bg-print-paper print:p-0">
@@ -160,7 +197,7 @@ export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion
                       data-print-cell={cell.caption.code}
                       className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.42fr)] items-start gap-3 break-inside-avoid print:grid-cols-[128mm_minmax(0,1fr)]"
                     >
-                      <Picture cell={cell} mode="pencil" onLoad={markLoaded} />
+                      <Picture cell={cell} mode="pencil" onLoad={markLoaded} aiLabel={aiLabel} />
                       <Caption cell={cell} />
                     </article>
                   ))}
@@ -174,11 +211,11 @@ export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion
                       className="grid grid-cols-[minmax(0,1fr)_minmax(0,0.62fr)] items-start gap-3 break-inside-avoid print:grid-cols-[112mm_minmax(0,1fr)]"
                     >
                       <div className="flex flex-col gap-1">
-                        <Picture cell={cell} mode="topview" onLoad={markLoaded} />
+                        <Picture cell={cell} mode="topview" onLoad={markLoaded} aiLabel={aiLabel} />
                         <p className="text-xs text-ink/70">俯视 · 站位示意（非实景测量）</p>
                       </div>
                       <div className="flex flex-col gap-1.5">
-                        <Picture cell={cell} mode="pencil" onLoad={markLoaded} />
+                        <Picture cell={cell} mode="pencil" onLoad={markLoaded} aiLabel={aiLabel} />
                         <p className="text-xs text-ink">
                           <span className="text-sm font-medium tabular-nums">{cell.caption.code}</span>
                           <span className="ml-1.5 text-ink/70">{cell.caption.version}</span>

@@ -3,6 +3,7 @@ import type { BoardSpec } from '@storyscript/contracts';
 import { frameSize } from '@storyscript/core';
 import { arrowHandles, moveArrowEnd, moveSubjectFoot, pointerToFrame, subjectHandles } from '../../lib/board-editor.ts';
 import type { BoardViewMode } from '../../lib/labels-boards.ts';
+import { AiLayer, type AiLayerProps } from './AiLayer.tsx';
 import { useBoardUrl } from './images.ts';
 import type { EditorApi } from './useEditor.ts';
 
@@ -14,6 +15,8 @@ import type { EditorApi } from './useEditor.ts';
  * drag an arrow end. While dragging, the picture renders as structure
  * (fast); on release the chosen mode comes back. Handles are also keyboard
  * operable: focus one and use the arrow keys (Shift = bigger steps).
+ * An AI raster (FR-12) can sit between the picture and the handles; it is
+ * hidden while a handle is dragged so the structure shows through.
  */
 
 type Drag = { kind: 'foot'; id: string } | { kind: 'arrow'; id: string; end: 'from' | 'to' };
@@ -34,11 +37,13 @@ export interface BoardCanvasProps {
   alt: string;
   /** null: read-only (an older version) */
   editor: EditorApi | null;
+  /** AI raster layer (adopted or compared); null = none */
+  ai?: Omit<AiLayerProps, 'spec' | 'code'> | null;
 }
 
 const NUDGE = 0.004;
 
-export function BoardCanvas({ spec, mode, code, alt, editor }: BoardCanvasProps) {
+export function BoardCanvas({ spec, mode, code, alt, editor, ai = null }: BoardCanvasProps) {
   const dragging = editor?.dragging ?? false;
   const req = useMemo(() => ({ spec, mode: dragging ? ('structure' as const) : mode, overlay: true, code }), [spec, mode, dragging, code]);
   const url = useBoardUrl(req, dragging);
@@ -123,6 +128,7 @@ export function BoardCanvas({ spec, mode, code, alt, editor }: BoardCanvasProps)
   return (
     <div ref={box} className="relative w-full select-none">
       <img src={url} alt={alt} draggable={false} className="block h-auto w-full" />
+      {ai && !dragging ? <AiLayer spec={spec} code={code} {...ai} /> : null}
       {editor ? (
         <svg
           ref={layer}

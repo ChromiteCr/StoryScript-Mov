@@ -376,6 +376,7 @@ function BoardsWorkbench({
   const main = (
     <BoardMain
       project={project}
+      board={current}
       editor={editor}
       shot={shot}
       mode={mode}

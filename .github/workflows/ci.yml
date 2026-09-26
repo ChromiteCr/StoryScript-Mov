@@ -21,12 +21,10 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
       - run: npm ci
       - run: npm run typecheck
+      # the install smoke is opt-in (STORYSCRIPT_SMOKE=1) and gets its own step below:
+      # it builds, packs and runs npm ci, kept apart from the timing-sensitive render/DB tests
       - name: Unit and API tests
         run: npm test
-        env:
-          # the install smoke has its own step below (it builds, packs and runs npm ci),
-          # kept apart from the timing-sensitive render/DB tests
-          STORYSCRIPT_SMOKE: '0'
       - name: Build (web + server package)
         run: npm run build
       - name: Licenses (THIRD_PARTY_NOTICES.md must be committed up to date)

@@ -14,3 +14,10 @@ export { validateSourceRange, checkSourceRangeShape, wholeStreamRange, type Sour
 export { buildCandidates, compileUserRegex, type BuildCandidatesInput, type BuildCandidatesResult, type CandidateAsset, type CandidateError, type CandidateShot } from './media/candidates.ts';
 export * from './board/index.ts';
 export * from './i18n/index.ts';
+export * from './script/parse.ts';
+export * from './script/quote.ts';
+export * from './script/relink.ts';
+export * from './shots/normalize.ts';
+export * from './shots/validate.ts';
+export * from './shots/hash.ts';
+export * from './shots/eval-score.ts';

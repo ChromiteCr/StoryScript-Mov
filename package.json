@@ -21,7 +21,10 @@
     "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",
     "look": "tsx scripts/look.ts",
     "e2e": "playwright test",
-    "licenses": "node scripts/check-licenses.mjs"
+    "licenses": "node scripts/check-licenses.mjs",
+    "ui:shots": "tsx scripts/ui-shots.ts",
+    "eval:breakdown": "tsx scripts/eval-breakdown.ts",
+    "gen:media": "tsx scripts/gen-media.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

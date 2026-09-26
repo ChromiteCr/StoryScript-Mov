@@ -15,6 +15,15 @@
  *     x = L·cos a + F·sin a,   depth toward viewer t = −L·sin a + F·cos a
  * which narrows shoulders/hips by cos a and pushes far-side limbs back; far limbs
  * are also thinned and drawn behind the torso. Screen-left facings are mirrors.
+ *
+ * Layering is decided per whole limb, never per segment, so a leg's thigh,
+ * shin and foot can never interleave with the other leg. Parts carry a
+ * `group`; renderers draw each group's outlines first and its fills on top,
+ * which merges thigh/shin/foot into one continuous limb (no knee circles)
+ * while a nearer group still draws its contour over a farther one.
+ * Layer order, back → front:
+ *   far arm → legs behind the pelvis → torso (+neck, + any thigh pointing at the
+ *   viewer) → shins of those legs → coat/skirt → near arms → head
  */
 import type { Pose, Silhouette } from '@storyscript/contracts';
 import { DEG, chaikin, clamp, convexHull, type V2, wrapDeg } from './math.ts';
@@ -377,6 +386,10 @@ export type PuppetFill = 'body' | 'hair' | 'none';
 
 export interface PuppetPart {
   key: string;
+  /** limb/body group; consecutive parts of one group are drawn outline-then-fill */
+  group: string;
+  /** far-side limb of a turned figure (renderers may tone it down) */
+  far: boolean;
   /** closed polygon, normalised units (x right, y up, standing height 1) */
   pts: V2[];
   fill: PuppetFill;
@@ -394,7 +407,7 @@ export interface PuppetLine {
 export interface PuppetShape {
   view: PuppetView;
   mirror: boolean;
-  /** parts in draw order (back → front) */
+  /** parts in draw order (back → front), grouped contiguously by `group` */
   parts: PuppetPart[];
   /** interior detail lines (face / coat hints), drawn after the parts they sit on */
   lines: PuppetLine[];
@@ -471,22 +484,40 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   const P = (k: Joint): V2 => [sx(J[k]), J[k].y];
   const T = (k: Joint): number => tz(J[k]);
   const turned = Math.abs(sa) > 0.3;
-  const thin = (t: number) => (turned && t < -0.02 ? 0.88 : 1);
 
-  type Draft = PuppetPart & { t: number };
+  type Draft = PuppetPart & { layer: number; t: number };
   const drafts: Draft[] = [];
-  const limb = (key: string, j0: Joint, j1: Joint, r: readonly [number, number], bias: number) => {
-    const t = (T(j0) + T(j1)) / 2;
-    const k = thin(t);
-    drafts.push({ key, pts: capsule(P(j0), P(j1), r[0] * k, r[1] * k), fill: 'body', stroke: true, silhouette: true, t: t + bias });
+  const LAYER = { farArm: 0, legBehind: 1, torso: 2, legFront: 3, skirt: 4, arm: 5, head: 6 } as const;
+  const push = (d: Omit<Draft, 'far'> & { far?: boolean }) => drafts.push({ far: false, ...d });
+
+  // One depth per whole limb (mean of its joints): segments of a limb never interleave.
+  const limbDepth = (js: readonly Joint[]) => js.reduce((acc, j) => acc + T(j), 0) / js.length;
+  const limb = (group: string, layer: number, t: number, far: boolean, segs: readonly [string, Joint, Joint, readonly [number, number]][]) => {
+    const k = far ? 0.88 : 1;
+    for (const [key, j0, j1, r] of segs) {
+      push({ key, group, far, layer, t, pts: capsule(P(j0), P(j1), r[0] * k, r[1] * k), fill: 'body', stroke: true, silhouette: true });
+    }
   };
 
-  // Legs: behind the torso when turned; over the pelvis (under any skirt) when frontal.
-  const legBias = turned ? -0.08 : 0.001;
+  // Legs sit behind the pelvis. A thigh that points at the viewer (sitting,
+  // crouching, a raised running knee seen from the front) instead merges into
+  // the torso group — no seam where it leaves the pelvis — and its shin/foot
+  // draw on top, so the knee reads over the foreshortened thigh.
   for (const s of ['A', 'B'] as const) {
-    limb(`thigh${s}`, `hip${s}`, `kn${s}`, R.thigh, legBias);
-    limb(`shin${s}`, `kn${s}`, `an${s}`, R.shin, legBias - 0.001);
-    limb(`foot${s}`, `he${s}`, `to${s}`, R.foot, legBias + 0.001);
+    const t = limbDepth([`hip${s}`, `kn${s}`, `an${s}`]);
+    const far = turned && t < -0.02;
+    const towardViewer = !turned && T(`kn${s}`) - T(`hip${s}`) > 0.12;
+    const thigh: [string, Joint, Joint, readonly [number, number]] = [`thigh${s}`, `hip${s}`, `kn${s}`, R.thigh];
+    const lower: [string, Joint, Joint, readonly [number, number]][] = [
+      [`shin${s}`, `kn${s}`, `an${s}`, R.shin],
+      [`foot${s}`, `he${s}`, `to${s}`, R.foot],
+    ];
+    if (towardViewer) {
+      limb('torso', LAYER.torso, 0.001 + t * 0.001, false, [thigh]);
+      limb(`leg${s}`, LAYER.legFront, t, false, lower);
+    } else {
+      limb(`leg${s}`, LAYER.legBehind, t, far, [thigh, ...lower]);
+    }
   }
 
   // Torso: sections along the spine, offset along the spine normal.
@@ -528,7 +559,7 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
     ...right,
     ...left.reverse(),
   ];
-  drafts.push({ key: 'torso', pts: chaikin(torsoPts, 2), fill: 'body', stroke: true, silhouette: true, t: 0 });
+  push({ key: 'torso', group: 'torso', layer: LAYER.torso, t: 0, pts: chaikin(torsoPts, 2), fill: 'body', stroke: true, silhouette: true });
 
   // Coat tail / dress: hull over waist, hips, (bent) knees and a flat hem; lightly rounded.
   let hemY: number | null = null;
@@ -565,7 +596,7 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
       }
     }
     const hull = convexHull(pts);
-    drafts.push({ key: 'skirt', pts: chaikin(hull, 1, 0.14), fill: 'body', stroke: true, silhouette: true, t: 0.004 });
+    push({ key: 'skirt', group: 'skirt', layer: LAYER.skirt, t: 0, pts: chaikin(hull, 1, 0.14), fill: 'body', stroke: true, silhouette: true });
   }
 
   // Neck and head.
@@ -574,23 +605,30 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   const toHead: V2 = [hc[0] - nk[0], hc[1] - nk[1]];
   const nl = Math.hypot(toHead[0], toHead[1]) || 1;
   const neckTop: V2 = [nk[0] + (toHead[0] / nl) * 0.04, nk[1] + (toHead[1] / nl) * 0.04];
-  drafts.push({ key: 'neck', pts: capsule(nk, neckTop, R.neck[0], R.neck[1]), fill: 'body', stroke: true, silhouette: true, t: -0.001 });
+  // neck belongs to the torso group, drawn before it so the collar covers its base
+  push({ key: 'neck', group: 'torso', layer: LAYER.torso, t: -0.001, pts: capsule(nk, neckTop, R.neck[0], R.neck[1]), fill: 'body', stroke: true, silhouette: true });
 
-  // Arms (in front of the torso unless on the far side).
+  // Arms: in front of the torso, except the far arm of a turned figure.
   for (const s of ['A', 'B'] as const) {
-    limb(`upperArm${s}`, `sh${s}`, `el${s}`, R.upperArm, 0.02);
-    limb(`foreArm${s}`, `el${s}`, `wr${s}`, R.foreArm, 0.021);
-    limb(`hand${s}`, `wr${s}`, `ha${s}`, R.hand, 0.022);
+    const t = limbDepth([`sh${s}`, `el${s}`, `wr${s}`]);
+    const far = turned && t < -0.02;
+    limb(`arm${s}`, far ? LAYER.farArm : LAYER.arm, t, far, [
+      [`upperArm${s}`, `sh${s}`, `el${s}`, R.upperArm],
+      [`foreArm${s}`, `el${s}`, `wr${s}`, R.foreArm],
+      [`hand${s}`, `wr${s}`, `ha${s}`, R.hand],
+    ]);
   }
 
   const rx = projW(HEAD.rxFront, HEAD.rxSide, a);
   const ry = HEAD.ry;
-  const headT = T('head') + 0.03;
+  const headT = 0;
 
   // Nose bump (profile only) sits behind the head fill.
   if (view === 'side') {
-    drafts.push({
+    push({
       key: 'nose',
+      group: 'head',
+      layer: LAYER.head,
       pts: [
         [hc[0] + rx - 0.012, hc[1] + 0.006],
         [hc[0] + rx + 0.017, hc[1] - 0.02],
@@ -603,16 +641,27 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
     });
   }
   const headPoly = ellipse(hc, rx, ry, 28);
-  drafts.push({ key: 'head', pts: headPoly, fill: 'hair', stroke: true, silhouette: true, t: headT });
+  push({ key: 'head', group: 'head', layer: LAYER.head, pts: headPoly, fill: 'hair', stroke: true, silhouette: true, t: headT });
 
   // Face: the part of the head's front hemisphere below the hairline.
   const face = facePolygon(hc, rx, ry, VIEW_ANGLE[view]);
-  if (face) drafts.push({ key: 'face', pts: face, fill: 'body', stroke: false, silhouette: false, t: headT + 0.0001 });
-  drafts.push({ key: 'headLine', pts: headPoly, fill: 'none', stroke: true, silhouette: false, t: headT + 0.0002 });
+  if (face) push({ key: 'face', group: 'head', layer: LAYER.head, pts: face, fill: 'body', stroke: false, silhouette: false, t: headT + 0.0001 });
+  push({ key: 'headLine', group: 'head', layer: LAYER.head, pts: headPoly, fill: 'none', stroke: true, silhouette: false, t: headT + 0.0002 });
 
-  // Stable sort back → front.
-  const order = drafts.map((d, i) => ({ d, i })).sort((p, q) => p.d.t - q.d.t || p.i - q.i);
-  const parts: PuppetPart[] = order.map(({ d }) => ({ key: d.key, pts: d.pts, fill: d.fill, stroke: d.stroke, silhouette: d.silhouette }));
+  // Stable sort back → front: layer, then whole-limb depth; a group's parts stay
+  // contiguous and in authoring order (thigh → shin → foot).
+  const order = drafts
+    .map((d, i) => ({ d, i }))
+    .sort((p, q) => p.d.layer - q.d.layer || p.d.t - q.d.t || (p.d.group < q.d.group ? -1 : p.d.group > q.d.group ? 1 : 0) || p.i - q.i);
+  const parts: PuppetPart[] = order.map(({ d }) => ({
+    key: d.key,
+    group: d.group,
+    far: d.far,
+    pts: d.pts,
+    fill: d.fill,
+    stroke: d.stroke,
+    silhouette: d.silhouette,
+  }));
   const lines: PuppetLine[] = [];
   const lineAfter: number[] = [];
   const idxOf = (key: string) => parts.findIndex((p) => p.key === key);

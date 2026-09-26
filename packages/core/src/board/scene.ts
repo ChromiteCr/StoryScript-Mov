@@ -52,6 +52,10 @@ export interface PuppetPrim {
   fill: PuppetFill;
   stroke: boolean;
   silhouette: boolean;
+  /** draw group (see puppets.ts): outlines of a group go under its fills */
+  group: string;
+  /** far-side limb of a turned figure */
+  far: boolean;
 }
 
 export interface SubjectItem {
@@ -382,10 +386,11 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
     const ref = (s.pose === 'point' ? [capsule([0, 0], [-0.2 * Hm, 0.3 * Hm], 0.03 * Hm, 0.022 * Hm)] : []).map((poly) =>
       plane(topY * 0.8, poly),
     );
-    for (const r of ref) if (r.length >= 3) parts.push({ pts: r, fill: 'body', stroke: true, silhouette: true });
-    if (shoulders.length >= 3) parts.push({ pts: shoulders, fill: 'body', stroke: true, silhouette: true });
-    if (nose.length >= 3) parts.push({ pts: nose, fill: 'body', stroke: true, silhouette: true });
-    if (headPoly.length >= 3) parts.push({ pts: headPoly, fill: 'hair', stroke: true, silhouette: true });
+    const prim = (pts: V2[], group: string, fill: PuppetFill = 'body'): PuppetPrim => ({ pts, fill, stroke: true, silhouette: true, group, far: false });
+    for (const r of ref) if (r.length >= 3) parts.push(prim(r, 'arm'));
+    if (shoulders.length >= 3) parts.push(prim(shoulders, 'torso'));
+    if (nose.length >= 3) parts.push(prim(nose, 'head'));
+    if (headPoly.length >= 3) parts.push(prim(headPoly, 'head', 'hair'));
     const all = parts.flatMap((p) => p.pts);
     const bbox = bboxOf(all);
     const span = bbox ? Math.max(bbox.x1 - bbox.x0, bbox.y1 - bbox.y0) : 0;
@@ -411,7 +416,7 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
   const idxMap: number[] = [];
   for (const p of shape.parts) {
     const pts = projectPolygon(b, p.pts.map(toWorld)).map(px);
-    if (pts.length >= 3) parts.push({ pts, fill: p.fill, stroke: p.stroke, silhouette: p.silhouette });
+    if (pts.length >= 3) parts.push({ pts, fill: p.fill, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far });
     idxMap.push(parts.length - 1);
   }
   const lines = shape.lines

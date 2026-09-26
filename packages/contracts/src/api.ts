@@ -5,6 +5,10 @@ import { Job } from './job.ts';
 import { CreateProjectInput, Project, RecentProject } from './project.ts';
 import { ParsedScript, Scene, ScreenSides, ScriptFormat, ScriptVersion } from './script.ts';
 import { RequiredStatus, Shot, ShotDraft, ShotFields, ShotRevision } from './shot.ts';
+import { CoverageDecision, CoverageDecisionKind, CoverageResult } from './coverage.ts';
+import { LinkCandidate, MediaAsset, ShotMediaLink, SourceRoot } from './media.ts';
+import { Constraint, Plan, Resource, ResourceType, Setup, SetupDurations, TimeWindow, Violation } from './plan.ts';
+import { Take, TakeRating } from './take.ts';
 
 /**
  * Local REST API (prefix /api/v1). Internal, not a stable public API.
@@ -222,6 +226,130 @@ export const ApplyBreakdownResult = z.object({
 });
 export type ApplyBreakdownResult = z.infer<typeof ApplyBreakdownResult>;
 
+
+// ---------------------------------------------------------------- M5 -------
+// Times are UTC instants; the web converts local wall-clock input with
+// core/schedule localToUtc / localWindowToUtc using the project time zone.
+// Resource.cast_character_ids maps a performer to character entities and a
+// location resource to location entities (scene.location_entity_id).
+
+export const CreateResourceInput = z.object({
+  type: ResourceType,
+  name: z.string().min(1),
+  windows: z.array(TimeWindow),
+  cast_character_ids: z.array(Uuid),
+  confirmed: z.boolean(),
+});
+export const UpdateResourceInput = CreateResourceInput.partial();
+
+export const CreateSetupInput = z.object({
+  location_resource_id: Uuid.nullable(),
+  label: z.string().min(1),
+  shot_ids: z.array(Uuid),
+  resource_ids: z.array(Uuid),
+  durations: SetupDurations,
+  estimate_confirmed: z.boolean(),
+});
+export const UpdateSetupInput = CreateSetupInput.partial();
+
+/** Auto-group active shots into setups: same location resource + camera angle/facing bucket. */
+export const DeriveSetupsInput = z.object({
+  /** keep setups the user created or edited; only rebuild auto ones */
+  keep_edited: z.boolean(),
+  default_durations: SetupDurations,
+});
+
+export const ConstraintInput = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('before'), a_setup_id: Uuid, b_setup_id: Uuid, confirmed: z.boolean() }),
+  z.object({ type: z.literal('not_before'), setup_id: Uuid, at_utc: z.string(), confirmed: z.boolean() }),
+  z.object({ type: z.literal('not_after'), setup_id: Uuid, at_utc: z.string(), confirmed: z.boolean() }),
+  z.object({ type: z.literal('locked_block'), setup_id: Uuid, start_utc: z.string(), end_utc: z.string(), confirmed: z.boolean() }),
+]);
+
+export const CreatePlanInput = z.object({
+  /** local shooting date YYYY-MM-DD in the project time zone */
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  /** crew call and wrap, local HH:mm; wrap ≤ call means past midnight */
+  crew_call: z.string().regex(/^\d{2}:\d{2}$/),
+  crew_wrap: z.string().regex(/^\d{2}:\d{2}$/),
+});
+
+export const PlanDetail = z.object({
+  plan: Plan,
+  /** input changed since the plan was computed */
+  stale: z.boolean(),
+  approval: z.object({ ok: z.boolean(), blockers: z.array(Violation) }),
+});
+export type PlanDetail = z.infer<typeof PlanDetail>;
+
+export const PlanRevisionInput = z.object({ expected_revision: z.number().int().nonnegative() });
+export const ReorderPlanInput = PlanRevisionInput.extend({ order: z.array(Uuid) });
+export const AdoptSuggestionInput = PlanRevisionInput.extend({ draft_id: Uuid });
+
+// ---------------------------------------------------------------- M6 -------
+
+export const CreateTakeInput = z.object({
+  setup_id: Uuid.nullable(),
+  /** omitted = next number for this shot set */
+  take_no: z.number().int().positive().optional(),
+  camera_label: z.string().nullable(),
+  rating: TakeRating,
+  clip_hint: z.string().nullable(),
+  notes: z.string(),
+  shot_ids: z.array(Uuid),
+  unresolved_labels: z.array(z.string()),
+});
+export const UpdateTakeInput = CreateTakeInput.partial().extend({
+  expected_revision: z.number().int().nonnegative(),
+  /** why a logged fact was corrected (audit) */
+  reason: z.string().min(1),
+});
+
+export const AddRootInput = z.object({ abs_path: z.string().min(1), label: z.string().optional() });
+
+/** Asset row for the library: asset + where it lives + review hints. */
+export const MediaAssetView = MediaAsset.extend({
+  root_label: z.string(),
+  /** same-origin URL of the poster JPEG, null when none */
+  poster_url: z.string().nullable(),
+  /** same-origin Range-capable URL, null unless playable_direct */
+  stream_url: z.string().nullable(),
+  link_count: z.number().int().nonnegative(),
+  candidate_count: z.number().int().nonnegative(),
+});
+export type MediaAssetView = z.infer<typeof MediaAssetView>;
+
+export const MediaSearchInput = z.object({
+  q: z.string(),
+  availability: z.enum(['online', 'offline']).nullable(),
+  linked: z.enum(['linked', 'unlinked', 'candidate']).nullable(),
+});
+
+export const RootCheckResult = z.object({ online: z.number().int(), offline: z.number().int(), changed: z.number().int() });
+
+export const BuildCandidatesInput = z.object({ user_regex: z.string().nullable() });
+export const BuildCandidatesOutput = z.object({
+  created: z.array(ShotMediaLink),
+  candidates: z.array(LinkCandidate),
+  errors: z.array(z.object({ code: z.string(), message: z.string() })),
+});
+
+export const CreateLinkInput = z.object({
+  shot_id: Uuid,
+  media_asset_id: Uuid,
+  take_id: Uuid.nullable(),
+});
+export const ReviewLinkInput = z.object({
+  expected_revision: z.number().int().nonnegative(),
+  action: z.enum(['confirm', 'reject', 'unlink']),
+});
+
+export const CoverageDecisionInput = z.object({
+  decision: CoverageDecisionKind,
+  selected_link_ids: z.array(Uuid),
+  reason: z.string().min(1),
+});
+
 // -------------------------------------------------------------- registry ---
 
 export const Api = {
@@ -274,4 +402,42 @@ export const Api = {
   getJob: { method: 'GET', path: '/api/v1/jobs/:id', output: Job },
   listActiveJobs: { method: 'GET', path: '/api/v1/jobs', output: z.array(Job) },
   cancelJob: { method: 'POST', path: '/api/v1/jobs/:id/cancel', output: Job },
+  // M5 — resources, setups, constraints, plans
+  listResources: { method: 'GET', path: '/api/v1/resources', output: z.array(Resource) },
+  createResource: { method: 'POST', path: '/api/v1/resources', input: CreateResourceInput, output: Resource },
+  updateResource: { method: 'PATCH', path: '/api/v1/resources/:id', input: UpdateResourceInput, output: Resource },
+  deleteResource: { method: 'DELETE', path: '/api/v1/resources/:id', output: z.object({ id: Uuid }) },
+  listSetups: { method: 'GET', path: '/api/v1/setups', output: z.array(Setup) },
+  deriveSetups: { method: 'POST', path: '/api/v1/setups/derive', input: DeriveSetupsInput, output: z.array(Setup) },
+  createSetup: { method: 'POST', path: '/api/v1/setups', input: CreateSetupInput, output: Setup },
+  updateSetup: { method: 'PATCH', path: '/api/v1/setups/:id', input: UpdateSetupInput, output: Setup },
+  deleteSetup: { method: 'DELETE', path: '/api/v1/setups/:id', output: z.object({ id: Uuid }) },
+  listConstraints: { method: 'GET', path: '/api/v1/constraints', output: z.array(Constraint) },
+  createConstraint: { method: 'POST', path: '/api/v1/constraints', input: ConstraintInput, output: Constraint },
+  deleteConstraint: { method: 'DELETE', path: '/api/v1/constraints/:id', output: z.object({ id: Uuid }) },
+  listPlans: { method: 'GET', path: '/api/v1/plans', output: z.array(Plan) },
+  createPlan: { method: 'POST', path: '/api/v1/plans', input: CreatePlanInput, output: PlanDetail },
+  getPlan: { method: 'GET', path: '/api/v1/plans/:id', output: PlanDetail },
+  recomputePlan: { method: 'POST', path: '/api/v1/plans/:id/recompute', input: PlanRevisionInput, output: PlanDetail },
+  reorderPlan: { method: 'POST', path: '/api/v1/plans/:id/reorder', input: ReorderPlanInput, output: PlanDetail },
+  approvePlan: { method: 'POST', path: '/api/v1/plans/:id/approve', input: PlanRevisionInput, output: PlanDetail },
+  suggestOrder: { method: 'POST', path: '/api/v1/plans/:id/suggest-order', output: JobAccepted },
+  adoptSuggestion: { method: 'POST', path: '/api/v1/plans/:id/adopt-suggestion', input: AdoptSuggestionInput, output: PlanDetail },
+
+  // M6 — takes, media, links, coverage
+  listTakes: { method: 'GET', path: '/api/v1/takes', output: z.array(Take) },
+  createTake: { method: 'POST', path: '/api/v1/takes', input: CreateTakeInput, output: Take },
+  updateTake: { method: 'PATCH', path: '/api/v1/takes/:id', input: UpdateTakeInput, output: Take },
+  listRoots: { method: 'GET', path: '/api/v1/media/roots', output: z.array(SourceRoot) },
+  addRoot: { method: 'POST', path: '/api/v1/media/roots', input: AddRootInput, output: SourceRoot },
+  scanRoot: { method: 'POST', path: '/api/v1/media/roots/:id/scan', output: JobAccepted },
+  checkRoot: { method: 'POST', path: '/api/v1/media/roots/:id/check', output: RootCheckResult },
+  listAssets: { method: 'GET', path: '/api/v1/media/assets', output: z.array(MediaAssetView) },
+  searchAssets: { method: 'POST', path: '/api/v1/media/search', input: MediaSearchInput, output: z.array(MediaAssetView) },
+  buildCandidates: { method: 'POST', path: '/api/v1/media/candidates', input: BuildCandidatesInput, output: BuildCandidatesOutput },
+  listLinks: { method: 'GET', path: '/api/v1/links', output: z.array(ShotMediaLink) },
+  createLink: { method: 'POST', path: '/api/v1/links', input: CreateLinkInput, output: ShotMediaLink },
+  reviewLink: { method: 'PATCH', path: '/api/v1/links/:id', input: ReviewLinkInput, output: ShotMediaLink },
+  coverage: { method: 'GET', path: '/api/v1/coverage', output: z.array(CoverageResult) },
+  addCoverageDecision: { method: 'POST', path: '/api/v1/shots/:id/coverage-decisions', input: CoverageDecisionInput, output: CoverageDecision },
 } as const;

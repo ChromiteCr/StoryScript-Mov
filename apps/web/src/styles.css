@@ -1,0 +1,79 @@
+@import "tailwindcss";
+
+/*
+ * Design tokens. The app chrome is a neutral grey drafting desk; the warm
+ * pencil paper (#F3F0E8) is reserved for boards so they read as sheets on it.
+ * Light only. No web fonts (CSP default-src 'self'): system CJK stacks.
+ */
+@theme {
+  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC",
+    "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+
+  --color-desk: #e8e8e5;
+  --color-sheet: #f7f7f5;
+  --color-sheet-sunk: #efefec;
+  --color-board-paper: #f3f0e8;
+
+  --color-ink: #26272a;
+  --color-ink-2: #55575c;
+  --color-ink-3: #85878b;
+
+  --color-rule: #d3d3cf;
+  --color-rule-strong: #b3b4b0;
+
+  --color-graphite: #2f3033;
+  --color-graphite-hover: #1f2022;
+  --color-focus: #3e5c76;
+
+  --color-ok: #3f6b4a;
+  --color-warn: #7a5a12;
+  --color-warn-bg: #f3ecd9;
+  --color-warn-rule: #dccb9c;
+  --color-danger: #9a3326;
+  --color-danger-bg: #f5e4df;
+  --color-danger-rule: #e0b8ae;
+
+  --radius-sheet: 4px;
+  --radius-control: 3px;
+
+  --animate-appear: appear 180ms ease-out 350ms both;
+
+  @keyframes appear {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+}
+
+@layer base {
+  html {
+    color-scheme: light;
+    -webkit-text-size-adjust: 100%;
+  }
+
+  body {
+    background-color: var(--color-desk);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    font-size: 14px;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-focus);
+    outline-offset: 2px;
+  }
+
+  ::selection {
+    background-color: #c9d3dc;
+  }
+
+  input::placeholder {
+    color: var(--color-ink-3);
+  }
+}

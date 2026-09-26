@@ -523,7 +523,8 @@ function renderTopview(spec: BoardSpec, opts: RenderOptions): string {
 
   // Frustum: wedge by hFOV, or the ground footprint when looking steeply down.
   const reach = Math.max(z1 - cam.z, x1 - x0, 3) * 1.6;
-  if (cam.pitch_deg < -55) {
+  const steep = cam.pitch_deg < -55;
+  if (steep) {
     const corners = ([
       [0, 0],
       [1, 0],
@@ -576,8 +577,35 @@ function renderTopview(spec: BoardSpec, opts: RenderOptions): string {
     out.push(a.kind === 'eyeline' ? arrowSvg(pts, { width: 2.2, dash: '10 7', head: 16 }) : arrowSvg(pts, { width: 4, head: 22 }));
   }
 
-  // People: circle + facing wedge + badge.
   const r = clamp(0.24 * scale, 10, 30);
+  const camLabel = `${ZH_BOARD.camera}${steep ? ZH_BOARD.cameraAbove : ''} ${Math.round(cam.focal_mm)}mm · ${num(cam.y)}m`;
+  if (steep) {
+    // Looking straight down: the camera is above the set, so mark its ground
+    // point with a crosshair ring drawn under the people (a body icon here
+    // would hide whoever stands below it) and keep the label clear of them.
+    const c = P(cam.x, cam.z);
+    const R = r * 2.1;
+    out.push('<g data-camera="1">');
+    out.push(el('circle', { cx: c[0], cy: c[1], r: R, fill: 'none', stroke: C.ink, 'stroke-width': 2, 'stroke-dasharray': '8 6' }));
+    out.push(
+      el('path', {
+        d: linesPath([
+          [[c[0] - R - 12, c[1]], [c[0] - R + 10, c[1]]],
+          [[c[0] + R - 10, c[1]], [c[0] + R + 12, c[1]]],
+          [[c[0], c[1] - R - 12], [c[0], c[1] - R + 10]],
+          [[c[0], c[1] + R - 10], [c[0], c[1] + R + 12]],
+        ]),
+        fill: 'none',
+        stroke: C.ink,
+        'stroke-width': 2.4,
+      }),
+    );
+    if (overlay)
+      out.push(text({ x: c[0] + R * 0.75 + 8, y: Math.min(c[1] + R + 30, H - 10), 'font-family': FONT, 'font-size': 18, fill: gray(60) }, camLabel));
+    out.push('</g>');
+  }
+
+  // People: circle + facing wedge + badge.
   for (const s of spec.scene.subjects) {
     const c = P(s.x, s.z);
     const Y = s.yaw_deg * DEG;
@@ -598,8 +626,8 @@ function renderTopview(spec: BoardSpec, opts: RenderOptions): string {
     out.push('</g>');
   }
 
-  // Camera icon.
-  {
+  // Camera icon (on the ground, looking up the page).
+  if (!steep) {
     const c = P(cam.x, cam.z);
     const yaw = cam.yaw_deg * DEG;
     const F: V2 = [Math.sin(yaw), -Math.cos(yaw)];
@@ -614,7 +642,7 @@ function renderTopview(spec: BoardSpec, opts: RenderOptions): string {
       out.push(
         text(
           { x: c[0] + 26, y: Math.min(c[1] + 30, H - 10), 'font-family': FONT, 'font-size': 18, fill: gray(60) },
-          `${ZH_BOARD.camera} ${Math.round(cam.focal_mm)}mm · ${num(cam.y)}m`,
+          camLabel,
         ),
       );
     }
@@ -671,10 +699,15 @@ export function renderPuppetPreview(
 ): string {
   const W = opts.width ?? 120;
   const H = opts.height ?? 220;
-  const figure = H * 0.84;
-  const x0 = W / 2;
-  const y0 = H - H * 0.06;
   const shape = buildPuppet(pose, view, mirror, silhouette);
+  // Centre the figure's horizontal extent (a pointing arm reaches far to one
+  // side) and shrink only when it still would not fit the cell.
+  let minX = 0;
+  let maxX = 0;
+  for (const p of shape.parts) for (const q of p.pts) (minX = Math.min(minX, q[0])), (maxX = Math.max(maxX, q[0]));
+  const figure = Math.min(H * 0.84, (W * 0.92) / Math.max(maxX - minX, 1e-6));
+  const x0 = W / 2 - ((minX + maxX) / 2) * figure;
+  const y0 = H - H * 0.06;
   const px = (q: V2): V2 => [x0 + q[0] * figure, y0 - q[1] * figure];
   const idx = shape.lineAfter;
   const item: SubjectItem = {

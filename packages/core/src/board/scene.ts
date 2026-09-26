@@ -109,7 +109,12 @@ function propParts(p: BoardProp): LocalBox[] {
       for (const sx of [-1, 1])
         for (const sz of [-1, 1])
           legs.push({ cx: sx * (w / 2 - 0.07), y: 0, cz: sz * (d / 2 - 0.07), w: 0.05, h: h - t, d: 0.05 });
-      return [...legs, { cx: 0, y: h - t, cz: 0, w, h: t, d }];
+      // two grain lines on the top read as a table surface in close inserts
+      const grain: [V3, V3][] = [-0.22, 0.2].map((k) => [
+        [-w / 2 + 0.08, h, d * k],
+        [w / 2 - 0.08, h, d * k],
+      ]);
+      return [...legs, { cx: 0, y: h - t, cz: 0, w, h: t, d, decor: { '+y': grain } }];
     }
     case 'chair': {
       const seatY = h * 0.5;
@@ -132,6 +137,21 @@ function propParts(p: BoardProp): LocalBox[] {
         for (const sz of [-1, 1])
           wheels.push({ cx: sx * w * 0.31, y: 0, cz: sz * (d / 2 - 0.12), w: 0.66 * k, h: 0.64 * k, d: 0.24 });
       const cabinH = h - bodyY - bodyH;
+      // side windows (glass outline + centre pillar) so the cabin reads as a car
+      const cabX = -w * 0.06;
+      const cabW = w * 0.5;
+      const winX0 = cabX - cabW / 2 + 0.14 * k;
+      const winX1 = cabX + cabW / 2 - 0.14 * k;
+      const winY0 = bodyY + bodyH + 0.07 * k;
+      const winY1 = bodyY + bodyH + cabinH - 0.07 * k;
+      const side = (z: number): [V3, V3][] => [
+        [[winX0, winY0, z], [winX1, winY0, z]],
+        [[winX1, winY0, z], [winX1, winY1, z]],
+        [[winX1, winY1, z], [winX0, winY1, z]],
+        [[winX0, winY1, z], [winX0, winY0, z]],
+        [[cabX, winY0, z], [cabX, winY1, z]],
+      ];
+      const cabD = d * 0.86;
       return [
         ...wheels,
         {
@@ -146,7 +166,7 @@ function propParts(p: BoardProp): LocalBox[] {
             '-z': [[[-w * 0.05, bodyY + bodyH * 0.1, -d / 2], [-w * 0.05, bodyY + bodyH * 0.95, -d / 2]]],
           },
         },
-        { cx: -w * 0.06, y: bodyY + bodyH, cz: 0, w: w * 0.5, h: cabinH, d: d * 0.86 },
+        { cx: cabX, y: bodyY + bodyH, cz: 0, w: cabW, h: cabinH, d: cabD, decor: { '+z': side(cabD / 2), '-z': side(-cabD / 2) } },
       ];
     }
     case 'stairs': {

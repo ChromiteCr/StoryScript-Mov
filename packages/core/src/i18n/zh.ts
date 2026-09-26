@@ -122,6 +122,7 @@ export const ZH_FRAME_FORMAT: Record<FrameFormat, string> = {
 export const ZH_BOARD = {
   topviewNote: '站位示意（非实景测量）',
   camera: '摄影机',
+  cameraAbove: '（正上方）',
   track: 'TRACK',
   lint: {
     subject_count: (board: number, shot: number) => `分镜人数（${board}）与镜头人物数（${shot}）不一致`,

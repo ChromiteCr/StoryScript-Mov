@@ -27,8 +27,9 @@ import {
 } from '@storyscript/contracts';
 import { shotLabelZh } from '../i18n/zh.ts';
 import { rngFor } from '../util/random.ts';
-import { cameraBasis, hFov, REF_HEIGHT_M, solveCamera, type CameraBasis, type CameraSolution } from './camera.ts';
+import { cameraBasis, REF_HEIGHT_M, solveCamera, type CameraBasis, type CameraSolution } from './camera.ts';
 import { clamp, dot3, round, wrapDeg, type V3 } from './math.ts';
+import { poseTopY } from './puppets.ts';
 
 export interface RosterEntry {
   alias: string;
@@ -209,8 +210,24 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
     fgIdx = pov >= 0 ? pov : 0;
     primaryIdx = subs.findIndex((s) => s.idx !== fgIdx);
   }
-  const primary = primaryIdx >= 0 ? subs[primaryIdx] : undefined;
   const poseOf = (s: Resolved): Pose => s.spec.pose ?? (template === 'lateral_move' ? 'run' : 'stand');
+  if ((template === 'two_shot' || template === 'establishing') && subs.length > 1) {
+    // Frame the group on its tallest head among people on the main (mg) plane.
+    const main = subs.filter((s) => (s.spec.depth ?? 'mg') === 'mg');
+    const pool = main.length ? main : subs;
+    const top = (s: Resolved) => poseTopY(poseOf(s)) * s.height;
+    primaryIdx = pool.reduce((best, s) => (top(s) > top(subs[best] as Resolved) ? s.idx : best), (pool[0] as Resolved).idx);
+  }
+  const primary = primaryIdx >= 0 ? subs[primaryIdx] : undefined;
+  const eyeLevel = shot.angle === 'eye' || shot.angle === 'dutch';
+  // Rig height: a vehicle hard-mount rides at door height; an over-the-shoulder
+  // camera sits at the foreground character's eye line, just behind the shoulder.
+  let rigHeight: number | null = null;
+  if (shot.movement === 'vehicle' && eyeLevel) rigHeight = VEHICLE_RIG_HEIGHT_M;
+  else if (fgIdx >= 0 && eyeLevel) {
+    const fg = subs[fgIdx] as Resolved;
+    rigHeight = 0.93 * poseTopY(poseOf(fg)) * fg.height;
+  }
 
   // ---- insert target --------------------------------------------------------
   const isInsert = template === 'insert';
@@ -231,8 +248,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
     technique: ctx.technique ?? null,
     look: ctx.look,
     insert_center_y: insertCenterY,
-    // vehicle hard-mount rides at door height on an eye-level shot
-    camera_height_m: shot.movement === 'vehicle' && (shot.angle === 'eye' || shot.angle === 'dutch') ? VEHICLE_RIG_HEIGHT_M : null,
+    camera_height_m: rigHeight,
   });
   const camera = sol.camera;
   const basis = cameraBasis(camera, aspect);
@@ -242,6 +258,20 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
 
   // ---- subject placement ------------------------------------------------------
   const placed: BoardSubject[] = new Array(subs.length);
+  const make = (s: Resolved, x: number, z: number, yaw: number, pose: Pose): BoardSubject => ({
+    id: `s${s.idx}`,
+    entity_id: s.entity_id,
+    label: s.label,
+    badge: s.badge,
+    x: r4(x),
+    z: r4(z),
+    yaw_deg: round(yaw, 2),
+    pose,
+    height_m: s.height,
+    silhouette: s.silhouette,
+    tone_override: null,
+    z_override: null,
+  });
   const fxOf = (s: Resolved, fallback: number) => (s.spec.screen ? SCREEN_X[s.spec.screen] : fallback);
   const depthOf = (s: Resolved, fallback: DepthPlane = 'mg') => DEPTH_FACTOR[s.spec.depth ?? fallback];
   /** fx: frame x; k: distance factor relative to the framed subject (fg 0.6 / mg 1 / bg 2). */
@@ -251,20 +281,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
     const zz = overhead ? (k - 1) * 0.35 * sol.visible_m : d * k;
     let x = overhead ? (fx - 0.5) * frameWidthAt(camera.y - yRef) : worldXAtFrameX(basis, fx, zz, yRef);
     if (!Number.isFinite(x)) x = 0;
-    placed[s.idx] = {
-      id: `s${s.idx}`,
-      entity_id: s.entity_id,
-      label: s.label,
-      badge: s.badge,
-      x: r4(x),
-      z: r4(zz),
-      yaw_deg: round(yawForRel(rel, x, zz, camera), 2),
-      pose,
-      height_m: s.height,
-      silhouette: s.silhouette,
-      tone_override: null,
-      z_override: null,
-    };
+    placed[s.idx] = make(s, x, zz, yawForRel(rel, x, zz, camera), pose);
   };
   const relOf = (s: Resolved, fallback: Facing) => FACING_REL[s.spec.facing ?? fallback];
   const sideOf = (alias: string): ScreenPos | null =>
@@ -304,20 +321,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
         const rel = relativeYaw({ x: xA, z: zA, yaw_deg: yaw }, camera);
         if (Math.abs(rel) < OTS_FG_MIN_REL) yaw = yawForRel((rel >= 0 ? 1 : -1) * OTS_FG_MIN_REL, xA, zA, camera);
       }
-      placed[fg.idx] = {
-        id: `s${fg.idx}`,
-        entity_id: fg.entity_id,
-        label: fg.label,
-        badge: fg.badge,
-        x: r4(xA),
-        z: r4(zA),
-        yaw_deg: round(yaw, 2),
-        pose: poseOf(fg),
-        height_m: fg.height,
-        silhouette: fg.silhouette,
-        tone_override: null,
-        z_override: null,
-      };
+      placed[fg.idx] = make(fg, xA, zA, yaw, poseOf(fg));
       // any extra people stand in the background
       subs.forEach((s, i) => {
         if (s.idx === fg.idx || s.idx === tg.idx) return;
@@ -349,20 +353,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
         const side = i % 2 === 0 ? 1 : -1;
         const z = baseZ + 0.9;
         const x = side * (frameWidthAt(z) / 2 + 0.45 + 0.5 * Math.floor(i / 2));
-        placed[s.idx] = {
-          id: `s${s.idx}`,
-          entity_id: s.entity_id,
-          label: s.label,
-          badge: s.badge,
-          x: r4(x),
-          z: r4(z),
-          yaw_deg: round(yawLookAt(x, z, 0, baseZ), 2),
-          pose: poseOf(s),
-          height_m: s.height,
-          silhouette: s.silhouette,
-          tone_override: null,
-          z_override: null,
-        };
+        placed[s.idx] = make(s, x, z, yawLookAt(x, z, 0, baseZ), poseOf(s));
       });
       break;
     }
@@ -567,8 +558,8 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
           from = { x: s.x + off, z: s.z - 0.2 };
           to = { x: s.x + off, z: Math.max(0.9, s.z - Math.max(0.8, 0.4 * s.z)) };
         } else {
-          from = { x: s.x + off, z: s.z + 0.2 };
-          to = { x: s.x + off, z: s.z + Math.max(1, 0.5 * s.z) };
+          from = { x: s.x + off, z: s.z + 0.3 };
+          to = { x: s.x + off, z: s.z + Math.max(2, s.z) };
         }
       }
       arrows.push({
@@ -621,6 +612,3 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
 export function isEnvProp(p: Pick<BoardProp, 'id'>): boolean {
   return p.id.startsWith(ENV_PREFIX);
 }
-
-/** Horizontal FOV helper re-exported for topview consumers. */
-export const hFovDeg = (focal_mm: number) => (hFov(focal_mm) * 180) / Math.PI;

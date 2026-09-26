@@ -140,10 +140,34 @@ describe('determinism and options', () => {
     expect(renderBoard(boards[0]!.spec, 'topview')).toContain('站位示意（非实景测量）');
   });
 
+  test('overhead topview: camera marker sits under the people and its label says it is above', () => {
+    const spec = boards.find((b) => b.shot.key === '09-overhead')!.spec;
+    const svg = renderBoard(spec, 'topview');
+    const cam = svg.indexOf('data-camera="1"');
+    expect(cam).toBeGreaterThan(-1);
+    expect(cam).toBeLessThan(svg.indexOf('data-subject='));
+    expect(svg).toContain('摄影机（正上方）');
+    // ground-level cameras keep the body icon drawn on top
+    const eye = renderBoard(boards.find((b) => b.shot.key === '05-mcu')!.spec, 'topview');
+    expect(eye.indexOf('data-camera="1"')).toBeGreaterThan(eye.indexOf('data-subject='));
+  });
+
   test('puppet preview renders standalone', () => {
     const svg = renderPuppetPreview('run', 'side', true, 'coat');
     expect(svg).toContain('data-view="side"');
     expect(svg).not.toMatch(/style=|<text/);
+  });
+
+  test('puppet preview keeps a pointing arm inside the cell', () => {
+    for (const view of ['front', '3q', 'side', 'back'] as const) {
+      const svg = renderPuppetPreview('point', view, false, 'regular', { width: 110, height: 190 });
+      const xs = [...svg.matchAll(/<path d="([^"]*)"/g)].flatMap((m) =>
+        [...(m[1] as string).matchAll(/[ML]\s?(-?[\d.]+)[ ,](-?[\d.]+)/g)].map((q) => Number(q[1])),
+      );
+      expect(xs.length).toBeGreaterThan(0);
+      expect(Math.min(...xs)).toBeGreaterThanOrEqual(0);
+      expect(Math.max(...xs)).toBeLessThanOrEqual(110);
+    }
   });
 
   test('structure render < 50 ms per board (12-shot average, layout included)', () => {

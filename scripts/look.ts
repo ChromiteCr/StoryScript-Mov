@@ -5,6 +5,8 @@
  * plus contact sheets for review:
  *   <out>/m1/shots/<key>-structure.png, <key>-topview.png
  *   <out>/m1/compare-1.png, compare-2.png   (structure | topview, 6 shots each)
+ *   <out>/m1/compare-structure.png          (all 12 structure boards, 2 × 6)
+ *   <out>/m1/compare-topview.png            (all 12 topviews, 2 × 6)
  *   <out>/m1/thumbs.png                     (12 boards at 240 px wide)
  *   <out>/m1/puppets.png                    (6 poses × 4 facings × 3 silhouettes)
  *   <out>/m1/metrics.json                   (framing numbers + timings)
@@ -117,6 +119,27 @@ for (let page = 0; page < 2; page++) {
   });
   const sheet = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${body}</svg>`;
   writeFileSync(join(OUT, `compare-${page + 1}.png`), png(sheet));
+}
+
+// One mode per sheet: all 12 shots, 2 columns × 6 rows at 900 px.
+for (const mode of ['structure', 'topview'] as const) {
+  const cw = 900;
+  const chH = Math.round(cw / 2.39);
+  const cols = 2;
+  const rows = Math.ceil(specs.length / cols);
+  const cellH = chH + 44;
+  const W = cols * (cw + 20) + 20;
+  const H = rows * cellH + 60;
+  let body = `<rect x="0" y="0" width="${W}" height="${H}" fill="#eeeeee"/>`;
+  body += label(20, 36, mode === 'structure' ? '12 个标准镜头 · 结构图（structure）' : '12 个标准镜头 · 站位俯视图（topview）', 26);
+  specs.forEach(({ shot, spec }, i) => {
+    const x = 20 + (i % cols) * (cw + 20);
+    const y = 50 + Math.floor(i / cols) * cellH;
+    body += label(x, y + 28, `${shot.key}  ${shot.name}`);
+    body += place(renderBoard(spec, mode, { width: cw }), x, y + 38);
+  });
+  const sheet = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}" height="${H}">${body}</svg>`;
+  writeFileSync(join(OUT, `compare-${mode}.png`), png(sheet));
 }
 
 // 240 px thumbnails (readability check).

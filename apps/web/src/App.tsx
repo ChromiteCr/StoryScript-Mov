@@ -137,7 +137,7 @@ function Workbench() {
   }
 
   return (
-    <div className="flex h-dvh flex-col bg-graphite-950 print:block print:h-auto">
+    <div className="flex h-dvh flex-col bg-graphite-950 print:block print:h-auto print:bg-print-paper">
       <TitleBar
         project={current}
         view={view}

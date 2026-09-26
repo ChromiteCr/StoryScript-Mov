@@ -327,17 +327,19 @@ export function imageEnv(baseUrl: string, model = 'fake-image-model', key = IMAG
 }
 
 /**
- * Board rows are written by the M4 board routes; tests of the redraw
- * pipeline insert one directly (same columns as migration 001).
+ * Board rows are written by the M4 board service (v1 is created with the
+ * shot); tests of the redraw pipeline add a newer version with a known spec
+ * directly (same columns as migration 001), so it becomes the latest board.
  */
 export function insertBoardRow(db: DbPort, shotId: string, spec: BoardSpec, opts: { version?: number; basis?: string } = {}): string {
   const id = randomUUID();
+  const next = db.get<{ v: number }>('SELECT COALESCE(MAX(version), 0) + 1 AS v FROM board WHERE shot_id = ?', shotId)!.v;
   db.run(
     `INSERT INTO board (id, shot_id, version, parent_board_id, spec_json, renderer_version, basis_content_hash, user_edited, revision, created_at)
      VALUES (?, ?, ?, NULL, ?, ?, ?, 0, 0, ?)`,
     id,
     shotId,
-    opts.version ?? 1,
+    opts.version ?? next,
     JSON.stringify(spec),
     RENDERER_VERSION,
     opts.basis ?? 'basis',

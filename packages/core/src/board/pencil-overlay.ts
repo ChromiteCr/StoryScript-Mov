@@ -226,21 +226,37 @@ export function pencilOverlaySvg(spec: BoardSpec, scene: FrameScene, o: PencilOv
     g.push('</g>');
   }
   for (const l of ov.labels) {
-    g.push(
-      text(
-        { x: l.x * W, y: l.y * H, 'font-family': FONT, 'font-size': 26, fill: ctx.ink, stroke: ctx.paper, 'stroke-width': 6, 'paint-order': 'stroke', 'data-label': l.id },
-        l.text,
-      ),
-    );
+    g.push(labelTab(l.x * W, l.y * H, 26, 400, l.text, ctx, l.id, 'data-label'));
   }
   if (ov.show_code && o.code) {
-    g.push(
-      text(
-        { x: 22, y: 44, 'font-family': FONT, 'font-size': 30, 'font-weight': 700, fill: ctx.ink, stroke: ctx.paper, 'stroke-width': 6, 'paint-order': 'stroke', 'data-code': '1' },
-        o.code,
-      ),
-    );
+    g.push(labelTab(22, 44, 30, 700, o.code, ctx, '1', 'data-code'));
   }
   g.push('</g>');
   return g.join('');
+}
+
+/** Rough advance width: CJK glyphs ≈ 1 em, everything else ≈ 0.66 em (errs wide). */
+function textWidth(t: string, size: number): number {
+  let w = 0;
+  for (const ch of t) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? size : size * 0.66;
+  return w;
+}
+
+/**
+ * Label on a small paper tab (like a note pinned to the board). A solid tab
+ * reads cleanly over dark silhouettes, where a paper-coloured text stroke
+ * smears into the hatching.
+ */
+function labelTab(x: number, baseline: number, size: number, weight: number, t: string, ctx: Ctx, id: string, attr: 'data-label' | 'data-code'): string {
+  const padX = size * 0.3;
+  const padY = size * 0.22;
+  const w = textWidth(t, size) + padX * 2;
+  const h = size + padY * 2;
+  const top = baseline - size * 0.86 - padY;
+  return (
+    `<g${attrs({ [attr]: id })}>` +
+    el('rect', { x: x - padX, y: top, width: w, height: h, rx: 3, fill: ctx.paper, 'fill-opacity': 0.9 }) +
+    text({ x, y: baseline, 'font-family': FONT, 'font-size': size, 'font-weight': weight, fill: ctx.ink }, t) +
+    '</g>'
+  );
 }

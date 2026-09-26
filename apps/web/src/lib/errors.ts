@@ -9,7 +9,16 @@ export interface HumanError {
 }
 
 /** Where the error happened; changes wording for ambiguous codes like NOT_FOUND. */
-export type ErrorContext = 'general' | 'open' | 'create' | 'choose-folder';
+export type ErrorContext =
+  | 'general'
+  | 'open'
+  | 'create'
+  | 'choose-folder'
+  | 'shot-save'
+  | 'apply-breakdown'
+  | 'provider'
+  | 'ai-request'
+  | 'script-import';
 
 type Copy = { title: string; detail: string | null };
 
@@ -28,7 +37,10 @@ const COPY: Record<ClientErrorCode, Copy> = {
   PROVIDER_ERROR: { title: '模型服务返回错误', detail: null },
   PROVIDER_OUTCOME_UNKNOWN: { title: '无法确认模型请求是否成功', detail: '为避免重复计费，不会自动重发。' },
   PROVIDER_REFUSED: { title: '模型拒绝了这次请求', detail: null },
-  ATTEMPTS_EXHAUSTED: { title: '已达到本步骤的最大尝试次数', detail: '每一步最多向外发送 3 次请求。' },
+  ATTEMPTS_EXHAUSTED: {
+    title: '已达到本步骤的最大尝试次数',
+    detail: '每一步最多向外发送 3 次请求，网络重试、限流、解析失败和校验失败都计入。可以调整参考说明或镜头上限后重新发起。',
+  },
   FFMPEG_MISSING: { title: '没有找到 ffmpeg', detail: '素材导入需要 ffmpeg 和 ffprobe。用 brew install ffmpeg 安装后，重启 storyscript-mov。' },
   PROJECT_LOCKED: {
     title: '这个项目正在别处打开',
@@ -56,6 +68,25 @@ const CONTEXT_COPY: Partial<Record<ErrorContext, Partial<Record<ClientErrorCode,
   },
   create: {
     NOT_FOUND: { title: '找不到这个目录', detail: '确认路径拼写正确，并且目录所在的磁盘已经接上。' },
+  },
+  'shot-save': {
+    REVISION_CONFLICT: { title: '这个镜头已在别处修改', detail: '请刷新后重试。你在表单里的改动还在，可以对照最新内容再保存。' },
+    LOCKED_SHOT: { title: '镜头已锁定', detail: '锁定的镜头不能修改。先解除锁定再保存。' },
+    NOT_FOUND: { title: '这个镜头已不存在', detail: '它可能已被归档或删除。刷新后查看。' },
+  },
+  'apply-breakdown': {
+    REVISION_CONFLICT: { title: '本场镜头已在别处修改，请刷新后重试', detail: '为避免覆盖别处的改动，这次没有写入任何镜头。' },
+    LOCKED_SHOT: { title: '有镜头在此期间被锁定', detail: '锁定的镜头不会被改动。刷新草案后重新勾选。' },
+    NOT_FOUND: { title: '草案已不存在', detail: '它可能已被应用或放弃。' },
+  },
+  provider: {
+    PROVIDER_ERROR: { title: '模型服务返回错误', detail: '检查 base_url、模型名和 key 是否正确。' },
+  },
+  'ai-request': {
+    PROVIDER_NOT_CONFIGURED: { title: '还没有配置文本模型', detail: '在"设置 → 模型"里填写 base_url、模型和 key。手工流程照常可用。' },
+  },
+  'script-import': {
+    VALIDATION_ERROR: { title: '剧本内容无法导入', detail: null },
   },
 };
 
@@ -95,15 +126,70 @@ export function describeError(error: unknown, context: ErrorContext = 'general')
     };
   }
 
+  // The server answers "not in this state" with VALIDATION_ERROR + 409 (draft
+  // already applied, draft made for an older script version, shot archived…):
+  // nothing the user typed is wrong, so say what the server said.
+  if (error.code === 'VALIDATION_ERROR' && error.status === 409) {
+    return { title: '当前状态下不能这样操作', detail: error.message || null, technical: technicalLine(error) };
+  }
+
   const copy = CONTEXT_COPY[context]?.[error.code] ?? COPY[error.code];
   let detail = copy.detail;
   if (error.code === 'PROJECT_LOCKED') {
     const holder = lockHolder(error.details);
     if (holder) detail = `${detail ?? ''}占用者：${holder}。`;
   }
-  if (error.code === 'VALIDATION_ERROR' || error.code === 'PATH_NOT_ALLOWED') {
+  if (
+    error.code === 'VALIDATION_ERROR' ||
+    error.code === 'PATH_NOT_ALLOWED' ||
+    error.code === 'PROVIDER_ERROR' ||
+    error.code === 'PROVIDER_REFUSED'
+  ) {
     // Server messages here are specific ("directory is not empty"…); show them.
     detail = error.message ? `${copy.detail ?? ''}${copy.detail ? ' ' : ''}原因：${error.message}` : copy.detail;
   }
   return { title: copy.title, detail, technical: technicalLine(error) };
+}
+
+function isKnownCode(code: string): code is ClientErrorCode {
+  return Object.prototype.hasOwnProperty.call(COPY, code);
+}
+
+/**
+ * Job codes the server writes that are not API error codes
+ * (apps/server jobs/queue.ts: a job left over from a previous process).
+ */
+const JOB_ONLY_COPY: Readonly<Record<string, Copy>> = {
+  INTERRUPTED: { title: '任务被中断', detail: '服务重启时任务还没有发出请求，可以重新发起。' },
+};
+
+/** Codes whose server message carries the specific reason (last problem, HTTP status…). */
+const JOB_MESSAGE_CODES: ReadonlySet<string> = new Set([
+  'PROVIDER_ERROR',
+  'PROVIDER_REFUSED',
+  'VALIDATION_ERROR',
+  'ATTEMPTS_EXHAUSTED',
+  'INTERNAL',
+]);
+
+/** Job.error ({ code, message }) in the same plain-language form. */
+export function describeJobError(error: { code: string; message: string } | null): HumanError | null {
+  if (!error) return null;
+  const technical = `${error.code}：${error.message}`;
+  const known = JOB_ONLY_COPY[error.code] ?? (isKnownCode(error.code) ? (CONTEXT_COPY['ai-request']?.[error.code] ?? COPY[error.code]) : null);
+  if (known) {
+    const showMessage = JOB_MESSAGE_CODES.has(error.code) && error.message;
+    const detail = showMessage ? `${known.detail ?? ''}${known.detail ? ' ' : ''}原因：${error.message}` : known.detail;
+    return { title: known.title, detail, technical };
+  }
+  return { title: '任务失败', detail: error.message || null, technical };
+}
+
+/**
+ * True for REVISION_CONFLICT only (optimistic concurrency). The server also
+ * answers 409 for LOCKED_SHOT, NO_PROJECT_OPEN, PROVIDER_NOT_CONFIGURED and
+ * state errors, which a "reload and retry" cannot fix.
+ */
+export function isRevisionConflict(error: unknown): boolean {
+  return isApiClientError(error) && error.code === 'REVISION_CONFLICT';
 }

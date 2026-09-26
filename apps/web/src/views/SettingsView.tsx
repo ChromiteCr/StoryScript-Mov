@@ -8,6 +8,7 @@ import { nextIndex } from '../lib/stages.ts';
 import { ErrorNotice } from '../components/ErrorNotice.tsx';
 import { Button, CopyCommand, Notice, Spinner } from '../components/ui.tsx';
 import { Inspector, InspectorGroup, InspectorRow, PageHeader, Panel, Workspace } from '../components/workspace.tsx';
+import { TextProviderPanel } from './TextProviderPanel.tsx';
 
 /**
  * Settings: category list on the left, an inspector on the right. Not a
@@ -170,29 +171,7 @@ function Environment({ health }: { health: HealthInfo }) {
 function Models({ health }: { health: HealthInfo }) {
   return (
     <Inspector>
-      <InspectorGroup
-        title="配置方式"
-        note={
-          <p className="text-graphite-300">
-            在这里填写模型地址和密钥的界面从 M3 起提供。目前通过环境变量配置，重启后生效；密钥只保存在本机服务端，页面上不会显示。
-          </p>
-        }
-      />
-      <InspectorGroup
-        title="文本模型"
-        note={
-          health.text_provider_configured ? null : (
-            <p className="text-graphite-300">
-              拆镜、实体抽取和排序建议需要文本模型；未配置时这些按钮置灰，手工流程照常可用。设置 <Mono>STORYSCRIPT_LLM_BASE_URL</Mono>、
-              <Mono>STORYSCRIPT_LLM_API_KEY</Mono>、<Mono>STORYSCRIPT_LLM_MODEL</Mono> 后重启即可。
-            </p>
-          )
-        }
-      >
-        <InspectorRow label="状态">
-          <State ok={health.text_provider_configured}>{health.text_provider_configured ? '已配置' : '未配置'}</State>
-        </InspectorRow>
-      </InspectorGroup>
+      <TextProviderPanel />
       <InspectorGroup
         title="图像模型（实验）"
         note={

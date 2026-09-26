@@ -1,4 +1,5 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
+import type { Project } from '@storyscript/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from './lib/api.ts';
 import {
@@ -19,10 +20,12 @@ import { ConnectingScreen, SessionExpiredScreen, UnreachableScreen } from './com
 import { PageBar } from './components/PageBar.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
-import { ComingSoonView } from './views/ComingSoonView.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { StageOutlineView } from './views/StageOutlineView.tsx';
+
+// The script workspace is the heaviest page; it loads as its own chunk.
+const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ default: m.ScriptView })));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -126,7 +129,7 @@ function Workbench() {
   } else {
     const stage: StageId = isStage(view) ? view : 'script';
     page = stage;
-    body = <StagePage stage={stage} />;
+    body = <StagePage stage={stage} project={current} />;
   }
 
   return (
@@ -157,8 +160,20 @@ function Workbench() {
   );
 }
 
-/** One workflow stage. Script keeps its placeholder until the script page lands. */
-function StagePage({ stage }: { stage: StageId }) {
-  if (stage === 'script') return <ComingSoonView view="script" />;
+/** One workflow stage. Stages after the script page keep their outline until they land. */
+function StagePage({ stage, project }: { stage: StageId; project: Project }) {
+  if (stage === 'script') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner label="正在加载…" />
+          </div>
+        }
+      >
+        <ScriptView project={project} />
+      </Suspense>
+    );
+  }
   return <StageOutlineView stage={stage} />;
 }

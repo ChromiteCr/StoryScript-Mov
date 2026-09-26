@@ -6,6 +6,7 @@ import {
   type InputHTMLAttributes,
   type ReactNode,
   type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
 } from 'react';
 import { Check, CircleAlert, Copy, Info, LoaderCircle, TriangleAlert, type LucideIcon } from 'lucide-react';
 
@@ -94,12 +95,28 @@ export function IconButton({ icon: Icon, label, className = '', type = 'button',
   );
 }
 
+/** Disabled (e.g. a locked shot's form): quieter frame and text, still readable (graphite-300 on 800 is AA). */
+const FIELD_DISABLED = 'disabled:cursor-not-allowed disabled:border-graphite-800 disabled:text-graphite-300';
+
 const FIELD_CONTROL =
   'h-7 w-full min-w-0 rounded-control border border-graphite-700 bg-graphite-800 px-2 text-sm text-graphite-100 ' +
-  'hover:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger';
+  `hover:enabled:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger ${FIELD_DISABLED}`;
 
 export function TextInput({ className = '', ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`${FIELD_CONTROL} ${className}`} {...rest} />;
+}
+
+export function TextArea({ className = '', ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      className={
+        'w-full min-w-0 rounded-control border border-graphite-700 bg-graphite-800 px-2 py-1.5 text-sm text-graphite-100 ' +
+        `hover:enabled:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger ${FIELD_DISABLED} ` +
+        className
+      }
+      {...rest}
+    />
+  );
 }
 
 export function SelectInput({ className = '', children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
@@ -202,10 +219,37 @@ export function SectionHeading({ id, title, description, actions }: { id?: strin
   );
 }
 
-/** Small outlined status label, e.g. "开发中". Neutral: it describes, it does not alarm. */
-export function Tag({ children }: { children: ReactNode }) {
+export type TagTone = 'neutral' | 'ok' | 'warn' | 'danger';
+
+const TAG_DOT: Record<Exclude<TagTone, 'neutral'>, string> = { ok: 'bg-ok', warn: 'bg-warn', danger: 'bg-danger' };
+const TAG_EDGE: Record<Exclude<TagTone, 'neutral'>, string> = {
+  ok: 'border-ok/50',
+  warn: 'border-warn/60',
+  danger: 'border-danger/70',
+};
+
+/**
+ * Small outlined status label, e.g. "开发中". Neutral describes, it does not
+ * alarm. A status tone adds a coloured dot and edge; the text stays graphite
+ * so it keeps AA contrast (same rule as Notice).
+ */
+export function Tag({ children, tone = 'neutral', title, className = '' }: { children: ReactNode; tone?: TagTone; title?: string; className?: string }) {
+  if (tone === 'neutral') {
+    return (
+      <span
+        title={title}
+        className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-control border border-graphite-700 px-1.5 text-xs whitespace-nowrap text-graphite-300 ${className}`}
+      >
+        {children}
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex h-5 shrink-0 items-center rounded-control border border-graphite-700 px-1.5 text-xs text-graphite-300">
+    <span
+      title={title}
+      className={`inline-flex h-5 shrink-0 items-center gap-1.5 rounded-control border px-1.5 text-xs whitespace-nowrap text-graphite-100 ${TAG_EDGE[tone]} ${className}`}
+    >
+      <span aria-hidden className={`size-1.5 shrink-0 rounded-full ${TAG_DOT[tone]}`} />
       {children}
     </span>
   );

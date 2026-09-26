@@ -1,0 +1,24 @@
+{
+  "id": "volcengine-seedream",
+  "name": "火山方舟 Seedream（generations + 参考图）",
+  "host_patterns": ["ark.*.volces.com", "*.bytepluses.com"],
+  "dialect": "generations-ref",
+  "path": "/images/generations",
+  "ref_field": "image",
+  "ref_format": "data_url",
+  "ref_is_array": true,
+  "size_mode": "pixels",
+  "size_field": "size",
+  "aspect_values": [],
+  "response_path": "data.0.b64_json",
+  "response_kind": "b64",
+  "extra_body": {
+    "watermark": false,
+    "response_format": "b64_json",
+    "sequential_image_generation": "disabled"
+  },
+  "optional_params": ["sequential_image_generation"],
+  "verified": false,
+  "verified_at": null,
+  "notes": "base_url 形如 https://ark.cn-beijing.volces.com/api/v3；model 直接填 Model ID。水印默认开启，这里显式传 watermark:false。参考图放在 image 数组（data URL）：5.0 pro/flash 最多 10 张，5.0 lite、4.5、4.0 最多 14 张。size 为像素 WxH；5.0 lite 像素下限约 3.69MP。按文档对照假服务开发，未用真实 key 验证。"
+}

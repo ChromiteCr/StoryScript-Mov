@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { afterAll, describe, expect, test } from 'vitest';
 
 /**
@@ -11,17 +11,20 @@ import { afterAll, describe, expect, test } from 'vitest';
  * repo and runs `npm ci` + `npm start`. Everything happens in
  * scripts/smoke-install.mjs; this test runs it and checks its report.
  *
- * Runs by default on CI (env CI set), otherwise only with STORYSCRIPT_SMOKE=1;
- * STORYSCRIPT_SMOKE=0 turns it off everywhere. Note that the source path
- * clones the committed HEAD, so uncommitted changes are not part of it.
+ * Opt-in: it only runs with STORYSCRIPT_SMOKE=1, so a plain `npx vitest run`
+ * (and `npm test`) skips it; CI runs it as a separate step with the variable
+ * set. Note that the source path clones the committed HEAD, so uncommitted
+ * changes are not part of it.
  *
  *   STORYSCRIPT_SMOKE=1 npx vitest run apps/server/test/smoke-install.test.ts
+ *
+ * The package-contents policy itself (packProblems) is checked by the fast
+ * test at the bottom on every run.
  */
 
 const ROOT = fileURLToPath(new URL('../../../', import.meta.url));
 const SCRIPT = join(ROOT, 'scripts', 'smoke-install.mjs');
-const flag = process.env.STORYSCRIPT_SMOKE;
-const ENABLED = flag === '1' || (flag !== '0' && Boolean(process.env.CI));
+const ENABLED = process.env.STORYSCRIPT_SMOKE === '1';
 
 interface ServerReport {
   port: number;
@@ -79,4 +82,34 @@ describe.skipIf(!ENABLED)('install paths under a temporary HOME (slow)', () => {
     }
     expect(report.source!.commit).toMatch(/^[0-9a-f]{40}$/);
   }, 40 * 60_000);
+});
+
+describe('npm pack file-list policy (fast, always on)', () => {
+  // a variable specifier: the script is plain .mjs without type declarations
+  const load = async () => (await import(pathToFileURL(SCRIPT).href)) as { packProblems: (files: string[]) => string[] };
+  const GOOD = ['package.json', 'README.md', 'LICENSE', 'dist/cli.mjs', 'dist/THIRD_PARTY_NOTICES.md', 'web/index.html', 'web/assets/index-abc.js', 'web/assets/index-abc.css'];
+
+  test('the expected layout passes', async () => {
+    const { packProblems } = await load();
+    expect(packProblems(GOOD)).toEqual([]);
+    expect(packProblems([...GOOD.filter((f) => f !== 'dist/THIRD_PARTY_NOTICES.md'), 'THIRD_PARTY_NOTICES.md'])).toEqual([]);
+  });
+
+  test.each([
+    ['source map', 'dist/cli.mjs.map'],
+    ['.env', 'dist/.env'],
+    ['TypeScript source', 'src/cli.ts'],
+    ['test', 'dist/queue.test.mjs'],
+    ['fixtures', 'web/fixtures/a.txt'],
+    ['stray top-level file', 'tsdown.config.ts'],
+    ['tarball', 'dist/old.tgz'],
+  ])('rejects a %s (%s)', async (_what, file) => {
+    const { packProblems } = await load();
+    expect(packProblems([...GOOD, file]).length).toBeGreaterThan(0);
+  });
+
+  test.each(['README.md', 'LICENSE', 'dist/cli.mjs', 'web/index.html', 'dist/THIRD_PARTY_NOTICES.md'])('requires %s', async (missing) => {
+    const { packProblems } = await load();
+    expect(packProblems(GOOD.filter((f) => f !== missing))).not.toEqual([]);
+  });
 });

@@ -28,6 +28,8 @@ export const ErrorCode = z.enum([
   'PROVIDER_OUTCOME_UNKNOWN',
   'PROVIDER_REFUSED',
   'ATTEMPTS_EXHAUSTED',
+  /** project-level soft cap on paid generations reached */
+  'QUOTA_EXCEEDED',
   'FFMPEG_MISSING',
   'PROJECT_LOCKED',
   'PROJECT_EXISTS',

@@ -7,6 +7,7 @@ import { listDrafts } from '../db/repos/draft.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
 import { applyBreakdown, discardDraft, draftDetail } from '../services/drafts.ts';
+import { ensuringBoards } from '../services/boards/boards.ts';
 
 /** AI breakdown (FR-03): request → job → draft → review → apply / discard. */
 export function registerDraftRoutes(app: Hono, deps: AppDeps): void {
@@ -26,7 +27,8 @@ export function registerDraftRoutes(app: Hono, deps: AppDeps): void {
   app.post(Api.applyBreakdown.path, async (c) => {
     const id = idParam(c);
     const input = await parseBody(c, ApplyBreakdownInput);
-    return respond(c, ApplyBreakdownResult, applyBreakdown(db(), id, input));
+    const d = db();
+    return respond(c, ApplyBreakdownResult, d.tx(() => ensuringBoards(d, applyBreakdown(d, id, input))));
   });
 
   app.post(Api.discardDraft.path, (c) => respond(c, ShotDraft, discardDraft(db(), idParam(c))));

@@ -27,6 +27,8 @@ import { PlanView } from './views/plan/PlanView.tsx';
 
 // The script workspace is the heaviest page; it loads as its own chunk.
 const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ default: m.ScriptView })));
+const SetView = lazy(() => import('./views/set/SetView.tsx').then((m) => ({ default: m.SetView })));
+const MediaView = lazy(() => import('./views/media/MediaView.tsx').then((m) => ({ default: m.MediaView })));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -177,5 +179,18 @@ function StagePage({ stage, project }: { stage: StageId; project: Project }) {
     );
   }
   if (stage === 'plan') return <PlanView />;
+  if (stage === 'set' || stage === 'media') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner label="正在加载…" />
+          </div>
+        }
+      >
+        {stage === 'set' ? <SetView /> : <MediaView />}
+      </Suspense>
+    );
+  }
   return <StageOutlineView stage={stage} />;
 }

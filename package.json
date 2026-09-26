@@ -24,7 +24,8 @@
     "licenses": "node scripts/check-licenses.mjs",
     "ui:shots": "tsx scripts/ui-shots.ts",
     "eval:breakdown": "tsx scripts/eval-breakdown.ts",
-    "gen:media": "tsx scripts/gen-media.ts"
+    "gen:media": "tsx scripts/gen-media.ts",
+    "ui:shots:media": "tsx scripts/ui-shots-media.ts"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0",

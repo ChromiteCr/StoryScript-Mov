@@ -13,7 +13,7 @@ const [X, Y, W, V] = [201, 202, 203, 204].map(uid) as [string, string, string, s
 describe('AT-08 feasible data where a heuristic order fails → partial with reasons (never proven_infeasible)', () => {
   test('tight-window-first ordering pushes the cursor past the only room for a long setup', () => {
     // X needs performer P 14:00–15:00; Y is a 5 h setup. Valid plan: Y 09–14, X 14–15.
-    // Greedy ranks X first (its window ends earlier), places it at 14:00, then Y has no 5 h left.
+    // An X-first order places X at 14:00, then Y has no 5 h left.
     const data = input({
       crew_window: win('09:00', '18:00'),
       resources: [resource(P, 'performer', 'P', [win('14:00', '15:00')]), resource(L1, 'location', 'L1', [win('09:00', '18:00')])],
@@ -23,7 +23,10 @@ describe('AT-08 feasible data where a heuristic order fails → partial with rea
         setup(Y, 'Y', { location: L1, shots: [b], setup: 60, perShot: 180, reset: 60 }),
       ],
     });
-    const r = schedule(data);
+    // the multi-start search finds the valid plan on its own
+    expect(schedule(data).outcome).toBe('feasible');
+    // the X-first order, kept as given, misses Y → partial with a reason, never "infeasible"
+    const r = reorder(data, [X, Y]);
     expect(r.outcome).toBe('partial');
     expect(r.contradictions).toEqual([]);
     expect(r.unplaced).toHaveLength(1);

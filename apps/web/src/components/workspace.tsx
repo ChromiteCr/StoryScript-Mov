@@ -132,7 +132,7 @@ export function Panel({ title, tools, children, padded = true, className = '', b
         </h2>
         {tools ? <div className="flex shrink-0 items-center gap-0.5">{tools}</div> : null}
       </header>
-      <div className={`min-h-0 flex-1 overflow-auto print:overflow-visible print:p-0 ${padded ? 'p-3' : ''} ${bodyClassName}`}>
+      <div className={`relative min-h-0 flex-1 overflow-auto print:overflow-visible print:p-0 ${padded ? 'p-3' : ''} ${bodyClassName}`}>
         {children}
       </div>
     </section>

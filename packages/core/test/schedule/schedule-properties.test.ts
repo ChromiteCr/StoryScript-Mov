@@ -9,7 +9,7 @@ import { scheduleInputArb } from './arbitraries.ts';
 import { ms, overlappingPairs } from './fixtures.ts';
 
 /** Total fast-check runs, reported in the milestone measurements. */
-const RUNS = { accept: 1000, inject: 1000, derived: 500, soundness: 400, determinism: 300, idempotent: 300 };
+const RUNS = { accept: 1000, inject: 1000, derived: 500, soundness: 400, completeness: 400, determinism: 300, idempotent: 300 };
 const tally: Record<string, number> = {};
 const count = (key: string): void => {
   tally[key] = (tally[key] ?? 0) + 1;
@@ -208,6 +208,25 @@ describe('proven_infeasible is sound', () => {
         }
       }),
       { numRuns: RUNS.soundness },
+    );
+  });
+});
+
+describe('small days are searched completely', () => {
+  test('if any setup order gives a clean plan, schedule() returns feasible (≤ 4 setups)', () => {
+    fc.assert(
+      fc.property(scheduleInputArb(4), (input) => {
+        const r = schedule(input);
+        if (r.outcome !== 'partial') return;
+        count('completeness:partial_checked');
+        const shots = new Map(input.shots.map((s) => [s.id, s]));
+        const active = input.setups.filter((s) => s.shot_ids.some((id) => shots.get(id)?.required_status !== 'waived')).map((s) => s.id);
+        for (const perm of permutations(active)) {
+          // no order may be clean while the scheduler settled for partial
+          expect(validate(input, greedySchedule(input, perm).blocks)).not.toEqual([]);
+        }
+      }),
+      { numRuns: RUNS.completeness },
     );
   });
 });

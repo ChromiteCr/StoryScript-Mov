@@ -21,9 +21,9 @@ afterEach(() => app.close());
 const createPlan = (call = '09:00', wrap = '18:00') => app.post<PlanDetail>('/api/v1/plans', { date: '2026-10-05', crew_call: call, crew_wrap: wrap });
 
 describe('AT-08 partial vs proven_infeasible', () => {
-  test('greedy order fails on feasible data → partial with a reason; reordering finds the feasible plan', async () => {
+  test('a heuristic order fails on feasible data → partial with a reason; the scheduler and a reorder find the plan', async () => {
     // X needs performer P only 14:00–15:00; Y is a 5 h setup at the same location.
-    // Tightest-window-first puts X at 14:00, leaving no 5 h stretch for Y. Valid: Y 09–14, X 14–15.
+    // Order X-first puts X at 14:00, leaving no 5 h stretch for Y. Valid: Y 09–14, X 14–15.
     const [s1] = w.scenes as [(typeof w.scenes)[0]];
     await makeResource(app, 'performer', '演员甲', [W('14:00', '15:00')], [w.c1.id]);
     const loc = await makeResource(app, 'location', '书店', [W('09:00', '18:00')], [w.shop.id]);
@@ -34,27 +34,32 @@ describe('AT-08 partial vs proven_infeasible', () => {
 
     const res = await createPlan();
     expect(res.status, res.text).toBe(201);
-    const { plan, approval } = res.data;
+    // multi-start search finds the valid plan by itself
+    expect(res.data.plan.result.outcome).toBe('feasible');
+    // an explicit X-first order is kept as given and misses Y → partial, never "infeasible"
+    const { plan, approval } = await expectOk<PlanDetail>(
+      app.post(`/api/v1/plans/${res.data.plan.id}/reorder`, { expected_revision: 0, order: [X.id, Y.id] }),
+    );
     expect(plan.result.outcome).toBe('partial');
     expect(plan.result.contradictions).toEqual([]);
     expect(plan.result.unplaced).toEqual([{ setup_id: Y.id, code: 'ORDER', reason: expect.stringMatching(/^ORDER: /) }]);
     expect(plan.result.violations.map((v) => v.code)).toEqual(['UNPLACED_REQUIRED']);
     expect(approval.ok).toBe(false);
     expect(approval.blockers.map((v) => v.code)).toContain('UNPLACED_REQUIRED');
-    const blocked = await app.post(`/api/v1/plans/${plan.id}/approve`, { expected_revision: 0 });
+    const blocked = await app.post(`/api/v1/plans/${plan.id}/approve`, { expected_revision: 1 });
     expect(blocked.status).toBe(409);
 
-    const fixed = await expectOk<PlanDetail>(app.post(`/api/v1/plans/${plan.id}/reorder`, { expected_revision: 0, order: [Y.id, X.id] }));
+    const fixed = await expectOk<PlanDetail>(app.post(`/api/v1/plans/${plan.id}/reorder`, { expected_revision: 1, order: [Y.id, X.id] }));
     expect(fixed.plan.result.outcome).toBe('feasible');
     expect(fixed.plan.result.order).toEqual([Y.id, X.id]);
     expect(fixed.plan.result.violations).toEqual([]);
-    expect(fixed.plan.revision).toBe(1);
+    expect(fixed.plan.revision).toBe(2);
     expect(fixed.approval.ok).toBe(true);
     const shoot = fixed.plan.result.blocks.find((blk) => blk.setup_id === X.id && blk.kind === 'shoot')!;
     expect([shoot.start_utc, shoot.end_utc]).toEqual([L('14:00'), L('15:00')]);
 
     // a stale expected_revision is a conflict, not a silent overwrite
-    const conflict = await app.post(`/api/v1/plans/${plan.id}/reorder`, { expected_revision: 0, order: [X.id, Y.id] });
+    const conflict = await app.post(`/api/v1/plans/${plan.id}/reorder`, { expected_revision: 1, order: [X.id, Y.id] });
     expect(conflict.status).toBe(409);
     expect(conflict.body.error!.code).toBe('REVISION_CONFLICT');
   });

@@ -28,9 +28,13 @@ async function seed(target: PlanApp): Promise<string> {
   X = await makeSetup(target, 'X', [a.id], { location: loc.id, durations: { setup_min: 0, per_shot_min: 60, reset_min: 0 } });
   Y = await makeSetup(target, 'Y', [b.id], { location: loc.id, durations: { setup_min: 60, per_shot_min: 180, reset_min: 60 } });
   const created = await expectOk<PlanDetail>(target.post('/api/v1/plans', { date: '2026-10-05', crew_call: '09:00', crew_wrap: '18:00' }), 201);
-  expect(created.plan.result.outcome).toBe('partial');
-  // X (tighter window) leads the default order → keys u1 = X, u2 = Y
-  expect(created.plan.result.order).toEqual([X.id, Y.id]);
+  // the scheduler finds Y 09–14, X 14–15 on its own; force a bad manual order
+  // (X first) so the suggestion has something to fix
+  expect(created.plan.result.outcome).toBe('feasible');
+  const bad = await expectOk<PlanDetail>(target.post(`/api/v1/plans/${created.plan.id}/reorder`, { expected_revision: 0, order: [X.id, Y.id] }));
+  expect(bad.plan.result.outcome).toBe('partial');
+  // keys follow the current order → u1 = X, u2 = Y
+  expect(bad.plan.result.order).toEqual([X.id, Y.id]);
   return created.plan.id;
 }
 
@@ -77,13 +81,13 @@ describe('suggest-order with a configured text model', () => {
     expect(detail!.draft.parsed).toEqual({ setup_order: [Y.id, X.id], rationale: expect.stringContaining('大场面') });
     expect(detail!.draft.scope).toMatchObject({ plan_id: planId });
 
-    const adopted = await expectOk<PlanDetail>(app.post(`/api/v1/plans/${planId}/adopt-suggestion`, { expected_revision: 0, draft_id: detail!.draft.id }));
+    const adopted = await expectOk<PlanDetail>(app.post(`/api/v1/plans/${planId}/adopt-suggestion`, { expected_revision: 1, draft_id: detail!.draft.id }));
     expect(adopted.plan.result.order).toEqual([Y.id, X.id]);
     expect(adopted.plan.result.outcome).toBe('feasible');
     expect(adopted.plan.result.violations).toEqual([]);
-    expect(adopted.plan.revision).toBe(1);
+    expect(adopted.plan.revision).toBe(2);
     // a draft is adopted once
-    const twice = await app.post(`/api/v1/plans/${planId}/adopt-suggestion`, { expected_revision: 1, draft_id: detail!.draft.id });
+    const twice = await app.post(`/api/v1/plans/${planId}/adopt-suggestion`, { expected_revision: 2, draft_id: detail!.draft.id });
     expect(twice.status).toBe(409);
   });
 
@@ -111,7 +115,7 @@ describe('suggest-order with a configured text model', () => {
     expect(fake.chatRequests()).toHaveLength(3);
     expect(detail!.draft.status).toBe('failed');
     expect(detail!.draft.parsed).toBeNull();
-    const adopt = await app.post(`/api/v1/plans/${planId}/adopt-suggestion`, { expected_revision: 0, draft_id: detail!.draft.id });
+    const adopt = await app.post(`/api/v1/plans/${planId}/adopt-suggestion`, { expected_revision: 1, draft_id: detail!.draft.id });
     expect(adopt.status).toBe(409);
   });
 });

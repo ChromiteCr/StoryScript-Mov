@@ -34,7 +34,16 @@ interface SearchOptions {
   precedence: boolean;
 }
 
-export function greedy(model: Model, order: readonly Uuid[]): GreedyResult {
+export interface GreedyOptions {
+  /**
+   * Fill the earliest legal gap anywhere in the day instead of only appending
+   * behind the previous setup (SPEC FR-06 step 4). Off for an explicit order,
+   * which must be kept as given.
+   */
+  backfill?: boolean;
+}
+
+export function greedy(model: Model, order: readonly Uuid[], opts: GreedyOptions = {}): GreedyResult {
   const placed = new Map<Uuid, Placed>();
   const blocks: ScheduleBlock[] = [];
   const unplaced: Unplaced[] = [];
@@ -85,13 +94,13 @@ export function greedy(model: Model, order: readonly Uuid[]): GreedyResult {
       unplaced.push(unplacedOf(id, SELF_PRECEDENCE));
       continue;
     }
-    const start = earliestStart(model, s, placed, { lower: cursor, occupied, precedence: true });
+    const start = earliestStart(model, s, placed, { lower: opts.backfill ? (crew.start ?? cursor) : cursor, occupied, precedence: true });
     if (start === null) {
       unplaced.push(unplacedOf(id, diagnose(model, s, placed, occupied, cursor)));
       continue;
     }
     occupy(s, start, false, start + s.total);
-    cursor = start + s.total;
+    cursor = Math.max(cursor, start + s.total);
   }
 
   blocks.sort((a, b) => cmp(a.start_utc, b.start_utc) || cmp(a.id, b.id));

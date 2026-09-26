@@ -152,7 +152,7 @@ function Workbench() {
           <ErrorNotice error={close.error} />
         </div>
       ) : null}
-      <main className="min-h-0 flex-1 overflow-auto print:overflow-visible">
+      <main className="relative min-h-0 flex-1 overflow-auto print:overflow-visible">
         <div key={page} className="h-full animate-page-in motion-reduce:animate-none print:h-auto">
           {body}
         </div>

@@ -46,7 +46,7 @@ export function FolderField({ id, describedBy, invalid, value, onChange, onPicke
           spellCheck={false}
           autoComplete="off"
           autoCapitalize="off"
-          className="font-mono text-[12.5px]"
+          className="font-mono text-xs"
         />
         <Button onClick={pick} busy={choose.isPending} title="在本机弹出文件夹选择框">
           {choose.isPending ? null : <FolderSearch aria-hidden className="size-3.5" />}

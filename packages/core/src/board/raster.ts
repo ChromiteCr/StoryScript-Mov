@@ -202,7 +202,9 @@ export function traceLoops(g: Grid, threshold = 0.5, smooth = 2, minLen = 0): V2
     }
     if (loop.length < 4) continue;
     let pts = loop.map(toPx);
-    if (smooth > 0) pts = chaikin(pts, smooth);
+    // marching squares on a binary grid leaves half-cell stair-steps; a small
+    // cyclic binomial filter irons them out before the corner-cutting pass
+    if (smooth > 0) pts = chaikin(relax(pts, smooth), 1);
     pts = simplifyClosed(pts, g.cell * 0.18);
     let len = 0;
     for (let q = 0; q < pts.length; q++) {
@@ -213,6 +215,29 @@ export function traceLoops(g: Grid, threshold = 0.5, smooth = 2, minLen = 0): V2
     if (len >= minLen) loops.push(pts);
   }
   return loops;
+}
+
+/** `n` passes of a cyclic [1 2 3 2 1]/9 filter over a closed polyline. */
+function relax(pts: readonly V2[], n: number): V2[] {
+  let cur = pts.slice();
+  const m = cur.length;
+  if (m < 6) return cur;
+  for (let k = 0; k < n; k++) {
+    const next: V2[] = new Array(m);
+    for (let i = 0; i < m; i++) {
+      let x = 0;
+      let y = 0;
+      for (let d = -2; d <= 2; d++) {
+        const q = cur[(i + d + m) % m] as V2;
+        const wgt = 3 - Math.abs(d);
+        x += q[0] * wgt;
+        y += q[1] * wgt;
+      }
+      next[i] = [x / 9, y / 9];
+    }
+    cur = next;
+  }
+  return cur;
 }
 
 /** Ramer–Douglas–Peucker on an open polyline. */

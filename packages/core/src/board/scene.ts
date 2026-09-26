@@ -292,6 +292,12 @@ const FACES: { key: FaceKey; n: V3; idx: [number, number, number, number] }[] = 
 ];
 
 /** World corners of a local box (8, bit order x|y|z). */
+/** World-space corners (8 each) of a prop's sub-boxes (pencil cast shadows). */
+export function propWorldBoxes(p: BoardProp, cam: BoardCamera): V3[][] {
+  const L = localToWorld(propWorldOrigin(p, cam), p.y);
+  return propParts(p).map((lb) => boxCorners(lb, L));
+}
+
 function boxCorners(b: LocalBox, L: (p: V3) => V3): V3[] {
   const out: V3[] = [];
   for (let i = 0; i < 8; i++) {

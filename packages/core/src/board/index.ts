@@ -67,6 +67,7 @@ export {
 export { BAND_TONE, buildPencilPlan, groundTone, subjectBands, type DepthBand, type PencilPlan, type PencilSubjectInfo } from './pencil-plan.ts';
 export { renderSubjectMask, renderToneMap, type SubjectMaskOptions } from './pencil-masks.ts';
 export {
+  dilate,
   erode,
   l1ToneClusters,
   l2MaxSaturation,

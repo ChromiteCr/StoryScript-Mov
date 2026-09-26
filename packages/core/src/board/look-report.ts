@@ -51,6 +51,8 @@ export interface LookReport {
   /** null: no people in frame */
   l6: number | null;
   l6Subject: string | null;
+  /** visible area (px @ width) of the L6 subject */
+  l6Area: number;
   l7: LineWidths;
 }
 
@@ -88,15 +90,18 @@ export async function measureLook(spec: BoardSpec, raster: Rasterize, o: { look?
   // the foreground subject: the nearest person that is visible in frame
   let l6: number | null = null;
   let l6Subject: string | null = null;
+  let l6Area = 0;
   for (const s of infos.slice().sort((a, b) => a.depth - b.depth)) {
     const m = maskFrom(await raster(renderSubjectMask(spec, { ids: [s.id], width: W }), W));
-    if (maskArea(m) < 200) continue;
+    const area = maskArea(m);
+    if (area < 200) continue;
     l6 = l6ForegroundPaper(lum, m);
     l6Subject = s.id;
+    l6Area = area;
     break;
   }
 
   const contour = await raster(renderPencil(spec, { overlay: false, look, layers: 'contour' }), W);
   const l7 = l7LineWidthCV(luminance(contour), contour.width, contour.height);
-  return { l1, l2, l3, l3Area, l4, bands, l5, l6, l6Subject, l7 };
+  return { l1, l2, l3, l3Area, l4, bands, l5, l6, l6Subject, l6Area, l7 };
 }

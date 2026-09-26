@@ -6,21 +6,24 @@
  *
  * Tone rules (docs/PLAN.md, 分镜管线 step 5):
  *  - people by depth band: fg 3 / mg 2 / bg 1 (tone_override wins);
- *  - boxes by face vs light: lit 1, side 2, away 3 (environment shell one lighter);
- *  - ground: near → far 2 → 1 → 0 (aerial perspective), sky 0;
- *  - contact shadow under each person: 3.
+ *  - boxes by face vs light: lit top 0 (paper), lit side 1, side 2, away 3
+ *    (environment shell: lit 0, else 1);
+ *  - ground: near → far 2 → 1 → 0 in laid-in blocks (aerial perspective), sky 0;
+ *    looking steeply down, one light tone;
+ *  - contact shadow under each person and cast shadow of furniture-scale props: 3
+ *    (2.3 seen from high above).
  *
  * Light convention: `azimuth_deg` swings the light from behind the camera
  * (0) toward the camera's left; direction to the light =
  * (−sin az·cos el, sin el, −cos az·cos el). The layout default (45°, 40°)
  * is the illustrator's upper-left light.
  */
-import type { BoardSpec } from '@storyscript/contracts';
+import type { BoardProp, BoardSpec } from '@storyscript/contracts';
 import { NEAR_M, projectPoint, projectPolygon, toCamera, unprojectToPlane } from './camera.ts';
-import { clamp, clipPolygon, clipPolygonRect, DEG, dot3, lerp, mix2, polygonArea, type V2, type V3 } from './math.ts';
+import { clamp, clipPolygon, clipPolygonRect, convexHull, DEG, dot3, lerp, mix2, polygonArea, type V2, type V3 } from './math.ts';
 import { poseTopY } from './puppets.ts';
 import { fillPolygon, makeGrid, type Grid } from './raster.ts';
-import { buildFrameScene, type FrameScene, type PropItem, type SubjectItem } from './scene.ts';
+import { buildFrameScene, propWorldBoxes, type FrameScene, type PropItem, type SubjectItem } from './scene.ts';
 
 export type DepthBand = 'fg' | 'mg' | 'bg';
 export const BAND_TONE: Record<DepthBand, number> = { fg: 3, mg: 2, bg: 1 };
@@ -48,10 +51,32 @@ export interface PlanEdge {
   n: V2;
 }
 
+/**
+ * One toned patch of a figure, in painter order: the lit side of a puppet
+ * part at the figure's tone ('body'), or the part in shade ('shade', one tone
+ * darker — form shading per limb). The head is one form like the rest: no
+ * face plane, no features; the facing reads from a faint guide line.
+ */
+export interface FigureRegion {
+  pts: V2[];
+  tone: number;
+  kind: 'body' | 'shade';
+}
+
 export type PlanItem =
   | { type: 'prop'; key: string; item: PropItem; band: DepthBand; faces: PlanFace[]; edges: PlanEdge[] }
-  | { type: 'shadow'; key: string; subjectId: string; pts: V2[] }
-  | { type: 'subject'; key: string; item: SubjectItem; band: DepthBand; tone: number; parts: V2[][] };
+  | { type: 'shadow'; key: string; /** the casting subject or prop */ owner: string; pts: V2[]; tone: number }
+  | {
+      type: 'subject';
+      key: string;
+      item: SubjectItem;
+      band: DepthBand;
+      tone: number;
+      /** filled silhouette parts (counter-clockwise, their nonzero union is the figure) */
+      parts: V2[][];
+      /** toned regions in painter order */
+      regions: FigureRegion[];
+    };
 
 export interface GroundPlan {
   /** ground region (frame px) */
@@ -133,12 +158,15 @@ function referenceDepth(scene: FrameScene, subjects: PencilSubjectInfo[]): numbe
 /** Ground tone vs depth ratio ρ = depth / refDepth. */
 export function groundTone(rho: number): number {
   if (!Number.isFinite(rho) || rho <= 0) return 0;
-  if (rho <= 0.5) return 2;
-  if (rho <= 0.95) return lerp(2, 1, (rho - 0.5) / 0.45);
-  if (rho <= 1.7) return 1;
-  if (rho <= 3.2) return lerp(1, 0, (rho - 1.7) / 1.5);
-  return 0;
+  // laid-in blocks (near 2, middle 1, far paper) with short blends, not a smooth ramp
+  const step = (x: number, at: number, w: number) => clamp((x - (at - w)) / (2 * w), 0, 1);
+  return 2 - step(rho, GROUND_BANDS[0], 0.06) - step(rho, GROUND_BANDS[1], 0.12);
 }
+
+/** depth ratios (to the mid-ground plane) where the ground steps 2 → 1 and 1 → 0 */
+export const GROUND_BANDS = [0.62, 1.35] as const;
+/** ground tone when the camera looks steeply down (the floor is the backdrop) */
+export const STEEP_GROUND = 0.45;
 
 function groundPlan(spec: BoardSpec, scene: FrameScene, refDepth: number): GroundPlan | null {
   const { W, H } = scene;
@@ -184,7 +212,7 @@ function groundPlan(spec: BoardSpec, scene: FrameScene, refDepth: number): Groun
     const o = k / N;
     const p: V2 = [lerp(from[0], to[0], o), lerp(from[1], to[1], o)];
     const g = unprojectToPlane(spec.camera, spec.frame.aspect, p[0] / W, p[1] / H, 0);
-    const v = steep ? 0.5 : g ? groundTone(toCamera(b, g)[2] / refDepth) : 0;
+    const v = steep ? STEEP_GROUND : g ? groundTone(toCamera(b, g)[2] / refDepth) : 0;
     stops.push({ o, v: Math.round(v * 1000) / 1000 });
   }
   return { poly, from, to, stops };
@@ -206,18 +234,17 @@ export function groundValueAt(gp: GroundPlan, x: number, y: number): number {
 }
 
 /**
- * Box faces: lit 1, side 2, turned away 3. A lit top plane is the light one
- * (the draughtsman's convention: tops lightest, then the lit side, then the
- * shadow side); otherwise the brightest visible face. The environment shell
- * (room walls, street blocks) stays paper except its shadowed planes, so
- * people and props carry the tone.
+ * Box faces, the draughtsman's convention: a lit top plane stays paper (0),
+ * the brightest lit side is 1, other lit sides 2, planes turned away 3. The
+ * environment shell (room walls, street blocks) stays paper except its
+ * shadowed planes, so people and props carry the tone.
  */
 function faceTones(ns: readonly V3[], L: V3, env: boolean): number[] {
   const dots = ns.map((n) => dot3(n, L));
   if (env) return dots.map((d) => (d > 0.1 ? 0 : 1));
   const top = ns.findIndex((n, i) => n[1] > 0.9 && (dots[i] as number) > 0.1);
-  const max = Math.max(...dots);
-  return dots.map((d, i) => (d <= 0.1 ? 3 : top >= 0 ? (i === top ? 1 : 2) : d >= max - 0.08 ? 1 : 2));
+  const max = Math.max(-1, ...dots.filter((_, i) => i !== top));
+  return dots.map((d, i) => (i === top ? 0 : d <= 0.1 ? 3 : d >= max - 0.08 ? 1 : 2));
 }
 
 const edgeKey = (p: V2) => `${Math.round(p[0] * 20)},${Math.round(p[1] * 20)}`;
@@ -285,8 +312,8 @@ function shadowPolygon(spec: BoardSpec, scene: FrameScene, id: string, L: V3): V
     gx /= gl;
     gz /= gl;
   }
-  const along = 0.24 * h;
-  const across = 0.12 * h;
+  const along = 0.2 * h;
+  const across = 0.1 * h;
   const cx = s.x + gx * 0.1 * h;
   const cz = s.z + gz * 0.1 * h;
   const pts: V3[] = [];
@@ -298,6 +325,97 @@ function shadowPolygon(spec: BoardSpec, scene: FrameScene, id: string, L: V3): V
   }
   return projectPolygon(scene.basis, pts).map((p) => [p[0] * scene.W, p[1] * scene.H] as V2);
 }
+
+const CASTS_SHADOW = new Set<BoardProp['kind']>(['table', 'chair', 'car', 'box']);
+
+/**
+ * Cast shadow of a set prop on the plane it stands on (a box on a table
+ * shadows the table top, the table shadows the floor): the convex hull of its
+ * corners pushed along the light onto that plane, length capped for a low sun.
+ */
+function propShadow(spec: BoardSpec, scene: FrameScene, p: BoardProp, L: V3): V2[] {
+  if (L[1] < 0.08) return [];
+  const y0 = p.y;
+  const reach = Math.min(Math.hypot(L[0], L[2]) / L[1], 2.5);
+  const lx = L[0] / (Math.hypot(L[0], L[2]) || 1);
+  const lz = L[2] / (Math.hypot(L[0], L[2]) || 1);
+  const foot: V2[] = [];
+  for (const box of propWorldBoxes(p, spec.camera))
+    for (const c of box) {
+      const up = c[1] - y0;
+      foot.push([c[0] - lx * up * reach, c[2] - lz * up * reach]);
+    }
+  const hull = convexHull(foot);
+  if (hull.length < 3) return [];
+  const pts: V3[] = hull.map((q) => [q[0], y0 + 0.002, q[1]]);
+  return projectPolygon(scene.basis, pts).map((q) => [q[0] * scene.W, q[1] * scene.H] as V2);
+}
+
+/** `poly` ∩ convex hull of `clip` (Sutherland–Hodgman against each hull edge). */
+export function intersectConvex(poly: readonly V2[], clip: readonly V2[]): V2[] {
+  const hull = convexHull(clip);
+  if (hull.length < 3) return [];
+  const sgn = polygonArea(hull) > 0 ? 1 : -1;
+  let out: V2[] = poly.slice();
+  for (let i = 0; i < hull.length && out.length >= 3; i++) {
+    const a = hull[i] as V2;
+    const b = hull[(i + 1) % hull.length] as V2;
+    const ex = b[0] - a[0];
+    const ey = b[1] - a[1];
+    out = clipPolygon(out, (p) => sgn * (ex * (p[1] - a[1]) - ey * (p[0] - a[0])), mix2);
+  }
+  return out;
+}
+
+/** Minor-axis width (px) of a polygon from its vertex covariance (≈ limb thickness). */
+export function minorWidth(poly: readonly V2[]): number {
+  const n = poly.length;
+  if (n < 3) return 0;
+  let cx = 0;
+  let cy = 0;
+  for (const p of poly) {
+    cx += p[0];
+    cy += p[1];
+  }
+  cx /= n;
+  cy /= n;
+  let xx = 0;
+  let yy = 0;
+  let xy = 0;
+  for (const p of poly) {
+    const dx = p[0] - cx;
+    const dy = p[1] - cy;
+    xx += dx * dx;
+    yy += dy * dy;
+    xy += dx * dy;
+  }
+  xx /= n;
+  yy /= n;
+  xy /= n;
+  const tr = xx + yy;
+  const det = xx * yy - xy * xy;
+  const l2 = tr / 2 - Math.sqrt(Math.max(0, (tr * tr) / 4 - det));
+  // a uniform ring of radius r has variance r²/2 per axis ⇒ width ≈ 2·√(2·λ)
+  return 2 * Math.sqrt(2 * Math.max(0, l2));
+}
+
+/**
+ * Lit part of a puppet part for form shading: the part intersected with a
+ * copy of itself shifted toward the light by `frac` × its thickness. What is
+ * left over (drawn first, one tone darker) is a crescent along the side and
+ * end turned away from the light — it follows each limb, not one straight cut.
+ */
+export function litSide(poly: readonly V2[], light: V2, frac: number): V2[] {
+  const w = minorWidth(poly);
+  if (w < 2) return poly.slice();
+  const d = frac * w;
+  const moved = poly.map((p) => [p[0] + light[0] * d, p[1] + light[1] * d] as V2);
+  const out = intersectConvex(poly, moved);
+  return out.length >= 3 && Math.abs(polygonArea(out)) > 1 ? out : [];
+}
+
+/** Figure form shading: shift of the lit copy, as a fraction of the part's thickness. */
+export const SHADE_SHIFT = 0.34;
 
 /** Margin (px) kept around the frame when clipping fill polygons. */
 export const FILL_MARGIN = 64;
@@ -320,6 +438,9 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
     lx /= ll;
     ly /= ll;
   }
+  const steep = spec.camera.pitch_deg < -60;
+  // seen from high above a shadow shows whole, right beside its owner: a little lighter
+  const shadowTone = steep ? 2.3 : 3;
   const subjects = subjectBands(spec, scene);
   const refDepth = referenceDepth(scene, subjects);
   const info = new Map(subjects.map((s) => [s.id, s]));
@@ -338,13 +459,48 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
           return { pts: fit(f.pts), tone: tones.get(f.sub)?.[k] ?? 2, sub: f.sub };
         })
         .filter((f) => f.pts.length >= 3);
+      // furniture-scale set props cast a shadow; walls and buildings do not (their
+      // shadow would be a stray patch far off on the paper-white ground)
+      const prop = !it.env ? spec.scene.props.find((q) => q.id === it.id) : undefined;
+      const casts = prop && prop.attach === 'world' && CASTS_SHADOW.has(prop.kind);
+      const cast = casts ? fit(propShadow(spec, scene, prop, L)) : [];
+      if (cast.length >= 3) items.push({ type: 'shadow', key: `shadow:${it.id}`, owner: it.id, pts: cast, tone: shadowTone });
       items.push({ type: 'prop', key: `prop:${it.id}`, item: it, band, faces, edges: propEdges(it.faces) });
     } else {
       const s = info.get(it.id);
       const shadow = fit(shadowPolygon(spec, scene, it.id, L));
-      if (shadow.length >= 3) items.push({ type: 'shadow', key: `shadow:${it.id}`, subjectId: it.id, pts: shadow });
-      const parts = orientAll(it.parts.filter((p) => p.fill !== 'none').map((p) => fit(p.pts)));
-      items.push({ type: 'subject', key: `subject:${it.id}`, item: it, band: s?.band ?? 'mg', tone: s?.tone ?? 2, parts });
+      if (shadow.length >= 3) items.push({ type: 'shadow', key: `shadow:${it.id}`, owner: it.id, pts: shadow, tone: shadowTone });
+      const tone = s?.tone ?? 2;
+      // silhouette parts only: the face plane is not drawn (it read as a visor)
+      const filled = it.parts.filter((p) => p.fill !== 'none' && p.silhouette);
+      const parts = orientAll(filled.map((p) => fit(p.pts)));
+      // Per draw group (a whole limb, the torso, the head — puppets.ts): every
+      // part's shade first, then the lit sides on top. Inside a group the lit
+      // sides hide the seams, so a limb shades as one form (no knee / elbow
+      // crescents); a nearer group still covers a farther one.
+      const regions: FigureRegion[] = [];
+      let i = 0;
+      while (i < filled.length) {
+        const group = filled[i]!.group;
+        let j = i;
+        while (j < filled.length && filled[j]!.group === group) j++;
+        const shade: FigureRegion[] = [];
+        const lit: FigureRegion[] = [];
+        for (const p of filled.slice(i, j)) {
+          const pts = orientAll([fit(p.pts)])[0];
+          if (!pts) continue;
+          // far-side limbs sit in the figure's own shadow: one tone darker, no split
+          const base = p.far ? Math.min(3, tone + 1) : tone;
+          if (base < 3) {
+            shade.push({ pts, tone: base + 1, kind: 'shade' });
+            const l = litSide(pts, [lx, ly], SHADE_SHIFT);
+            if (l.length >= 3) lit.push({ pts: orientAll([l])[0] ?? l, tone: base, kind: 'body' });
+          } else lit.push({ pts, tone: base, kind: 'body' });
+        }
+        regions.push(...shade, ...lit);
+        i = j;
+      }
+      items.push({ type: 'subject', key: `subject:${it.id}`, item: it, band: s?.band ?? 'mg', tone, parts, regions });
     }
   }
   return {
@@ -367,8 +523,8 @@ export function toneRaster(plan: PencilPlan, cell = 4): Grid {
   if (gp) fillPolygon(g, gp.poly, (x, y) => groundValueAt(gp, x, y));
   for (const it of plan.items) {
     if (it.type === 'prop') for (const f of it.faces) fillPolygon(g, f.pts, f.tone);
-    else if (it.type === 'shadow') fillPolygon(g, it.pts, 3);
-    else for (const p of it.parts) fillPolygon(g, p, it.tone);
+    else if (it.type === 'shadow') fillPolygon(g, it.pts, it.tone);
+    else for (const r of it.regions) fillPolygon(g, r.pts, r.tone);
   }
   return g;
 }

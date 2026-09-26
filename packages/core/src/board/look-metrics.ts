@@ -6,7 +6,7 @@
  *
  *  L1 luminance k=4 clustering: ≥3 clusters of ≥3 % whose centres are ≥0.15 apart
  *  L2 max saturation ≤ 0.04
- *  L3 240 px thumbnail, binarised (Otsu inside the people's box): IoU with the silhouette mask ≥ 0.7
+ *  L3 240 px thumbnail, binarised (Otsu over the people and a ring around them): IoU with the silhouette mask ≥ 0.7
  *  L4 mean luminance inside people by depth band: fg < mg < bg, adjacent gaps ≥ 0.08
  *  L5 gradient-orientation histogram over the toned area: main peak at the hatch angle ±8°, ≥ 50 %
  *  L6 foreground subject interior: share of near-paper pixels (luminance > 0.9) ≤ 40 %
@@ -91,7 +91,13 @@ export interface ToneClusters {
   pass: boolean;
 }
 
-/** 1-D k-means (k = 4) on a 256-bin luminance histogram, deterministic quantile init. */
+/**
+ * 1-D k-means (k = 4) on a 256-bin luminance histogram. Lloyd iterations get
+ * stuck in local optima on paper-dominated frames (three centres spent on the
+ * paper's vignette), so — like any k-means with several starts — it runs from
+ * three deterministic seeds (quantiles, even spacing, min–max spread) and keeps
+ * the clustering with the lowest within-cluster error.
+ */
 export function l1ToneClusters(lum: Float32Array, k: number = LOOK_THRESHOLDS.l1.k): ToneClusters {
   const hist = new Float64Array(256);
   for (let i = 0; i < lum.length; i++) hist[Math.min(255, Math.max(0, Math.round((lum[i] as number) * 255)))]! += 1;
@@ -104,26 +110,50 @@ export function l1ToneClusters(lum: Float32Array, k: number = LOOK_THRESHOLDS.l1
     }
     return 1;
   };
-  let centers = Array.from({ length: k }, (_, i) => quantile((i + 0.5) / k));
-  let shares = new Array<number>(k).fill(0);
-  for (let it = 0; it < 50; it++) {
-    const sum = new Float64Array(k);
-    const cnt = new Float64Array(k);
+  const lo = quantile(0.001);
+  const hi = quantile(0.999);
+  const seeds = [
+    Array.from({ length: k }, (_, i) => quantile((i + 0.5) / k)),
+    Array.from({ length: k }, (_, i) => (i + 0.5) / k),
+    Array.from({ length: k }, (_, i) => lo + ((hi - lo) * (i + 0.5)) / k),
+  ];
+  const nearest = (v: number, cs: readonly number[]) => {
+    let best = 0;
+    for (let j = 1; j < cs.length; j++) if (Math.abs(v - (cs[j] as number)) < Math.abs(v - (cs[best] as number))) best = j;
+    return best;
+  };
+  const lloyd = (init: number[]) => {
+    let centers = init.slice();
+    let shares = new Array<number>(k).fill(0);
+    for (let it = 0; it < 100; it++) {
+      const sum = new Float64Array(k);
+      const cnt = new Float64Array(k);
+      for (let b = 0; b < 256; b++) {
+        const c = hist[b] as number;
+        if (!c) continue;
+        const j = nearest(b / 255, centers);
+        sum[j]! += (b / 255) * c;
+        cnt[j]! += c;
+      }
+      const next = centers.map((c, j) => ((cnt[j] as number) > 0 ? (sum[j] as number) / (cnt[j] as number) : c));
+      shares = Array.from(cnt, (c) => c / total);
+      const moved = next.some((c, j) => Math.abs(c - (centers[j] as number)) > 1e-6);
+      centers = next;
+      if (!moved) break;
+    }
+    let sse = 0;
     for (let b = 0; b < 256; b++) {
       const c = hist[b] as number;
-      if (!c) continue;
-      const v = b / 255;
-      let best = 0;
-      for (let j = 1; j < k; j++) if (Math.abs(v - (centers[j] as number)) < Math.abs(v - (centers[best] as number))) best = j;
-      sum[best]! += v * c;
-      cnt[best]! += c;
+      if (c) sse += c * ((b / 255 - (centers[nearest(b / 255, centers)] as number)) ** 2);
     }
-    const next = centers.map((c, j) => ((cnt[j] as number) > 0 ? (sum[j] as number) / (cnt[j] as number) : c));
-    shares = Array.from(cnt, (c) => c / total);
-    const moved = next.some((c, j) => Math.abs(c - (centers[j] as number)) > 1e-6);
-    centers = next;
-    if (!moved) break;
+    return { centers, shares, sse };
+  };
+  let bestRun = lloyd(seeds[0] as number[]);
+  for (const seed of seeds.slice(1)) {
+    const r = lloyd(seed);
+    if (r.sse < bestRun.sse - 1e-9) bestRun = r;
   }
+  const { centers, shares } = bestRun;
   const order = centers.map((c, j) => ({ c, s: shares[j] as number })).sort((a, b) => a.c - b.c);
   let distinct = 0;
   let last = -Infinity;
@@ -203,50 +233,53 @@ export function otsu(lum: Float32Array, pick?: (i: number) => boolean): number {
 export interface SilhouetteIoU {
   iou: number;
   threshold: number;
-  /** region of interest (px) */
-  roi: { x0: number; y0: number; x1: number; y1: number };
+  /** radius (px) of the neighbourhood ring around the silhouette */
+  ring: number;
+}
+
+/** Binary dilation with a (2r+1)² square. */
+export function dilate(m: Mask, r: number): Mask {
+  if (r <= 0) return m;
+  const { width: w, height: h } = m;
+  const hor = new Uint8Array(w * h);
+  const pre = new Int32Array(Math.max(w, h) + 1);
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) pre[x + 1] = (pre[x] as number) + (m.data[y * w + x] as number);
+    for (let x = 0; x < w; x++) hor[y * w + x] = (pre[Math.min(w, x + r + 1)] as number) - (pre[Math.max(0, x - r)] as number) > 0 ? 1 : 0;
+  }
+  const out = new Uint8Array(w * h);
+  for (let x = 0; x < w; x++) {
+    for (let y = 0; y < h; y++) pre[y + 1] = (pre[y] as number) + (hor[y * w + x] as number);
+    for (let y = 0; y < h; y++) out[y * w + x] = (pre[Math.min(h, y + r + 1)] as number) - (pre[Math.max(0, y - r)] as number) > 0 ? 1 : 0;
+  }
+  return { width: w, height: h, data: out };
 }
 
 /**
- * Binarise the thumbnail (dark = figure, Otsu threshold inside the people's
- * padded bounding box) and compare with the silhouette mask there.
+ * Silhouette readability at thumbnail size: binarise the thumbnail (dark =
+ * figure) with an Otsu threshold taken over the people and a ring of their
+ * immediate surroundings (radius ≈ 10 % of the silhouette's size, ≥ 3 px), and
+ * compare with the silhouette mask inside that neighbourhood. A local
+ * neighbourhood, not the people's bounding box: a small group in a wide room
+ * must read against the floor around it, not against a wall across the frame.
  */
-export function l3SilhouetteIoU(thumb: RgbaImage, sil: Mask, padFrac = 0.2): SilhouetteIoU | null {
-  const { width: w, height: h } = thumb;
-  let x0 = w;
-  let y0 = h;
-  let x1 = -1;
-  let y1 = -1;
-  for (let y = 0; y < h; y++)
-    for (let x = 0; x < w; x++)
-      if (sil.data[y * w + x]) {
-        if (x < x0) x0 = x;
-        if (x > x1) x1 = x;
-        if (y < y0) y0 = y;
-        if (y > y1) y1 = y;
-      }
-  if (x1 < 0) return null;
-  const px = Math.max(3, Math.round((x1 - x0 + 1) * padFrac));
-  const py = Math.max(3, Math.round((y1 - y0 + 1) * padFrac));
-  const roi = { x0: Math.max(0, x0 - px), y0: Math.max(0, y0 - py), x1: Math.min(w - 1, x1 + px), y1: Math.min(h - 1, y1 + py) };
+export function l3SilhouetteIoU(thumb: RgbaImage, sil: Mask): SilhouetteIoU | null {
+  const area = maskArea(sil);
+  if (!area) return null;
+  const ring = Math.max(3, Math.round(0.1 * Math.sqrt(area)));
+  const roi = dilate(sil, ring);
   const lum = luminance(thumb);
-  const inRoi = (i: number) => {
-    const x = i % w;
-    const y = (i - x) / w;
-    return x >= roi.x0 && x <= roi.x1 && y >= roi.y0 && y <= roi.y1;
-  };
-  const threshold = otsu(lum, inRoi);
+  const threshold = otsu(lum, (i) => roi.data[i] === 1);
   let inter = 0;
   let uni = 0;
-  for (let y = roi.y0; y <= roi.y1; y++)
-    for (let x = roi.x0; x <= roi.x1; x++) {
-      const i = y * w + x;
-      const a = (lum[i] as number) < threshold;
-      const b = sil.data[i] === 1;
-      if (a && b) inter++;
-      if (a || b) uni++;
-    }
-  return { iou: uni ? inter / uni : 0, threshold, roi };
+  for (let i = 0; i < lum.length; i++) {
+    if (!roi.data[i]) continue;
+    const a = (lum[i] as number) < threshold;
+    const b = sil.data[i] === 1;
+    if (a && b) inter++;
+    if (a || b) uni++;
+  }
+  return { iou: uni ? inter / uni : 0, threshold, ring };
 }
 
 // ---------------------------------------------------------------------------

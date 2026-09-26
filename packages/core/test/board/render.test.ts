@@ -17,9 +17,14 @@ const MODES: RenderMode[] = ['structure', 'topview', 'pencil'];
 const boards = STANDARD_SHOTS.map((s) => ({ shot: s, spec: standardBoard(s) }));
 
 function colorsOf(svg: string): string[] {
-  return [...svg.matchAll(/\s(?:fill|stroke)="([^"]*)"/g)].map((m) => m[1] as string);
+  return [...svg.matchAll(/\s(?:fill|stroke|stop-color)="([^"]*)"/g)].map((m) => m[1] as string);
 }
 const isGray = (c: string) => c === 'none' || /^#([0-9a-f]{2})\1\1$/.test(c);
+/** a paint server defined in the same SVG (pencil gradients); its stops are checked as colours too */
+const isLocalRef = (c: string, svg: string) => {
+  const m = /^url\(#([^)]+)\)$/.exec(c);
+  return !!m && svg.includes(` id="${m[1]}"`);
+};
 
 describe('SVG hygiene (CSP, greyscale, precision)', () => {
   for (const { shot, spec } of boards) {
@@ -35,7 +40,7 @@ describe('SVG hygiene (CSP, greyscale, precision)', () => {
         expect(svg).not.toMatch(/(?:href|src)="(?!#)/);
         const colors = colorsOf(svg);
         expect(colors.length).toBeGreaterThan(0);
-        for (const c of colors) expect(isGray(c), c).toBe(true);
+        for (const c of colors) expect(isGray(c) || isLocalRef(c, svg), c).toBe(true);
         expect(svg).not.toMatch(/\d\.\d{3,}/); // two-decimal coordinates
         expect(svg).not.toMatch(/NaN|Infinity|undefined/);
       });
@@ -111,9 +116,15 @@ describe('determinism and options', () => {
     }
   });
 
-  test('pencil falls back to structure until M2 (same signature)', () => {
+  test('pencil is its own renderer on the same frame as structure', () => {
     const spec = boards[0]!.spec;
-    expect(renderBoard(spec, 'pencil')).toBe(renderBoard(spec, 'structure'));
+    const pencil = renderBoard(spec, 'pencil');
+    const structure = renderBoard(spec, 'structure');
+    expect(pencil).not.toBe(structure);
+    const vb = (s: string) => /viewBox="([^"]*)"/.exec(s)?.[1];
+    expect(vb(pencil)).toBe(vb(structure));
+    expect(pencil).toContain('data-layer="picture"');
+    expect(pencil).toContain('data-layer="hatch-1"');
   });
 
   test('viewBox is 1840 wide at the frame aspect; width option scales the element only', () => {

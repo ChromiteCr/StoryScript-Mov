@@ -19,7 +19,7 @@
  * one element never re-jitters another element's strokes.
  */
 import type { BoardSpec } from '@storyscript/contracts';
-import { contentHash, cyrb53 } from '../util/hash.ts';
+import { contentHash } from '../util/hash.ts';
 import { rngFor } from '../util/random.ts';
 import { projectPoint } from './camera.ts';
 import { clamp, clipPolygonRect, clipSegmentRect, lerp, type V2 } from './math.ts';
@@ -32,6 +32,7 @@ import {
   groundValueAt,
   toneRaster,
   type DepthBand,
+  type FigureRegion,
   type PencilPlan,
   type PlanItem,
 } from './pencil-plan.ts';
@@ -97,7 +98,7 @@ function contourPaths(runs: readonly Run[], w0: number, rng: Rng, look: PencilLo
       const side = r.n[0] * light[0] + r.n[1] * light[1];
       if (side > 0.35) {
         if (rng() < c.litBreak) continue;
-        w *= 0.85;
+        w *= c.lit;
       } else if (side < -0.35) w *= c.shade;
     }
     const d1 = taperedStroke(r.pts, { w0: w, rng, overshoot: c.overshoot });
@@ -132,7 +133,7 @@ function figureOutline(parts: readonly V2[][], it: SubjectItem, W: number, H: nu
   const y0 = Math.max(bb.y0, -m);
   const y1 = Math.min(bb.y1, H + m);
   if (x1 <= x0 || y1 <= y0) return { loops: [], grid: null };
-  let cell = clamp(it.heightPx / 260, 0.6, 3);
+  let cell = clamp(it.heightPx / 360, 0.6, 2);
   while (((x1 - x0) / cell) * ((y1 - y0) / cell) > 500_000) cell *= 1.25;
   const g = makeGrid(x0 - 2 * cell, y0 - 2 * cell, x1 + 2 * cell, y1 + 2 * cell, cell);
   for (const p of parts) fillPolygon(g, p, 1);
@@ -336,36 +337,52 @@ function hatchField(
   const s1 = Math.max(...os) + 20;
   const buckets: string[][] = [[], [], [], [], []];
   const phase = group === 2 ? 0.5 : group === 3 ? 0.25 : 0;
-  // Lines come in "patches" of 5–12 neighbours laid by one sweep of the hand:
-  // a patch shares a slight angle offset and pressure, while each line keeps
-  // its own breaks (so no seams line up and the tone stays even at a distance).
+  // The hand lays hatching in patches: 5–12 neighbouring lines in one sweep
+  // share their breaks (a slanted, slightly ragged seam), bow and pressure,
+  // so the field reads as blocks of strokes rather than scattered dashes.
+  // Patches, breaks and strokes are keyed by line index only — independent of
+  // the picture — so editing one element never re-jitters the strokes elsewhere.
   const prng = rngFor(seed, `hatch:${group}:patches`);
   let k = k0;
   while (k <= k1) {
-    const size = 5 + Math.floor(prng() * 8);
-    const pAngle = (sym(prng) * 2.2 * Math.PI) / 180;
-    const pPress = sym(prng) * 0.6;
-    const pWidth = 1 + sym(prng) * 0.08;
+    const size = h.patchMin + Math.floor(prng() * (h.patchMax - h.patchMin + 1));
+    const brng = rngFor(seed, `hatch:${group}:patch:${k}`);
+    const breaks: { s: number; slant: number; angle: number; press: number; width: number; sag: number }[] = [];
+    let s = s0 - brng() * h.segMax;
+    while (s < s1 + h.segMax) {
+      breaks.push({
+        s,
+        slant: sym(brng) * h.slant,
+        angle: (sym(brng) * 2.2 * Math.PI) / 180,
+        press: sym(brng) * 0.6,
+        width: 1 + sym(brng) * 0.08,
+        sag: h.bow * (0.4 + 0.8 * brng()) * (brng() < 0.85 ? 1 : -1),
+      });
+      s += h.segMin + Math.sqrt(brng()) * (h.segMax - h.segMin);
+    }
     for (let j = 0; j < size && k <= k1; j++, k++) {
       const rng = rngFor(seed, `hatch:${group}:${k}`);
       const o = (k + phase) * spacing + sym(rng) * 0.12 * spacing;
-      let s = s0 - rng() * h.segMax;
-      while (s < s1) {
-        const L = h.segMin + Math.sqrt(rng()) * (h.segMax - h.segMin);
+      // this line's break positions: the patch seam (slanted across the patch) ± a little
+      const cut = breaks.map((b) => b.s + b.slant * j + sym(rng) * h.endJitter);
+      for (let i = 0; i + 1 < breaks.length; i++) {
+        const b = breaks[i] as (typeof breaks)[number];
         const gap = h.gapMin + rng() * (h.gapMax - h.gapMin);
-        const wob = pAngle + (sym(rng) * h.wobble * Math.PI) / 180;
-        const off = sym(rng) * 0.6;
-        const sagSign = rng() < 0.85 ? 1 : -1;
-        const sag = L * h.bow * (0.4 + 0.8 * rng()) * sagSign;
-        const wj = pWidth * (1 + sym(rng) * h.jitter);
-        const oj = clamp(pPress + sym(rng) * 0.7, -1, 1);
+        const sa = (cut[i] as number) + gap / 2;
+        const sb = (cut[i + 1] as number) - gap / 2;
+        const L = sb - sa;
+        if (L < 8 || sb < s0 || sa > s1) continue;
+        const wob = b.angle + (sym(rng) * h.wobble * Math.PI) / 180;
+        const off = sym(rng) * 0.5;
         const cd: V2 = [Math.cos(theta + wob), -Math.sin(theta + wob)];
-        const a: V2 = [nrm[0] * (o + off) + d[0] * s, nrm[1] * (o + off) + d[1] * s];
-        const b: V2 = [a[0] + cd[0] * L, a[1] + cd[1] * L];
-        s += L + gap;
-        if (!keep(a, b)) continue;
+        const a: V2 = [nrm[0] * (o + off) + d[0] * sa, nrm[1] * (o + off) + d[1] * sa];
+        const e: V2 = [a[0] + cd[0] * L, a[1] + cd[1] * L];
+        const wj = b.width * (1 + sym(rng) * h.jitter);
+        const oj = clamp(b.press + sym(rng) * 0.7, -1, 1);
+        const sag = L * b.sag * (1 + sym(rng) * 0.25);
+        if (!keep(a, e)) continue;
         const bucket = clamp(Math.round((oj + 1) * 2), 0, 4);
-        (buckets[bucket] as string[]).push(hatchMark(a, b, width * wj, sag));
+        (buckets[bucket] as string[]).push(hatchMark(a, e, width * wj, sag));
       }
     }
   }
@@ -389,7 +406,8 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
     return lerp(look.fill[i] as number, look.fill[i + 1] as number, clamp(v - i, 0, 1));
   };
   const ink = gray(look.contour.ink);
-  const id = `p${cyrb53(JSON.stringify(spec)).toString(36)}`;
+  // def ids from the picture's own hash: an annotation-only edit leaves the picture layer byte-identical
+  const id = `p${structureHash(spec, look).slice(0, 10)}`;
   const ids = {
 
     tm: `${id}-tm`,
@@ -426,7 +444,32 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
     }
   }
 
+  // construction lines: drawn first (over the ground only), running past the forms
+  if (!contourOnly) {
+    const cl = constructionLines(spec, plan);
+    if (cl.length) {
+      const c = look.construction;
+      body.push(
+        el('path', {
+          d: cl.map((l) => polyPath(l, false)).join(''),
+          fill: 'none',
+          stroke: c.stroke,
+          'stroke-opacity': c.opacity,
+          'stroke-width': c.width,
+          'data-layer': 'construction',
+        }),
+      );
+    }
+  }
+
   for (const it of plan.items) body.push(itemSvg(it));
+
+  function figureDark(r: FigureRegion): number {
+    const t = clamp(r.tone, 0, 3);
+    // the shade is part-way from the lit tone to the next darker one; the hatch carries the rest
+    if (r.kind === 'shade') return lerp(look.figure[t - 1] as number, look.figure[t] as number, look.shade);
+    return look.figure[t] as number;
+  }
 
   function itemSvg(it: PlanItem): string {
     const g: string[] = [`<g${attrs({ 'data-el': it.key })}>`];
@@ -457,44 +500,38 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       g.push(contourPaths(runs, w0, rng, look, plan.lightScreen, ink));
     } else if (it.type === 'shadow') {
       // contact shadow: drawn by the T3 hatch + smudge only (soft, no hard disc)
-      toneMap.push(el('path', { d: polyPath(it.pts), fill: toneGray(3) }));
+      toneMap.push(el('path', { d: polyPath(it.pts), fill: toneGray(it.tone) }));
       return '';
     } else {
       const s = it.item;
       const rng = rngFor(spec.seed, `contour:${it.key}`);
-      const w0 = W2.w(it.band);
+      // w₀ by depth band, leaned on a little harder for a figure that fills the frame
+      const w0 = W2.w(it.band) * clamp(Math.sqrt(s.heightPx / 600), 0.85, 1.45);
       const outline = figureOutline(it.parts, s, W, H);
       const u = motion.get(s.id);
       if (u && !contourOnly) g.push(motionMarks(outline, s, u, w0, rngFor(spec.seed, `motion:${it.key}`), look, W, H));
-      const union = it.parts.map((p) => polyPath(p)).join('');
-      if (union) {
-        const body = look.figure[clamp(it.tone, 0, 3)] as number;
-        let fill = contourOnly ? paper : tone(body);
-        if (!contourOnly && s.bbox) {
-          // form: the silhouette is a little lighter on the lit side, darker on the shadow side
-          const cx = (clamp(s.bbox.x0, 0, W) + clamp(s.bbox.x1, 0, W)) / 2;
-          const cy = (clamp(s.bbox.y0, 0, H) + clamp(s.bbox.y1, 0, H)) / 2;
-          const r = Math.max(8, Math.hypot(clamp(s.bbox.x1, 0, W) - clamp(s.bbox.x0, 0, W), clamp(s.bbox.y1, 0, H) - clamp(s.bbox.y0, 0, H)) / 2);
-          const [lx, ly] = plan.lightScreen;
-          const gid = `${id}-f-${s.id}`;
-          defsLocal.push(
-            `<linearGradient${attrs({ id: gid, gradientUnits: 'userSpaceOnUse', x1: cx + lx * r, y1: cy + ly * r, x2: cx - lx * r, y2: cy - ly * r })}>` +
-              el('stop', { offset: 0, 'stop-color': tone(body * 0.8) }) +
-              el('stop', { offset: 1, 'stop-color': tone(body + (1 - body) * 0.2) }) +
-              '</linearGradient>',
-          );
-          fill = `url(#${gid})`;
+      if (it.parts.length) {
+        if (contourOnly) g.push(el('path', { d: it.parts.map((p) => polyPath(p)).join(''), fill: paper }));
+        else {
+          // painter-ordered toned regions; consecutive regions of one grey share a path
+          let d = '';
+          let cur = '';
+          const flush = () => {
+            if (d) g.push(el('path', { d, fill: cur }));
+            d = '';
+          };
+          for (const r of it.regions) {
+            const f = tone(figureDark(r));
+            if (f !== cur) {
+              flush();
+              cur = f;
+            }
+            d += polyPath(r.pts);
+          }
+          flush();
         }
-        g.push(el('path', { d: union, fill }));
-        toneMap.push(el('path', { d: union, fill: toneGray(it.tone) }));
-        if (!contourOnly) {
-          // hair a little darker, the face plane a little lighter: facing reads, no features drawn
-          const fit = (q: V2[]) => clipPolygonRect(q, -64, -64, W + 64, H + 64);
-          const hair = s.parts.filter((p) => p.fill === 'hair').map((p) => polyPath(fit(p.pts))).join('');
-          const face = s.parts.filter((p) => p.fill === 'body' && !p.silhouette).map((p) => polyPath(fit(p.pts))).join('');
-          if (hair) g.push(el('path', { d: hair, fill: tone(body + (1 - body) * look.hair) }));
-          if (face) g.push(el('path', { d: face, fill: tone(body * look.face) }));
-        }
+        // the hatch sees the lit side a little lighter than its fill tone: lit side sparse, shade side dense
+        for (const r of it.regions) toneMap.push(el('path', { d: polyPath(r.pts), fill: toneGray(r.kind === 'shade' ? r.tone : r.tone - look.litHatch) }));
       }
       g.push(contourPaths(loopRuns(outline, rng, s.heightPx, W, H), w0, rng, look, plan.lightScreen, ink));
       // head-direction guide (a faint line, not a face)
@@ -540,8 +577,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
     };
     const blurPad = Math.ceil(look.maskBlur * 3) + 6;
     const raster = dilate(coarse, 2);
-    const inkH = gray(look.hatch.ink);
-    for (const k of [1, 2, 3] as const) {
+        for (const k of [1, 2, 3] as const) {
       const box = region(k - 1 + 0.02, blurPad);
       if (!box) continue;
       const c = -(k - 1);
@@ -571,7 +607,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       buckets.forEach((list, bi) => {
         if (!list.length) return;
         const o = clamp(op * (1 + ((bi - 2) / 2) * look.hatch.jitter), 0.02, 1);
-        paths += el('path', { d: list.join(''), fill: inkH, 'fill-opacity': o });
+        paths += el('path', { d: list.join(''), fill: gray(look.hatch.ink[k - 1] as number), 'fill-opacity': o });
       });
       if (paths) hatch.push(`<g${attrs({ mask: `url(#${ids.m(k)})`, 'data-layer': `hatch-${k}` })}>${paths}</g>`);
     }
@@ -597,20 +633,6 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
   out.push('<g data-layer="picture">');
   out.push(body.join(''));
   if (!contourOnly) {
-    const cl = constructionLines(spec, plan);
-    if (cl.length) {
-      const c = look.construction;
-      out.push(
-        el('path', {
-          d: cl.map((l) => polyPath(l, false)).join(''),
-          fill: 'none',
-          stroke: c.stroke,
-          'stroke-opacity': c.opacity,
-          'stroke-width': c.width,
-          'data-layer': 'construction',
-        }),
-      );
-    }
     out.push(smudge);
     out.push(hatch.join(''));
     out.push(guides.join(''));

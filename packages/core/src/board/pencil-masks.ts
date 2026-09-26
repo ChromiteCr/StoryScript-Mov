@@ -62,11 +62,8 @@ export function renderToneMap(spec: BoardSpec, o: { width?: number } = {}): stri
   }
   for (const it of plan.items) {
     if (it.type === 'prop') for (const f of it.faces) out.push(el('path', { d: polyPath(f.pts), fill: tg(f.tone) }));
-    else if (it.type === 'shadow') out.push(el('path', { d: polyPath(it.pts), fill: tg(3) }));
-    else {
-      const d = it.parts.map((p) => polyPath(p)).join('');
-      if (d) out.push(el('path', { d, fill: tg(it.tone) }));
-    }
+    else if (it.type === 'shadow') out.push(el('path', { d: polyPath(it.pts), fill: tg(it.tone) }));
+    else for (const r of it.regions) out.push(el('path', { d: polyPath(r.pts), fill: tg(r.tone) }));
   }
   out.push('</svg>');
   return out.join('');

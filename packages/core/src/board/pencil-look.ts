@@ -26,8 +26,15 @@ export interface PencilLook {
     width: Three;
     /** fill-opacity of T1 / T2 / T3 strokes */
     opacity: Three;
-    /** grey level of the graphite (0 = black) */
-    ink: number;
+    /** grey level of the graphite per group (0 = black): light pressure for T1, heavier for T3 */
+    ink: Three;
+    /** lines per hand patch (adjacent strokes laid in one sweep share breaks, bow and pressure) */
+    patchMin: number;
+    patchMax: number;
+    /** ± px jitter of each stroke's ends around its patch's breaks */
+    endJitter: number;
+    /** ± slant of a patch's break line across the patch (px per line) */
+    slant: number;
     segMin: number;
     segMax: number;
     gapMin: number;
@@ -47,9 +54,10 @@ export interface PencilLook {
   fill: Four;
   /** flat darkness of figure silhouettes per tone (figures read as solid shapes) */
   figure: Four;
-  /** hair: this far from the body tone toward black; face plane: body × this (facing cue, no features) */
-  hair: number;
-  face: number;
+  /** figure shade darkness: this far from the lit tone to the next darker tone */
+  shade: number;
+  /** tone steps (0..1) the hatch masks take off a figure's lit side (its fill keeps the full tone) */
+  litHatch: number;
   contour: {
     /** multiplier on outline w₀ */
     scale: number;
@@ -64,12 +72,16 @@ export interface PencilLook {
     overshoot: number;
     /** probability of dropping a stroke on the lit side */
     litBreak: number;
+    /** width factor on the lit side (the strokes left after the breaks) */
+    lit: number;
     /** width factor on the shadow side */
     shade: number;
   };
   construction: { stroke: string; opacity: number; width: number };
   /** paper grain strength multiplier (0 = off) */
   grain: number;
+  /** paper tooth: paper-coloured specks over the graphite (fill-opacity, 0 = off) */
+  tooth: number;
   /** vignette darkness at the corners (0..1) */
   vignette: number;
 }
@@ -85,7 +97,11 @@ const BASE: PencilLook = {
     spacing: [9, 6, 7],
     width: [1.6, 1.5, 1.5],
     opacity: [0.72, 0.78, 0.8],
-    ink: 36,
+    ink: [64, 48, 30],
+    patchMin: 5,
+    patchMax: 12,
+    endJitter: 3,
+    slant: 1.6,
     segMin: 40,
     segMax: 120,
     gapMin: 2,
@@ -96,10 +112,10 @@ const BASE: PencilLook = {
   },
   maskBlur: 1.2,
   smudge: { blur: 2, opacity: 0.5, ink: 48 },
-  fill: [0, 0.1, 0.24, 0.42],
-  figure: [0.06, 0.26, 0.5, 0.8],
-  hair: 0.4,
-  face: 0.8,
+  fill: [0, 0.2, 0.34, 0.5],
+  figure: [0.06, 0.26, 0.44, 0.82],
+  shade: 0.6,
+  litHatch: 0.5,
   contour: {
     scale: 1,
     ink: 28,
@@ -110,30 +126,34 @@ const BASE: PencilLook = {
     secondWobble: 0.9,
     overshoot: 0.03,
     litBreak: 0.15,
+    lit: 0.7,
     shade: 1.5,
   },
   construction: { stroke: '#8a8a8a', opacity: 0.35, width: 0.6 },
   grain: 1,
+  tooth: 0.5,
   vignette: 0.12,
 };
 
 /** The three C1b candidates. A: hatch-led. B: tone-block-led. C: line-led. */
 export const PENCIL_VARIANTS: Record<PencilVariant, PencilLook> = {
   A: BASE,
+  // B: flat graphite blocks carry the values, the hatch is only a faint texture over them
   B: {
     ...BASE,
-    hatch: { ...BASE.hatch, opacity: [0.24, 0.26, 0.3] },
+    hatch: { ...BASE.hatch, opacity: [0.22, 0.25, 0.3] },
     smudge: { ...BASE.smudge, opacity: 0.35 },
-    fill: [0, 0.18, 0.4, 0.66],
-    figure: [0.1, 0.4, 0.62, 0.88],
+    fill: [0, 0.26, 0.46, 0.66],
+    figure: [0.08, 0.34, 0.56, 0.86],
   },
+  // C: heavier, more varied contours; values held light so the line leads
   C: {
     ...BASE,
-    hatch: { ...BASE.hatch, opacity: [0.5, 0.55, 0.58], width: [1.4, 1.3, 1.3] },
+    hatch: { ...BASE.hatch, opacity: [0.46, 0.5, 0.56], width: [1.4, 1.3, 1.3] },
     smudge: { ...BASE.smudge, opacity: 0.3 },
-    fill: [0, 0.1, 0.2, 0.34],
-    figure: [0.05, 0.2, 0.36, 0.56],
-    contour: { ...BASE.contour, scale: 1.75, shade: 1.6 },
+    fill: [0, 0.12, 0.22, 0.36],
+    figure: [0.05, 0.2, 0.34, 0.62],
+    contour: { ...BASE.contour, scale: 1.75, lit: 0.6, shade: 1.6 },
   },
 };
 

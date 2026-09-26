@@ -11,3 +11,4 @@ export * from './coverage.ts';
 export * from './provider.ts';
 export * from './job.ts';
 export * from './project.ts';
+export * from './api.ts';

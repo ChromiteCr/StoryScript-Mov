@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
+import type { Project } from '@storyscript/contracts';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from './lib/api.ts';
 import {
@@ -11,17 +12,19 @@ import {
 } from './lib/session.ts';
 import { keys, useCloseProject, useCurrentProject, useHealth } from './lib/queries.ts';
 import { useView } from './lib/route.ts';
+import { isStage, type StageId } from './lib/stages.ts';
 import { resetSaveState } from './lib/saveStatus.ts';
 import { DemoBanner } from './components/DemoBanner.tsx';
 import { ErrorNotice } from './components/ErrorNotice.tsx';
 import { ConnectingScreen, SessionExpiredScreen, UnreachableScreen } from './components/FullScreenNotice.tsx';
-import { TopBar } from './components/TopBar.tsx';
+import { PageBar } from './components/PageBar.tsx';
+import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
-import { ComingSoonView } from './views/ComingSoonView.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
+import { StageOutlineView } from './views/StageOutlineView.tsx';
 
-// The script workspace is the heaviest view; load it as its own chunk.
+// The script workspace is the heaviest page; it loads as its own chunk.
 const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ default: m.ScriptView })));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
@@ -99,36 +102,41 @@ function Workbench() {
     document.title = current ? `${current.name} - StoryScript-Mov` : 'StoryScript-Mov';
   }, [current]);
 
+  // `page` keys the fade-in: it changes exactly when the main workspace changes.
+  let page: string;
   let body;
   if (view === 'settings') {
+    page = 'settings';
     body = <SettingsView />;
   } else if (project.isPending) {
-    body = <Spinner label="正在读取项目…" />;
-  } else if (project.isError) {
+    page = 'loading';
     body = (
-      <div className="flex max-w-[520px] flex-col items-start gap-3">
+      <div className="flex h-full items-center justify-center">
+        <Spinner label="正在读取项目…" />
+      </div>
+    );
+  } else if (project.isError) {
+    page = 'error';
+    body = (
+      <div className="mx-auto flex max-w-[520px] flex-col items-start gap-3 px-4 py-10">
         <ErrorNotice error={project.error} />
         <Button onClick={() => void project.refetch()}>重试</Button>
       </div>
     );
   } else if (!current) {
+    page = 'home';
     body = <HomeView />;
-  } else if (view === null || view === 'script') {
-    body = (
-      <Suspense fallback={<Spinner label="正在加载…" />}>
-        <ScriptView project={current} />
-      </Suspense>
-    );
   } else {
-    body = <ComingSoonView view={view} />;
+    const stage: StageId = isStage(view) ? view : 'script';
+    page = stage;
+    body = <StagePage stage={stage} project={current} />;
   }
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      {health.data?.demo ? <DemoBanner /> : null}
-      <TopBar
+    <div className="flex h-dvh flex-col bg-graphite-950 print:block print:h-auto">
+      <TitleBar
         project={current}
-        view={current ? (view ?? 'script') : view}
+        view={view}
         switching={close.isPending}
         onSwitchProject={() =>
           close.mutate(undefined, {
@@ -137,11 +145,35 @@ function Workbench() {
         }
       />
       {close.isError ? (
-        <div className="mx-auto w-full max-w-[1200px] px-4 pt-4 sm:px-6">
+        <div className="px-2 pt-2 print:hidden">
           <ErrorNotice error={close.error} />
         </div>
       ) : null}
-      <main className="mx-auto w-full max-w-[1200px] flex-1 px-4 py-6 sm:px-6 sm:py-8">{body}</main>
+      <main className="min-h-0 flex-1 overflow-auto print:overflow-visible">
+        <div key={page} className="h-full animate-page-in motion-reduce:animate-none print:h-auto">
+          {body}
+        </div>
+      </main>
+      {health.data?.demo ? <DemoBanner /> : null}
+      <PageBar project={current} view={view} />
     </div>
   );
+}
+
+/** One workflow stage. Stages after the script page keep their outline until they land. */
+function StagePage({ stage, project }: { stage: StageId; project: Project }) {
+  if (stage === 'script') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner label="正在加载…" />
+          </div>
+        }
+      >
+        <ScriptView project={project} />
+      </Suspense>
+    );
+  }
+  return <StageOutlineView stage={stage} />;
 }

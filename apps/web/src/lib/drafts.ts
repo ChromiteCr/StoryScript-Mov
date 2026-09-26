@@ -52,11 +52,13 @@ function asMatch(v: unknown): ItemMatch | null {
 }
 
 /**
- * Quote match level of item `i`, from whichever place the server put it:
- * `parsed.shots[i].match | quote_match`, `parsed.matches[i] | quote_matches[i]`,
- * or an issue about the quote on that item (code mentioning fuzzy/reject).
+ * Quote match level of item `i`. The server (core validateBreakdown) reports
+ * it through issue codes: `quote_rejected` / `paragraph_not_in_scene` (error)
+ * and `quote_fuzzy` (warning); no quote issue means an exact match. A level
+ * attached to the parsed item (`match` / `quote_match`) or a sibling array
+ * (`matches` / `quote_matches`) wins when present.
  */
-export function quoteMatchOf(parsed: unknown, i: number, issues: readonly DraftIssue[]): ItemMatch | null {
+export function quoteMatchOf(parsed: unknown, i: number, issues: readonly DraftIssue[]): ItemMatch {
   if (isRecord(parsed)) {
     const shots = parsed.shots;
     if (Array.isArray(shots) && isRecord(shots[i])) {
@@ -73,10 +75,9 @@ export function quoteMatchOf(parsed: unknown, i: number, issues: readonly DraftI
     }
   }
   const own = issues.filter((x) => x.item === i);
-  if (own.some((x) => /reject/i.test(x.code))) return 'rejected';
+  if (own.some((x) => /reject/i.test(x.code) || x.code === 'paragraph_not_in_scene')) return 'rejected';
   if (own.some((x) => /fuzzy/i.test(x.code))) return 'fuzzy';
-  if (own.some((x) => /exact/i.test(x.code))) return 'exact';
-  return null;
+  return 'exact';
 }
 
 /** INV-03 / FR-03: an item with any error-level issue (or a rejected quote) can never be applied. */
@@ -162,23 +163,21 @@ export function keptShotCount(currentShots: readonly Shot[], replaceExisting: bo
 }
 
 /**
- * Tentative display code for a new shot, derived from the project's slate
- * `code_format` without its take part: "S{scene:02}-{shot:03}-T{take:02}" →
- * "S03-005". The server assigns the real code on apply.
+ * Tentative codes of the shots an apply would create, mirroring the server
+ * (apps/server db/repos/shot.ts): the largest trailing number among the
+ * scene's live shots that stay (after `replace_existing` archived the
+ * candidates), plus 1, 2, … and zero-padded to three digits. The server
+ * assigns the real codes; the diff view only previews them.
  */
-export function previewShotCode(codeFormat: string, sceneDisplayNo: string, shotNo: number): string {
-  const takeAt = codeFormat.search(/[^{}]*\{take(?::\d+)?\}/);
-  let fmt = takeAt >= 0 ? codeFormat.slice(0, takeAt) : codeFormat;
-  fmt = fmt.replace(/[-_\s.]+$/, '');
-  if (!/\{shot(?::\d+)?\}/.test(fmt)) fmt = '{scene}-{shot:02}';
-  const pad = (v: string | number, width: string | undefined) => {
-    const s = String(v);
-    const w = width ? Number(width) : 0;
-    return /^\d+$/.test(s) ? s.padStart(w, '0') : s;
-  };
-  return fmt
-    .replace(/\{scene(?::(\d+))?\}/g, (_m, w: string | undefined) => pad(sceneDisplayNo, w))
-    .replace(/\{shot(?::(\d+))?\}/g, (_m, w: string | undefined) => pad(shotNo, w));
+export function previewShotCodes(currentShots: readonly Shot[], replaceExisting: boolean, count: number): string[] {
+  const archived = new Set(replaceExisting ? archiveCandidates(currentShots).map((s) => s.id) : []);
+  let max = 0;
+  for (const s of currentShots) {
+    if (s.archived || archived.has(s.id)) continue;
+    const m = /(\d+)\s*$/.exec(s.code);
+    if (m) max = Math.max(max, parseInt(m[1] ?? '0', 10));
+  }
+  return Array.from({ length: count }, (_, i) => String(max + i + 1).padStart(3, '0'));
 }
 
 // ---------------------------------------------------------------- entities --
@@ -199,30 +198,43 @@ export interface EntityDraftRow {
   name: string;
   aliases: string[];
   selected: boolean;
-  /** an entity of the same type already has this name or alias */
+  /**
+   * an entity of the same type already has exactly this name: the server
+   * merges the aliases into it instead of creating a duplicate
+   */
+  mergeInto: string | null;
+  /** only a name/alias overlap with another entity: likely the same thing, left unticked */
   duplicateOf: string | null;
 }
 
-export function parseEntityDraft(
-  draft: Pick<ShotDraft, 'parsed'>,
-  existing: readonly { type: EntityType; name: string; aliases: string[]; alias: string }[],
-): EntityDraftRow[] | null {
+type ExistingEntity = { type: EntityType; name: string; aliases: string[]; alias: string };
+
+/** How a draft row relates to the roster (same rule the server applies: type + exact name). */
+export function rosterMatch(
+  type: EntityType,
+  name: string,
+  aliases: readonly string[],
+  existing: readonly ExistingEntity[],
+): { mergeInto: string | null; duplicateOf: string | null } {
+  const n = name.trim();
+  const same = existing.find((x) => x.type === type && x.name.trim() === n);
+  if (same) return { mergeInto: `${same.alias} ${same.name}`, duplicateOf: null };
+  const names = [n, ...aliases.map((a) => a.trim())].filter(Boolean);
+  const overlap = existing.find((x) => x.type === type && [x.name, ...x.aliases].some((v) => names.includes(v.trim())));
+  return { mergeInto: null, duplicateOf: overlap ? `${overlap.alias} ${overlap.name}` : null };
+}
+
+export function parseEntityDraft(draft: Pick<ShotDraft, 'parsed'>, existing: readonly ExistingEntity[]): EntityDraftRow[] | null {
   const parsed = EntitiesOutput.safeParse(draft.parsed);
   if (!parsed.success) return null;
   const rows: EntityDraftRow[] = [];
   for (const kind of ENTITY_DRAFT_KINDS) {
     parsed.data[kind].forEach((e, index) => {
       const type = ENTITY_KIND_TYPE[kind];
-      const names = [e.name, ...e.aliases].map((n) => n.trim()).filter(Boolean);
-      const dup = existing.find((x) => x.type === type && [x.name, ...x.aliases].some((n) => names.includes(n.trim())));
-      rows.push({
-        kind,
-        index,
-        name: e.name.trim(),
-        aliases: e.aliases.map((a) => a.trim()).filter(Boolean),
-        selected: dup === undefined && e.name.trim() !== '',
-        duplicateOf: dup ? `${dup.alias} ${dup.name}` : null,
-      });
+      const name = e.name.trim();
+      const aliases = e.aliases.map((a) => a.trim()).filter(Boolean);
+      const m = rosterMatch(type, name, aliases, existing);
+      rows.push({ kind, index, name, aliases, selected: m.duplicateOf === null && name !== '', ...m });
     });
   }
   return rows;

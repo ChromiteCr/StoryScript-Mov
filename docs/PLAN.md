@@ -157,6 +157,11 @@ docs/ samples/ fixtures/ scripts/ e2e/
 
 ## 里程碑
 
+> **2026-09-26 调整**：
+> - **版本号**：用户要求插入"S0a 界面改版"，参照 DaVinci Resolve 的专业工作台风格：石墨外框、纸面内容，底部工作流页面栏依次为 剧本 → 分镜 → 计划 → 现场 → 素材 → 交付。为此下表各里程碑的版本字母顺延，**实际版本号按合并顺序分配**，以 README 版本记录为准。
+> - **页面划分**：原来的"场记与素材"视图拆成"现场"（场记录入）和"素材"（素材库与漏拍）两页，另新增"交付"页（导出）。
+> - **开发前大标题**：每个里程碑开工前，先在会话里插入章节标题（用户全局规则）。
+
 | M | 版本 | 依赖 | 内容 | 退出标准 |
 |---|---|---|---|---|
 | M0 | S0 | — | 升级 Node；一次装齐依赖；docs 与规则文件；README 与 LICENSE；contracts v1；安全外壳；DbPort、迁移和锁；web 空壳；CI 配置；打包冒烟；spike：LLM structuredCall（真实文本 key）、媒体（生成样本、Range）、resvg | `npm ci && npm run typecheck && npm test` 全绿；安全 3 项：伪造 Host 403、跨源 POST 403、无 cookie 401；DB：WAL、backup、user_version、1 万行 LIKE <20ms；`npm pack` 后在临时 HOME 下 `npx ./x.tgz doctor` 退出码 0；`docs/spikes.md` |

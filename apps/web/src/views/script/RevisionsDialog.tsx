@@ -13,28 +13,28 @@ export function RevisionsDialog({ shot, onClose }: { shot: Shot; onClose: () => 
   const byRevision = new Map((revisions.data ?? []).map((r) => [r.revision, r] as const));
 
   return (
-    <Dialog open onClose={onClose} variant="drawer" title={`修订历史 · ${shot.code}`} description="每次保存都会留下一条修订，最新的在最上面。">
+    <Dialog onClose={onClose} variant="drawer" title={`修订历史 · ${shot.code}`} description="每次保存、锁定、改编号和改必拍状态都会留下一条修订，最新的在最上面。">
       {revisions.isPending ? <Spinner label="正在读取…" /> : null}
       {revisions.isError ? <ErrorNotice error={revisions.error} /> : null}
-      {revisions.data && list.length === 0 ? <p className="text-[13px] text-ink-3">还没有修订记录。</p> : null}
-      <ol className="flex flex-col gap-3">
+      {revisions.data && list.length === 0 ? <p className="text-sm text-graphite-300">还没有修订记录。</p> : null}
+      <ol className="flex flex-col gap-2">
         {list.map((r) => {
           const prev = [...byRevision.keys()].filter((k) => k < r.revision).sort((a, b) => b - a)[0];
           const changed = changedFieldLabels(prev === undefined ? null : (byRevision.get(prev)?.fields ?? null), r.fields);
           return (
-            <li key={r.id} className="rounded-sheet border border-rule px-3 py-2.5">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="font-mono text-xs text-ink-2">r{r.revision}</span>
-                <Tag tone={r.origin === 'ai' ? 'info' : 'neutral'}>{ORIGIN_LABEL[r.origin]}</Tag>
-                {r.revision === shot.revision ? <Tag tone="solid">当前</Tag> : null}
-                <time dateTime={r.at} className="ml-auto text-xs text-ink-3 tabular-nums">
+            <li key={r.id} className="rounded-panel border border-graphite-800 bg-graphite-950/40 px-3 py-2.5">
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="text-xs text-graphite-100 tabular-nums">r{r.revision}</span>
+                <Tag>{ORIGIN_LABEL[r.origin]}</Tag>
+                {r.revision === shot.revision ? <Tag>当前</Tag> : null}
+                <time dateTime={r.at} className="ml-auto text-xs text-graphite-300 tabular-nums">
                   {new Date(r.at).toLocaleString('zh-CN')}
                 </time>
               </div>
-              <p className="mt-1 text-[13px] text-ink">{shotSpecLine(r.fields)}</p>
-              {r.fields.action ? <p className="text-[13px] break-words text-ink-2">{r.fields.action}</p> : null}
-              {changed.length > 0 ? <p className="mt-1 text-xs text-ink-3">改动：{changed.join('、')}</p> : null}
-              {r.reason ? <p className="mt-1 text-xs break-words text-ink-2">说明：{r.reason}</p> : null}
+              <p className="mt-1 text-sm text-graphite-100">{shotSpecLine(r.fields)}</p>
+              {r.fields.action ? <p className="text-sm break-words text-graphite-300">{r.fields.action}</p> : null}
+              {changed.length > 0 ? <p className="mt-1 text-xs text-graphite-300">改动：{changed.join('、')}</p> : null}
+              {r.reason ? <p className="mt-1 text-xs break-words text-graphite-100">说明：{r.reason}</p> : null}
             </li>
           );
         })}

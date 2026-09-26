@@ -1,48 +1,115 @@
 @import "tailwindcss";
 
 /*
- * Design tokens. The app chrome is a neutral grey drafting desk; the warm
- * pencil paper (#F3F0E8) is reserved for boards so they read as sheets on it.
- * Light only. No web fonts (CSP default-src 'self'): system CJK stacks.
+ * S0a design tokens: graphite frame, paper content.
+ *
+ * The workbench chrome is a cool neutral graphite (never a tinted near-black);
+ * work itself (script text, board sheets) sits on warm paper, like drawings on
+ * a light box. Paper is for content canvases only, never for controls.
+ *
+ * Accent (non-photo blue) marks exactly two things: the current page and
+ * keyboard focus. warn / danger / ok are status colours, not decoration.
+ * Hierarchy comes from lightness steps and 1px rules, not shadows or gradients.
+ *
+ * Tailwind's default palette, radii, shadows and type scale are reset below so
+ * only these tokens exist as utilities. No web fonts (CSP default-src 'self').
  */
+:root {
+  --graphite-950: #17181b; /* window base */
+  --graphite-900: #1d1e22; /* panel body */
+  --graphite-800: #25272c; /* panel header, input fill */
+  --graphite-700: #30333a; /* rules, borders */
+  --graphite-500: #5b606b; /* secondary icons (not for text) */
+  --graphite-300: #a4a9b3; /* secondary text */
+  --graphite-100: #e3e5e9; /* primary text */
+
+  --paper: #efebe2; /* content canvas */
+  --ink: #25262a; /* text and lines on paper */
+
+  --accent: #7fc4e2; /* non-photo blue: current page, focus */
+  --accent-strong: #4fa9d1; /* pressed / selected fill */
+  --accent-ink: #0e2a36; /* text on accent fills */
+
+  --warn: #e0a53a; /* tungsten amber */
+  --danger: #e5484d; /* tally red */
+  --ok: #5dbb84; /* slate green */
+
+  --print-paper: #ffffff;
+  --print-ink: #000000;
+}
+
+@theme inline {
+  --color-*: initial;
+
+  --color-graphite-950: var(--graphite-950);
+  --color-graphite-900: var(--graphite-900);
+  --color-graphite-800: var(--graphite-800);
+  --color-graphite-700: var(--graphite-700);
+  --color-graphite-500: var(--graphite-500);
+  --color-graphite-300: var(--graphite-300);
+  --color-graphite-100: var(--graphite-100);
+
+  --color-paper: var(--paper);
+  --color-ink: var(--ink);
+
+  --color-accent: var(--accent);
+  --color-accent-strong: var(--accent-strong);
+  --color-accent-ink: var(--accent-ink);
+
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --color-ok: var(--ok);
+
+  --color-print-paper: var(--print-paper);
+  --color-print-ink: var(--print-ink);
+}
+
 @theme {
-  --font-sans: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Noto Sans CJK SC",
-    "Source Han Sans SC", "Microsoft YaHei", system-ui, sans-serif;
-  --font-mono: "SF Mono", ui-monospace, Menlo, Monaco, Consolas, monospace;
+  --font-*: initial;
+  --font-sans: "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC",
+    sans-serif;
+  /* paths and shell commands only; numbers use tabular-nums instead */
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 
-  --color-desk: #e8e8e5;
-  --color-sheet: #f7f7f5;
-  --color-sheet-sunk: #efefec;
-  --color-board-paper: #f3f0e8;
+  /* Pro-tool density: 13px body, 12px panel titles, 16–18px page titles, 15px/1.8 script on paper. */
+  --text-*: initial;
+  --text-xs: 12px;
+  --text-xs--line-height: 1.5;
+  --text-sm: 13px;
+  --text-sm--line-height: 1.5;
+  --text-base: 15px;
+  --text-base--line-height: 1.8;
+  --text-lg: 16px;
+  --text-lg--line-height: 1.4;
+  --text-xl: 18px;
+  --text-xl--line-height: 1.4;
 
-  --color-ink: #26272a;
-  --color-ink-2: #55575c;
-  --color-ink-3: #85878b;
-
-  --color-rule: #d3d3cf;
-  --color-rule-strong: #b3b4b0;
-
-  --color-graphite: #2f3033;
-  --color-graphite-hover: #1f2022;
-  --color-focus: #3e5c76;
-
-  --color-ok: #3f6b4a;
-  --color-ok-bg: #e6ede4;
-  --color-info-bg: #e6ebef;
-  /* located script paragraph / quote (a pencil-yellow wash, used sparingly) */
-  --color-mark: #f1e7c4;
-  --color-mark-rule: #d8c68b;
-  --color-warn: #7a5a12;
-  --color-warn-bg: #f3ecd9;
-  --color-warn-rule: #dccb9c;
-  --color-danger: #9a3326;
-  --color-danger-bg: #f5e4df;
-  --color-danger-rule: #e0b8ae;
-
-  --radius-sheet: 4px;
+  /* One radius per layer, so layers stay distinguishable. */
+  --radius-*: initial;
   --radius-control: 3px;
+  --radius-panel: 4px;
+  --radius-paper: 2px;
+  --radius-page: 6px;
 
+  --shadow-*: initial;
+  --inset-shadow-*: initial;
+  --drop-shadow-*: initial;
+  --text-shadow-*: initial;
+
+  /* md = the page bar's label breakpoint (720px) */
+  --breakpoint-md: 45rem;
+
+  --animate-page-in: page-in 120ms ease-out both;
   --animate-appear: appear 180ms ease-out 350ms both;
+
+  @keyframes page-in {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 
   @keyframes appear {
     from {
@@ -56,29 +123,72 @@
 
 @layer base {
   html {
-    color-scheme: light;
+    color-scheme: dark;
     -webkit-text-size-adjust: 100%;
+    background-color: var(--graphite-950);
   }
 
   body {
-    background-color: var(--color-desk);
-    color: var(--color-ink);
+    background-color: var(--graphite-950);
+    color: var(--graphite-100);
     font-family: var(--font-sans);
-    font-size: 14px;
-    line-height: 1.6;
+    font-size: 13px;
+    line-height: 1.5;
     -webkit-font-smoothing: antialiased;
+    accent-color: var(--accent-strong);
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--graphite-700) transparent;
   }
 
   :focus-visible {
-    outline: 2px solid var(--color-focus);
+    outline: 2px solid var(--accent);
     outline-offset: 2px;
   }
 
   ::selection {
-    background-color: #c9d3dc;
+    background-color: var(--accent-strong);
+    color: var(--accent-ink);
   }
 
-  input::placeholder {
-    color: var(--color-ink-3);
+  input::placeholder,
+  textarea::placeholder {
+    color: var(--graphite-300);
+  }
+
+  dialog::backdrop {
+    background-color: color-mix(in oklab, var(--graphite-950) 72%, transparent);
+  }
+}
+
+/*
+ * Print (future board PDFs): the title bar, page bar, panel headers and side
+ * panels carry print:hidden; what remains is the main area's paper, printed
+ * white with black ink and no screen tint. Rules and frames keep their
+ * (lighter) ink so drawings stay distinguishable from text.
+ */
+@page {
+  margin: 12mm;
+}
+
+@media print {
+  html,
+  body {
+    background-color: var(--print-paper);
+    color: var(--print-ink);
+    color-scheme: light;
+  }
+
+  [data-paper],
+  [data-paper] * {
+    color: var(--print-ink) !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  :focus-visible {
+    outline: none;
   }
 }

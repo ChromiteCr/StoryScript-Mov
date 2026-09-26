@@ -1,15 +1,15 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo } from 'react';
 import type { Paragraph, Scene } from '@storyscript/contracts';
 import { splitAroundQuote } from '../../lib/shots.ts';
-import type { Highlight } from './context.ts';
+import { PaperCanvas, Panel } from '../../components/workspace.tsx';
+import { paragraphDomId, sceneHeadingDomId, useWorkspace, type Highlight } from './context.ts';
 
 /**
- * Left column: the script text, one block per paragraph anchor (p-001…).
- * Script text is data (INV-10): rendered as React text only.
+ * The script on paper (PaperCanvas sheet, 15px / 1.8), one block per
+ * paragraph anchor (p-001…). Script text is data (INV-10): React text only.
+ * The paragraph a shot points at is washed in non-photo blue, the colour of
+ * the current selection.
  */
-
-export const paragraphDomId = (id: string) => `para-${id}`;
-export const sceneDomId = (id: string) => `scene-${id}`;
 
 interface ParagraphRowProps {
   p: Paragraph;
@@ -24,56 +24,64 @@ const ParagraphRow = memo(function ParagraphRow({ p, scene, active, quote, onHea
   const body = parts ? (
     <>
       {parts[0]}
-      <mark className="rounded-[2px] bg-mark px-0.5 text-ink">{parts[1]}</mark>
+      <mark className="rounded-[2px] bg-accent/55 text-ink">{parts[1]}</mark>
       {parts[2]}
     </>
   ) : (
     p.text
   );
 
+  const heading = p.is_heading && scene;
   return (
     <div
-      id={paragraphDomId(p.id)}
+      id={heading ? sceneHeadingDomId(scene.id) : paragraphDomId(p.id)}
       data-paragraph={p.id}
       className={
-        'group grid scroll-mt-24 grid-cols-[3.25rem_minmax(0,1fr)] gap-x-2 rounded-control px-1 py-1 [content-visibility:auto] ' +
-        (active ? 'bg-mark/60 ring-1 ring-mark-rule' : '')
+        'group relative -mx-2 grid scroll-mt-6 grid-cols-[minmax(0,1fr)] rounded-paper px-2 [content-visibility:auto] md:-ml-14 md:grid-cols-[2.75rem_minmax(0,1fr)] md:gap-x-3 ' +
+        (heading ? 'mt-5 first:mt-0 ' : 'mt-2 first:mt-0 ') +
+        (active ? 'bg-accent/20 ring-1 ring-accent-strong/50' : '')
       }
     >
-      <span className="pt-[3px] text-right font-mono text-[10.5px] text-ink-3 tabular-nums select-none">{p.id}</span>
-      {p.is_heading && scene ? (
-        <button
-          type="button"
-          onClick={() => onHeadingClick(scene)}
-          className="text-left text-[14px] leading-relaxed font-semibold break-words whitespace-pre-wrap text-ink hover:underline"
-          title="在右侧查看这一场的镜头"
-        >
-          <span className="mr-2 inline-block rounded-control border border-graphite px-1 font-mono text-[11px] leading-4 font-medium">{scene.display_no}</span>
-          {body}
-        </button>
+      {/* the anchor id: in the margin on wide sheets, hidden on narrow ones */}
+      <span aria-hidden className="hidden pt-[5px] text-right text-xs text-ink/60 tabular-nums select-none md:block">
+        {p.id.slice(2)}
+      </span>
+      {heading ? (
+        <h3 className="text-base">
+          <button
+            type="button"
+            onClick={() => onHeadingClick(scene)}
+            className="text-left font-medium break-words whitespace-pre-wrap text-ink hover:underline hover:decoration-ink/40 hover:underline-offset-4"
+            title="在镜头表中查看这一场"
+          >
+            <span className="mr-2 inline-block rounded-control border border-ink/50 px-1 align-[2px] text-xs leading-4 tabular-nums">{scene.display_no}</span>
+            {body}
+          </button>
+        </h3>
       ) : (
-        <p className={`text-[13.5px] leading-relaxed break-words whitespace-pre-wrap ${p.scene_idx === null ? 'text-ink-3' : 'text-ink'}`}>{body}</p>
+        <p className={`break-words whitespace-pre-wrap ${p.scene_idx === null ? 'text-ink/75' : 'text-ink'}`}>
+          <span className="sr-only">{p.id} </span>
+          {body}
+        </p>
       )}
     </div>
   );
 });
 
-export interface ScriptPaneProps {
-  paragraphs: readonly Paragraph[];
-  scenes: readonly Scene[];
-  highlight: Highlight | null;
-  onHeadingClick: (scene: Scene) => void;
-}
-
-export function ScriptPane({ paragraphs, scenes, highlight, onHeadingClick }: ScriptPaneProps) {
-  const box = useRef<HTMLDivElement>(null);
+export function ScriptPane() {
+  const ws = useWorkspace();
+  const { paragraphs, scenes } = { paragraphs: ws.script.version.paragraphs, scenes: ws.script.scenes };
+  const highlight: Highlight | null = ws.highlight;
 
   useEffect(() => {
-    if (!highlight) return;
-    const el = document.getElementById(paragraphDomId(highlight.paragraphId));
+    if (!highlight || highlight.scroll === 'none') return;
+    const p = ws.paragraphs.get(highlight.paragraphId);
+    const scene = p?.is_heading ? scenes.find((s) => s.paragraph_ids[0] === p.id) : undefined;
+    const el = document.getElementById(scene ? sceneHeadingDomId(scene.id) : paragraphDomId(highlight.paragraphId));
     if (!el) return;
     const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
-    el.scrollIntoView({ block: 'center', behavior: reduce ? 'auto' : 'smooth' });
+    el.scrollIntoView({ block: highlight.scroll, behavior: reduce ? 'auto' : 'smooth' });
+    // each locate request is a new Highlight object; a script refetch does not scroll
   }, [highlight]);
 
   // scene membership comes from Scene.paragraph_ids (robust to ordering); scene_idx is the fallback
@@ -85,21 +93,18 @@ export function ScriptPane({ paragraphs, scenes, highlight, onHeadingClick }: Sc
   const sceneOf = (p: Paragraph): Scene | null =>
     p.is_heading ? (byParagraph.get(p.id) ?? (p.scene_idx !== null ? (scenes[p.scene_idx] ?? null) : null)) : null;
 
+  const onHeadingClick = (scene: Scene) => ws.selectScene(scene, { reveal: true });
+
   return (
-    <div ref={box} className="flex flex-col gap-0.5">
-      {paragraphs.map((p) => {
-        const active = highlight?.paragraphId === p.id;
-        return (
-          <ParagraphRow
-            key={p.id}
-            p={p}
-            scene={sceneOf(p)}
-            active={active}
-            quote={active ? (highlight?.quote ?? null) : null}
-            onHeadingClick={onHeadingClick}
-          />
-        );
-      })}
-    </div>
+    <Panel title={`剧本原文 · ${paragraphs.length} 段`}>
+      <PaperCanvas label="剧本原文">
+        {paragraphs.map((p) => {
+          const active = highlight?.paragraphId === p.id;
+          return (
+            <ParagraphRow key={p.id} p={p} scene={sceneOf(p)} active={active} quote={active ? (highlight?.quote ?? null) : null} onHeadingClick={onHeadingClick} />
+          );
+        })}
+      </PaperCanvas>
+    </Panel>
   );
 }

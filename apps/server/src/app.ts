@@ -11,6 +11,12 @@ import { registerSessionRoutes } from './routes/session.ts';
 import { registerStaticRoutes } from './routes/static.ts';
 import { authGuard, headersMiddleware, hostGuard, originGuard, type ServerMode } from './security/guards.ts';
 import { SessionStore } from './security/sessions.ts';
+import { registerDraftRoutes } from './routes/drafts.ts';
+import { registerEntityRoutes } from './routes/entities.ts';
+import { registerJobRoutes } from './routes/jobs.ts';
+import { registerScriptRoutes } from './routes/scripts.ts';
+import { registerSettingsRoutes } from './routes/settings.ts';
+import { registerShotRoutes } from './routes/shots.ts';
 
 export interface CreateAppOptions {
   mode: ServerMode;
@@ -71,6 +77,12 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerHealthRoutes(app, deps);
   registerProjectRoutes(app, deps);
   registerPlatformRoutes(app, deps);
+  registerSettingsRoutes(app, deps);
+  registerScriptRoutes(app, deps);
+  registerEntityRoutes(app, deps);
+  registerShotRoutes(app, deps);
+  registerDraftRoutes(app, deps);
+  registerJobRoutes(app, deps);
 
   if (opts.mode === 'production') registerStaticRoutes(app, opts.webDir);
 

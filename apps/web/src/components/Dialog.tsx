@@ -1,9 +1,11 @@
 import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { X } from 'lucide-react';
+import { IconButton } from './ui.tsx';
 
 /**
- * Modal built on the native <dialog> (focus trap, Esc, top layer) so no
- * library or inline style is needed (CSP: style-src 'self').
+ * Modal on the native <dialog> (focus trap, Esc, top layer), so no library or
+ * inline style is needed (CSP: style-src 'self'). Graphite chrome like the
+ * project manager's drawer; no shadows, layers step in lightness.
  * - center: small confirmation / form
  * - drawer: right-hand panel, full width on phones
  * - full:   whole viewport (draft diff view)
@@ -11,28 +13,37 @@ import { X } from 'lucide-react';
 export type DialogVariant = 'center' | 'drawer' | 'full';
 
 const VARIANT: Record<DialogVariant, string> = {
-  center: 'm-auto w-[calc(100%-2rem)] max-w-[520px] max-h-[calc(100dvh-2rem)] rounded-sheet border border-rule-strong',
+  center: 'm-auto w-[calc(100%-2rem)] max-w-[480px] max-h-[calc(100dvh-2rem)] rounded-panel border border-graphite-700',
   drawer:
-    'fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-dvh w-full max-w-full border-l border-rule-strong sm:w-[640px] sm:max-w-[calc(100vw-2rem)]',
-  full: 'fixed inset-0 m-0 h-dvh max-h-dvh w-full max-w-full',
+    'fixed inset-y-0 right-0 left-auto m-0 h-dvh max-h-none w-[min(440px,100vw)] max-w-none [border-width:0_0_0_1px] border-graphite-700',
+  full: 'fixed inset-0 m-0 h-dvh max-h-none w-full max-w-none',
+};
+
+const BODY: Record<DialogVariant, string> = {
+  center: 'px-4 py-4',
+  drawer: 'px-4 py-4',
+  full: '',
 };
 
 export interface DialogProps {
-  open: boolean;
   onClose: () => void;
   title: ReactNode;
+  /** one line under the title bar */
   description?: ReactNode;
   variant?: DialogVariant;
-  /** sticky footer (actions) */
+  /** bottom bar (actions) */
   footer?: ReactNode;
-  /** extra controls in the header, left of the close button */
+  /** extra controls in the title bar, left of the close button */
   headerActions?: ReactNode;
   children: ReactNode;
   /** block Esc/backdrop close while a request is running */
   busy?: boolean;
+  /** body classes (the full variant lays out its own panels) */
+  bodyClassName?: string;
 }
 
-export function Dialog({ open, onClose, title, description, variant = 'center', footer, headerActions, children, busy = false }: DialogProps) {
+/** Always open while mounted: render it conditionally. */
+export function Dialog({ onClose, title, description, variant = 'center', footer, headerActions, children, busy = false, bodyClassName }: DialogProps) {
   const ref = useRef<HTMLDialogElement>(null);
   const titleId = useId();
   const descId = useId();
@@ -40,11 +51,9 @@ export function Dialog({ open, onClose, title, description, variant = 'center', 
   useEffect(() => {
     const d = ref.current;
     if (!d) return;
-    if (open && !d.open) d.showModal();
-    if (!open && d.open) d.close();
-  }, [open]);
-
-  if (!open) return null;
+    if (!d.open) d.showModal();
+    return () => d.close();
+  }, []);
 
   return (
     <dialog
@@ -55,37 +64,26 @@ export function Dialog({ open, onClose, title, description, variant = 'center', 
         e.preventDefault();
         if (!busy) onClose();
       }}
-      onMouseDown={(e) => {
-        // click on the backdrop (the dialog box itself, outside the panel)
-        if (e.target === ref.current && !busy) onClose();
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !busy) onClose(); // backdrop
       }}
-      className={`bg-sheet p-0 text-ink shadow-[0_8px_32px_rgb(0_0_0/0.18)] backdrop:bg-graphite/35 ${VARIANT[variant]}`}
+      className={`bg-graphite-900 p-0 text-graphite-100 ${VARIANT[variant]}`}
     >
-      <div className="flex h-full max-h-[inherit] flex-col">
-        <header className="flex shrink-0 items-start gap-3 border-b border-rule px-4 py-3 sm:px-5">
-          <div className="min-w-0 flex-1">
-            <h2 id={titleId} className="text-[15px] font-semibold text-ink">
-              {title}
-            </h2>
-            {description ? (
-              <div id={descId} className="mt-0.5 text-[13px] text-ink-2">
-                {description}
-              </div>
-            ) : null}
-          </div>
-          {headerActions ? <div className="flex shrink-0 items-center gap-2">{headerActions}</div> : null}
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={busy}
-            className="-mr-1 inline-flex size-8 shrink-0 items-center justify-center rounded-control text-ink-3 hover:enabled:bg-sheet-sunk hover:enabled:text-ink disabled:opacity-50"
-            aria-label="关闭"
-          >
-            <X aria-hidden className="size-4" />
-          </button>
+      <div className={`flex h-full flex-col ${variant === 'center' ? 'max-h-[calc(100dvh-2rem)]' : ''}`}>
+        <header className="flex min-h-10 shrink-0 items-center gap-2 border-b border-graphite-950 bg-graphite-800 py-1.5 pr-2 pl-4">
+          <h2 id={titleId} className="min-w-0 flex-1 text-sm font-medium break-words text-graphite-100">
+            {title}
+          </h2>
+          {headerActions ? <div className="flex shrink-0 items-center gap-1">{headerActions}</div> : null}
+          <IconButton icon={X} label="关闭" onClick={onClose} disabled={busy} />
         </header>
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-5">{children}</div>
-        {footer ? <footer className="shrink-0 border-t border-rule bg-sheet px-4 py-3 sm:px-5">{footer}</footer> : null}
+        {description ? (
+          <div id={descId} className="shrink-0 border-b border-graphite-800 px-4 py-2 text-xs text-graphite-300">
+            {description}
+          </div>
+        ) : null}
+        <div className={`min-h-0 flex-1 overflow-auto overscroll-contain ${bodyClassName ?? BODY[variant]}`}>{children}</div>
+        {footer ? <footer className="shrink-0 border-t border-graphite-800 bg-graphite-900 px-4 py-2.5">{footer}</footer> : null}
       </div>
     </dialog>
   );

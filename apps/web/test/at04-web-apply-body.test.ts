@@ -7,7 +7,7 @@ import {
   keptShotCount,
   parseAliasInput,
   parseEntityDraft,
-  previewShotCode,
+  previewShotCodes,
 } from '../src/lib/drafts.ts';
 import { draft, shot } from './fixtures.ts';
 
@@ -64,10 +64,15 @@ describe('apply request body', () => {
 });
 
 describe('shot code preview', () => {
-  it('follows the project slate format without the take part', () => {
-    expect(previewShotCode('S{scene:02}-{shot:03}-T{take:02}', '3', 5)).toBe('S03-005');
-    expect(previewShotCode('{scene}/{shot:02}', '12A', 4)).toBe('12A/04');
-    expect(previewShotCode('T{take}', '2', 1)).toBe('2-01');
+  it('mirrors the server: max trailing number of the shots that stay, plus one, three digits', () => {
+    const a = shot({ code: '003' });
+    const b = shot({ code: '1A-007' });
+    const locked = shot({ code: '012', locked: true });
+    expect(previewShotCodes([a, b], false, 2)).toEqual(['008', '009']);
+    // replacing archives a and b first; the locked 012 stays
+    expect(previewShotCodes([a, b, locked], true, 2)).toEqual(['013', '014']);
+    expect(previewShotCodes([a, b], true, 1)).toEqual(['001']);
+    expect(previewShotCodes([], false, 0)).toEqual([]);
   });
 });
 
@@ -95,6 +100,15 @@ describe('entity draft selection', () => {
       ['locations', 0, true],
     ]);
     expect(rows?.[0]?.duplicateOf).toContain('c1');
+    expect(rows?.[0]?.mergeInto).toBeNull();
+  });
+
+  it('an exact name match is merged by the server, so it stays ticked', () => {
+    const same = draft({ characters: [{ name: '林小满', aliases: ['满满'] }], locations: [], props: [] }, [], { kind: 'entities', scope: {} });
+    const rows = parseEntityDraft(same, existing) ?? [];
+    expect(rows[0]?.selected).toBe(true);
+    expect(rows[0]?.mergeInto).toBe('c1 林小满');
+    expect(rows[0]?.duplicateOf).toBeNull();
   });
 
   it('sends the user-edited name and aliases of ticked rows', () => {

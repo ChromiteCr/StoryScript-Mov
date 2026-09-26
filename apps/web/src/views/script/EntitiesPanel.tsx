@@ -1,12 +1,14 @@
 import { useCallback, useState, type FormEvent } from 'react';
+import type { UseQueryResult } from '@tanstack/react-query';
 import type { Entity, EntityType, Job } from '@storyscript/contracts';
-import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles } from 'lucide-react';
+import { Check, Pencil, Plus, Sparkles } from 'lucide-react';
+import { formatAliases, parseAliasInput } from '../../lib/drafts.ts';
 import { ENTITIES_SLOT, trackJob, useTrackedJob } from '../../lib/jobs.ts';
 import { ENTITY_TYPE_LABEL } from '../../lib/labels.ts';
-import { formatAliases, parseAliasInput } from '../../lib/drafts.ts';
 import { useCreateEntity, useDrafts, useExtractEntities, useUpdateEntity } from '../../lib/queries.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
-import { Button, Select, Tag, TextInput } from '../../components/ui.tsx';
+import { Button, IconButton, SelectInput, Spinner, TextInput } from '../../components/ui.tsx';
+import { EmptyState, Panel } from '../../components/workspace.tsx';
 import { JobLine, useDraftFinder } from './JobLine.tsx';
 import { useWorkspace } from './context.ts';
 
@@ -24,17 +26,15 @@ function EntityEditor({ entity, onDone }: { entity: Entity; onDone: () => void }
   };
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-1.5 py-1.5">
-      <div className="grid gap-1.5 sm:grid-cols-2">
-        <TextInput aria-label="名称" value={name} onChange={(e) => setName(e.target.value)} className="h-7 text-[13px]" autoFocus />
-        <TextInput aria-label="别名，用顿号或逗号分隔" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔" className="h-7 text-[13px]" />
-      </div>
+    <form onSubmit={submit} className="flex flex-col gap-1.5 px-3 py-2">
+      <TextInput aria-label={`${entity.alias} 的名称`} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+      <TextInput aria-label="别名，用顿号或逗号分隔" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔" />
       {update.isError ? <ErrorNotice error={update.error} /> : null}
       <div className="flex gap-1.5">
-        <Button type="submit" variant="primary" className="h-7 px-2 text-xs" busy={update.isPending} disabled={name.trim() === ''}>
+        <Button type="submit" variant="primary" size="sm" busy={update.isPending} disabled={name.trim() === ''}>
           保存
         </Button>
-        <Button variant="ghost" className="h-7 px-2 text-xs" onClick={onDone}>
+        <Button variant="ghost" size="sm" onClick={onDone}>
           取消
         </Button>
       </div>
@@ -48,59 +48,38 @@ function EntityRow({ entity }: { entity: Entity }) {
 
   if (editing) {
     return (
-      <li className="px-2">
+      <li className="bg-graphite-800/60">
         <EntityEditor entity={entity} onDone={() => setEditing(false)} />
       </li>
     );
   }
 
   return (
-    <li className="group flex items-start gap-2 px-2 py-1.5">
-      <span className="mt-0.5 w-8 shrink-0 font-mono text-[11px] text-ink-3">{entity.alias}</span>
+    <li className="group flex items-start gap-2 py-1 pr-1 pl-3 hover:bg-graphite-800/60">
+      <span className="w-6 shrink-0 pt-px text-xs text-graphite-300 tabular-nums">{entity.alias}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-[13px] break-words text-ink">
-          {entity.name}
-          {entity.origin === 'ai' ? (
-            <Tag tone="neutral" className="ml-1.5 align-[1px]">
-              AI
-            </Tag>
-          ) : null}
-        </p>
-        {entity.aliases.length > 0 ? <p className="text-xs break-words text-ink-3">又称 {formatAliases(entity.aliases)}</p> : null}
-        {update.isError ? <p className="text-xs text-danger">保存失败，请重试。</p> : null}
+        <p className="text-sm break-words text-graphite-100">{entity.name}</p>
+        {entity.aliases.length > 0 ? <p className="text-xs break-words text-graphite-300">又称 {formatAliases(entity.aliases)}</p> : null}
+        {update.isError ? <p className="text-xs text-graphite-100">保存失败，请重试。</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
-        {entity.confirmed ? (
-          <button
-            type="button"
-            onClick={() => update.mutate({ id: entity.id, input: { confirmed: false } })}
-            disabled={update.isPending}
-            className="inline-flex h-6 items-center gap-1 rounded-control px-1.5 text-xs text-ok hover:bg-sheet-sunk"
-            title="已确认，点击取消确认"
-          >
-            <Check aria-hidden className="size-3.5" />
-            已确认
-          </button>
-        ) : (
-          <button
-            type="button"
-            onClick={() => update.mutate({ id: entity.id, input: { confirmed: true } })}
-            disabled={update.isPending}
-            className="inline-flex h-6 items-center rounded-control border border-warn-rule bg-warn-bg px-1.5 text-xs text-warn hover:border-warn"
-            title="AI 抽取的条目需要你确认"
-          >
-            待确认
-          </button>
-        )}
         <button
           type="button"
-          onClick={() => setEditing(true)}
-          className="inline-flex size-6 items-center justify-center rounded-control text-ink-3 hover:bg-sheet-sunk hover:text-ink"
-          aria-label={`编辑 ${entity.name}`}
-          title="改名 / 编辑别名"
+          onClick={() => update.mutate({ id: entity.id, input: { confirmed: !entity.confirmed } })}
+          disabled={update.isPending}
+          aria-pressed={entity.confirmed}
+          className={
+            'inline-flex h-6 items-center gap-1 rounded-control px-1.5 text-xs ' +
+            (entity.confirmed
+              ? 'text-graphite-300 hover:bg-graphite-700 hover:text-graphite-100'
+              : 'border border-warn/60 text-graphite-100 hover:bg-graphite-700')
+          }
+          title={entity.confirmed ? '已确认，点击取消确认' : 'AI 抽取的条目需要你确认；点击确认'}
         >
-          <Pencil aria-hidden className="size-3.5" />
+          {entity.confirmed ? <Check aria-hidden className="size-3 text-ok" /> : <span aria-hidden className="size-1.5 rounded-full bg-warn" />}
+          {entity.confirmed ? '已确认' : '待确认'}
         </button>
+        <IconButton icon={Pencil} label={`编辑 ${entity.name}`} title="改名 / 编辑别名" onClick={() => setEditing(true)} />
       </div>
     </li>
   );
@@ -127,155 +106,139 @@ function AddEntityForm({ onDone }: { onDone: () => void }) {
   };
 
   return (
-    <form onSubmit={submit} className="flex flex-col gap-2 rounded-sheet border border-rule bg-sheet-sunk/50 p-3">
-      <div className="grid gap-2 sm:grid-cols-[7rem_minmax(0,1fr)_minmax(0,1fr)]">
-        <Select aria-label="类型" value={type} onChange={(e) => setType(e.target.value as EntityType)}>
+    <form onSubmit={submit} className="flex flex-col gap-1.5 border-b border-graphite-800 bg-graphite-800/40 p-3">
+      <div className="grid grid-cols-[5rem_minmax(0,1fr)] gap-1.5">
+        <SelectInput aria-label="类型" value={type} onChange={(e) => setType(e.target.value as EntityType)}>
           {TYPES.map((t) => (
             <option key={t} value={t}>
               {ENTITY_TYPE_LABEL[t]}
             </option>
           ))}
-        </Select>
+        </SelectInput>
         <TextInput aria-label="名称" value={name} onChange={(e) => setName(e.target.value)} placeholder="名称" autoFocus />
-        <TextInput aria-label="别名" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔（可不填）" />
       </div>
+      <TextInput aria-label="别名" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔（可不填）" />
       {create.isError ? <ErrorNotice error={create.error} /> : null}
-      <div className="flex gap-2">
-        <Button type="submit" variant="primary" busy={create.isPending} disabled={name.trim() === ''}>
-          {create.isPending ? null : <Plus aria-hidden className="size-3.5" />}
+      <div className="flex gap-1.5">
+        <Button type="submit" variant="primary" size="sm" busy={create.isPending} disabled={name.trim() === ''}>
           新增
         </Button>
-        <Button variant="ghost" onClick={onDone}>
+        <Button variant="ghost" size="sm" onClick={onDone}>
           完成
         </Button>
       </div>
-      <p className="text-xs text-ink-3">手工新增的条目直接生效。别名（c1、l1、o1）由系统分配，拆镜时用它指代角色。</p>
+      <p className="text-xs text-graphite-300">手工新增的条目直接生效。编号（c1、l1、o1）由系统分配，拆镜时用它指代角色。</p>
     </form>
   );
 }
 
-export interface EntitiesPanelProps {
-  onOpenEntityDraft: (draftId: string) => void;
-}
-
-/** Roster of characters / locations / props (FR-02), collapsible. */
-export function EntitiesPanel({ onOpenEntityDraft }: EntitiesPanelProps) {
+/** Roster of characters / locations / props (FR-02): manual edits always work; AI extraction goes through a draft. */
+export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult<Entity[]> }) {
   const ws = useWorkspace();
   const drafts = useDrafts();
   const extract = useExtractEntities();
   const tracked = useTrackedJob(ENTITIES_SLOT);
   const findDraft = useDraftFinder();
-  const [open, setOpen] = useState(ws.entities.length === 0);
   const [adding, setAdding] = useState(false);
 
-  const pending = (drafts.data ?? []).filter((d) => d.kind === 'entities' && d.status === 'pending').sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
+  const pending = (drafts.data ?? [])
+    .filter((d) => d.kind === 'entities' && d.status === 'pending')
+    .sort((a, b) => b.created_at.localeCompare(a.created_at))[0];
   const unconfirmed = ws.entities.filter((e) => !e.confirmed).length;
 
   const onSucceeded = useCallback(
     async (job: Job) => {
       const id = await findDraft(job, 'entities', null);
-      if (id) onOpenEntityDraft(id);
+      if (id) ws.openEntityDraft(id);
       else ws.notify('实体抽取已完成，但没有找到对应的草案。');
     },
-    [findDraft, onOpenEntityDraft, ws],
+    [findDraft, ws],
   );
 
   const startExtract = () => {
     extract.mutate(undefined, { onSuccess: ({ job_id }) => trackJob(ENTITIES_SLOT, job_id) });
   };
 
-  const counts = TYPES.map((t) => `${ENTITY_TYPE_LABEL[t]} ${ws.entities.filter((e) => e.type === t).length}`).join(' · ');
+  const extractTitle = ws.ai.reason ?? (tracked ? '抽取任务进行中' : `AI 抽取：把剧本全文发送到 ${ws.providerHost ?? '你配置的地址'}，结果先进草案`);
 
   return (
-    <section aria-labelledby="entities-title" className="rounded-sheet border border-rule bg-sheet">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5 sm:px-5">
-        <button
-          type="button"
-          onClick={() => setOpen((o) => !o)}
-          aria-expanded={open}
-          aria-controls="entities-body"
-          className="-ml-1 flex min-w-0 items-center gap-1.5 rounded-control px-1 py-0.5 text-left hover:bg-sheet-sunk"
-        >
-          {open ? <ChevronDown aria-hidden className="size-4 shrink-0 text-ink-3" /> : <ChevronRight aria-hidden className="size-4 shrink-0 text-ink-3" />}
-          <h2 id="entities-title" className="text-[14px] font-semibold text-ink">
-            角色 · 地点 · 道具
-          </h2>
-          <span className="truncate text-xs text-ink-3">{counts}</span>
-        </button>
-        {unconfirmed > 0 ? <Tag tone="warn">{unconfirmed} 条待确认</Tag> : null}
-        <div className="ml-auto flex flex-wrap items-center gap-2">
-          {pending ? (
-            <Button className="h-7 px-2 text-xs" onClick={() => onOpenEntityDraft(pending.id)}>
-              查看实体草案
-            </Button>
-          ) : null}
-          <Button
-            className="h-7 px-2 text-xs"
+    <Panel
+      title={`角色 · 地点 · 道具${unconfirmed > 0 ? `（${unconfirmed} 待确认）` : ''}`}
+      padded={false}
+      tools={
+        <>
+          <IconButton
+            icon={Sparkles}
+            label="AI 抽取角色、地点和道具"
+            title={extractTitle}
             onClick={startExtract}
-            busy={extract.isPending}
-            disabled={!ws.ai.enabled || tracked !== null}
-            title={ws.ai.reason ?? `把剧本全文发送到 ${ws.providerHost ?? '你配置的地址'}，抽取角色、地点和道具，结果先进草案`}
-          >
-            {extract.isPending ? null : <Sparkles aria-hidden className="size-3.5" />}
-            AI 抽取
-          </Button>
-          <Button
-            className="h-7 px-2 text-xs"
-            onClick={() => {
-              setOpen(true);
-              setAdding(true);
-            }}
-          >
-            <Plus aria-hidden className="size-3.5" />
-            新增
-          </Button>
-        </div>
-      </div>
-
-      {tracked || extract.isError ? (
-        <div className="flex flex-col gap-2 px-4 pb-3 sm:px-5">
+            disabled={!ws.ai.enabled || tracked !== null || extract.isPending}
+          />
+          <IconButton icon={Plus} label="新增角色、地点或道具" onClick={() => setAdding(true)} />
+        </>
+      }
+    >
+      {adding ? <AddEntityForm onDone={() => setAdding(false)} /> : null}
+      {tracked || extract.isError || pending ? (
+        <div className="flex flex-col gap-2 border-b border-graphite-800 p-3">
           {extract.isError ? <ErrorNotice error={extract.error} context="ai-request" /> : null}
-          <JobLine slot={ENTITIES_SLOT} onSucceeded={onSucceeded} />
-        </div>
-      ) : null}
-
-      {open ? (
-        <div id="entities-body" className="border-t border-rule px-4 py-3 sm:px-5">
-          {adding ? (
-            <div className="mb-3">
-              <AddEntityForm onDone={() => setAdding(false)} />
-            </div>
-          ) : null}
-          {ws.entities.length === 0 && !adding ? (
-            <p className="text-[13px] text-ink-3">
-              还没有角色、地点或道具。{ws.ai.enabled ? '可以用"AI 抽取"生成草案，或' : ''}点"新增"手工添加。拆镜时，人物只能从角色名单里选。
-            </p>
-          ) : null}
-          {ws.entities.length > 0 ? (
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
-              {TYPES.map((t) => {
-                const list = ws.entities.filter((e) => e.type === t);
-                return (
-                  <div key={t} className="min-w-0">
-                    <h3 className="mb-1 text-xs font-medium text-ink-2">
-                      {ENTITY_TYPE_LABEL[t]} <span className="text-ink-3 tabular-nums">{list.length}</span>
-                    </h3>
-                    {list.length === 0 ? (
-                      <p className="px-2 text-xs text-ink-3">无</p>
-                    ) : (
-                      <ul className="divide-y divide-rule rounded-sheet border border-rule">
-                        {list.map((e) => (
-                          <EntityRow key={e.id} entity={e} />
-                        ))}
-                      </ul>
-                    )}
-                  </div>
-                );
-              })}
+          <JobLine slot={ENTITIES_SLOT} onSucceeded={onSucceeded} onOpenDraft={ws.openEntityDraft} />
+          {pending && !tracked ? (
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs text-graphite-300">有一份实体草案待审。</span>
+              <Button size="sm" onClick={() => ws.openEntityDraft(pending.id)}>
+                查看草案
+              </Button>
             </div>
           ) : null}
         </div>
       ) : null}
-    </section>
+      {entitiesQuery.isPending ? (
+        <div className="p-3">
+          <Spinner label="正在读取…" />
+        </div>
+      ) : entitiesQuery.isError ? (
+        <div className="p-3">
+          <ErrorNotice error={entitiesQuery.error} />
+        </div>
+      ) : ws.entities.length === 0 && !adding ? (
+        <EmptyState
+          quiet
+          title="还没有角色、地点或道具。"
+          description={
+            ws.ai.enabled
+              ? '可以用 AI 抽取生成草案，或点 + 手工添加。拆镜时，人物只能从角色名单里选。'
+              : '点 + 手工添加。AI 抽取需要先在"设置 → 模型"里配置文本模型。拆镜时，人物只能从角色名单里选。'
+          }
+          action={
+            ws.ai.enabled ? (
+              <Button size="sm" onClick={startExtract} disabled={tracked !== null || extract.isPending} title={extractTitle}>
+                <Sparkles aria-hidden className="size-3" />
+                AI 抽取
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="flex flex-col py-1">
+          {TYPES.map((t) => {
+            const list = ws.entities.filter((e) => e.type === t);
+            if (list.length === 0) return null;
+            return (
+              <section key={t} aria-label={ENTITY_TYPE_LABEL[t]} className="py-1">
+                <h3 className="px-3 pb-0.5 text-xs text-graphite-300">
+                  {ENTITY_TYPE_LABEL[t]} <span className="tabular-nums">{list.length}</span>
+                </h3>
+                <ul>
+                  {list.map((e) => (
+                    <EntityRow key={e.id} entity={e} />
+                  ))}
+                </ul>
+              </section>
+            );
+          })}
+        </div>
+      )}
+    </Panel>
   );
 }

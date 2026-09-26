@@ -30,13 +30,17 @@ export function moveId(ids: readonly string[], from: number, to: number): string
 }
 
 /**
- * Full id list for PUT /shots/narrative-order: the live shots in the new
- * order, then archived shots in their existing order (so the server always
- * receives every shot of the scene).
+ * Id list for PUT /shots/narrative-order: exactly the scene's live shots in
+ * the new order (the server rejects the list unless it is precisely the set
+ * of unarchived shots of the scene). Ids not in the scene are dropped, live
+ * shots missing from `liveOrder` keep their relative order at the end.
  */
 export function narrativeOrderIds(sceneShots: readonly Shot[], liveOrder: readonly string[]): string[] {
-  const archived = sceneShots.filter((s) => s.archived).sort(byNarrative).map((s) => s.id);
-  return [...liveOrder, ...archived];
+  const live = sceneShots.filter((s) => !s.archived).sort(byNarrative);
+  const liveIds = new Set(live.map((s) => s.id));
+  const ordered = liveOrder.filter((id, i) => liveIds.has(id) && liveOrder.indexOf(id) === i);
+  const seen = new Set(ordered);
+  return [...ordered, ...live.filter((s) => !seen.has(s.id)).map((s) => s.id)];
 }
 
 /** Apply a new order locally (optimistic update) by rewriting narrative_pos. */

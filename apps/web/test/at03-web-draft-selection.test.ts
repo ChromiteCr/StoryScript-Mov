@@ -65,7 +65,9 @@ describe('draft item selectability', () => {
     expect(quoteMatchOf({ shots, quote_matches: [null, 'exact'] }, 1, [])).toBe('exact');
     expect(quoteMatchOf({ shots }, 2, [issue('error', 2, 'QUOTE_REJECTED')])).toBe('rejected');
     expect(quoteMatchOf({ shots }, 2, [issue('warning', 2, 'quote_fuzzy')])).toBe('fuzzy');
-    expect(quoteMatchOf({ shots }, 1, [])).toBeNull();
+    // server semantics: no quote issue = exact; a paragraph outside the scene cannot match
+    expect(quoteMatchOf({ shots }, 1, [])).toBe('exact');
+    expect(quoteMatchOf({ shots }, 2, [issue('error', 2, 'paragraph_not_in_scene')])).toBe('rejected');
   });
 
   it('attaches claim flags to their items', () => {

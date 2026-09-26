@@ -49,14 +49,16 @@ describe('shot table helpers', () => {
     expect(g.size).toBe(2);
   });
 
-  it('moves ids and builds the full narrative order with archived shots last', () => {
+  it('moves ids and sends exactly the live shots of the scene in the new order', () => {
     expect(moveId(['a', 'b', 'c'], 2, 0)).toEqual(['c', 'a', 'b']);
     expect(moveId(['a', 'b'], 0, 5)).toEqual(['a', 'b']);
     const live1 = shot({ narrative_pos: 1 });
     const gone = shot({ narrative_pos: 2, archived: true });
     const live2 = shot({ narrative_pos: 3 });
     const ids = narrativeOrderIds([live1, gone, live2], [live2.id, live1.id]);
-    expect(ids).toEqual([live2.id, live1.id, gone.id]);
+    expect(ids).toEqual([live2.id, live1.id]);
+    // unknown ids are dropped, forgotten live shots are appended
+    expect(narrativeOrderIds([live1, gone, live2], [gone.id, live2.id, 'x'])).toEqual([live2.id, live1.id]);
     expect(Api.setNarrativeOrder.input.safeParse({ scene_id: SCENE_ID, shot_ids: ids }).success).toBe(true);
     const re = reorderLocally([live1, gone, live2], ids);
     expect(re.find((s) => s.id === live2.id)?.narrative_pos).toBe(1);

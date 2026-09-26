@@ -1,0 +1,23 @@
+{
+  "format": "storyscript-replay-v1",
+  "prompt_version": "entities-v1",
+  "key": "06750775b77ac312e19016a924ad",
+  "origin": "handwritten",
+  "output_json": {
+    "characters": [
+      { "name": "周明远", "aliases": ["老周"] },
+      { "name": "林晓", "aliases": [] }
+    ],
+    "locations": [
+      { "name": "旧书店", "aliases": [] },
+      { "name": "旧书店后屋", "aliases": ["后屋"] }
+    ],
+    "props": [
+      { "name": "日记本", "aliases": ["蓝色封面的日记本"] },
+      { "name": "合影", "aliases": ["照片"] },
+      { "name": "小刷子", "aliases": [] },
+      { "name": "报纸", "aliases": [] },
+      { "name": "纸箱", "aliases": [] }
+    ]
+  }
+}

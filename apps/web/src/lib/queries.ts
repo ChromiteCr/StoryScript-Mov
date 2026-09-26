@@ -12,6 +12,8 @@ export const keys = {
   health: ['health'] as const,
   recent: ['projects', 'recent'] as const,
   project: ['project'] as const,
+  /** active (queued/running) jobs of the open project, for the page bar */
+  jobs: ['jobs', 'active'] as const,
   // M3
   providers: ['settings', 'providers'] as const,
   script: ['script', 'current'] as const,
@@ -21,7 +23,7 @@ export const keys = {
   shotRevisions: (id: string) => ['shot-revisions', id] as const,
   drafts: ['drafts'] as const,
   draft: (id: string) => ['drafts', id] as const,
-  job: (id: string) => ['jobs', id] as const,
+  job: (id: string) => ['jobs', 'one', id] as const,
 };
 
 /** Query roots that belong to the open project; dropped when it changes. */
@@ -109,10 +111,27 @@ export function useCloseProject() {
     onSuccess: () => {
       dropProjectData(qc);
       qc.setQueryData(keys.project, null);
+      qc.removeQueries({ queryKey: keys.jobs });
       void qc.invalidateQueries({ queryKey: keys.recent });
       void qc.invalidateQueries({ queryKey: keys.health });
       navigate(null);
     },
+  });
+}
+
+/**
+ * Active background jobs of the open project, polled once a second (FR-11).
+ * Polling stops after an error (e.g. a server without the jobs route yet) and
+ * resumes on the next explicit refetch.
+ */
+export function useActiveJobs(enabled: boolean) {
+  return useQuery({
+    queryKey: keys.jobs,
+    queryFn: ({ signal }) => api.call('listActiveJobs', undefined, { signal }),
+    enabled,
+    retry: false,
+    staleTime: 0,
+    refetchInterval: (query) => (query.state.status === 'error' ? false : 1000),
   });
 }
 
@@ -164,14 +183,22 @@ export interface AiGate {
   enabled: boolean;
   /** why AI buttons are disabled; null when enabled */
   reason: string | null;
+  /** --demo: AI routes replay recorded outputs and send nothing */
+  demo: boolean;
+}
+
+/** Pure part of useAiGate (tested). */
+export function aiGateOf(health: { text_provider_configured: boolean; demo: boolean } | undefined): AiGate {
+  if (!health) return { enabled: false, reason: '正在检测模型配置…', demo: false };
+  // In demo mode the server answers AI routes from fixtures/replay without a key.
+  if (health.demo) return { enabled: true, reason: null, demo: true };
+  if (health.text_provider_configured) return { enabled: true, reason: null, demo: false };
+  return { enabled: false, reason: '未配置文本模型：在"设置 → 模型"中填写后可用。手工流程不受影响。', demo: false };
 }
 
 /** AI buttons work only with a configured text provider (SPEC §1: 无 key 可用). */
 export function useAiGate(): AiGate {
-  const health = useHealth();
-  if (health.data?.text_provider_configured) return { enabled: true, reason: null };
-  if (!health.data) return { enabled: false, reason: '正在检测模型配置…' };
-  return { enabled: false, reason: '未配置文本模型：在"设置 → 文本模型"中填写后可用。手工流程不受影响。' };
+  return aiGateOf(useHealth().data);
 }
 
 // ------------------------------------------------------------------ script --
@@ -268,7 +295,8 @@ export function useShots() {
 }
 
 function shotsUpdated(qc: QueryClient, updated: readonly Shot[]): void {
-  qc.setQueryData<Shot[]>(keys.shots, (old) => mergeShots(old, updated));
+  // GET /shots lists live shots only; an archived one leaves the table.
+  qc.setQueryData<Shot[]>(keys.shots, (old) => mergeShots(old, updated).filter((s) => !s.archived));
   for (const s of updated) void qc.invalidateQueries({ queryKey: keys.shotRevisions(s.id) });
 }
 

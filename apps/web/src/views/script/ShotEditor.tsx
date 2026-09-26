@@ -1,5 +1,4 @@
-import { useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useEffect, useId, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import {
   BoardTemplate,
   CameraAngle,
@@ -20,7 +19,7 @@ import {
   type ShotSubject,
 } from '@storyscript/contracts';
 import { TECHNIQUES } from '@storyscript/core';
-import { Lock, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { History, Lock, LockOpen, Plus, RefreshCw, Trash2 } from 'lucide-react';
 import { isRevisionConflict } from '../../lib/errors.ts';
 import {
   ANGLE_LABEL,
@@ -30,31 +29,57 @@ import {
   FRAME_FORMAT_LABEL,
   LENS_LABEL,
   MOVEMENT_LABEL,
+  ORIGIN_LABEL,
   POSE_LABEL,
   PROP_LABEL,
+  QUOTE_MATCH_LABEL,
+  REQUIRED_STATUS_LABEL,
   SCREEN_POS_LABEL,
   SHOT_SIZE_LABEL,
   SUBJECT_MOTION_LABEL,
   TEMPLATE_LABEL,
 } from '../../lib/labels.ts';
-import { keys, useCreateShot, useUpdateShot } from '../../lib/queries.ts';
+import { useCreateShot, useUpdateShot } from '../../lib/queries.ts';
 import { emptyShotFields, emptySubject, linesToList, parseNumberField } from '../../lib/shots.ts';
 import { stableKey } from '../../lib/stable.ts';
-import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
-import { Button, Note, Select, TextArea, TextInput } from '../../components/ui.tsx';
+import { Button, IconButton, Notice, SelectInput, Tag, TextArea, TextInput } from '../../components/ui.tsx';
+import { FormRow } from './SceneInspector.tsx';
 import { useWorkspace } from './context.ts';
+
+/**
+ * Shot inspector: every ShotFields field (enums as Chinese dropdowns), saved
+ * with expected_revision (409 → reload prompt). The same form creates manual
+ * shots, with a required manual note and an optional source paragraph.
+ */
+
+/** Server business bounds (core validateShotFieldsBasic). */
+const EST_SECONDS_MAX = 120;
 
 // ------------------------------------------------------------ primitives ---
 
-function EnumSelect<T extends string>({
+function Group({ title, children, actions }: { title: string; children: ReactNode; actions?: ReactNode }) {
+  const id = useId();
+  return (
+    <section aria-labelledby={id} className="py-3 first:pt-2">
+      <div className="flex min-h-6 items-center justify-between gap-2 px-3">
+        <h3 id={id} className="text-xs font-medium text-graphite-100">
+          {title}
+        </h3>
+        {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
+      </div>
+      <div className="mt-2 flex flex-col gap-2 px-3">{children}</div>
+    </section>
+  );
+}
+
+function EnumRow<T extends string>({
   label,
   value,
   options,
   labels,
   onChange,
   nullLabel,
-  className = '',
 }: {
   label: string;
   value: T | null;
@@ -63,45 +88,64 @@ function EnumSelect<T extends string>({
   onChange: (v: T | null) => void;
   /** when set, the select offers a null option with this label */
   nullLabel?: string;
-  className?: string;
+}) {
+  return (
+    <FormRow label={label}>
+      {(id) => (
+        <SelectInput id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : (e.target.value as T))}>
+          {nullLabel !== undefined ? <option value="">{nullLabel}</option> : null}
+          {options.map((o) => (
+            <option key={o} value={o}>
+              {labels[o]}
+            </option>
+          ))}
+        </SelectInput>
+      )}
+    </FormRow>
+  );
+}
+
+function Stacked({ label, children, hint, error }: { label: string; children: (id: string) => ReactNode; hint?: ReactNode; error?: string | null }) {
+  const id = useId();
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <label htmlFor={id} className="text-xs text-graphite-300">
+        {label}
+      </label>
+      {children(id)}
+      {error ? <p className="text-xs text-graphite-100">{error}</p> : hint ? <p className="text-xs text-graphite-300">{hint}</p> : null}
+    </div>
+  );
+}
+
+function MiniSelect<T extends string>({
+  label,
+  value,
+  options,
+  labels,
+  onChange,
+}: {
+  label: string;
+  value: T | null;
+  options: readonly T[];
+  labels: Record<T, string>;
+  onChange: (v: T | null) => void;
 }) {
   const id = useId();
   return (
-    <div className={`flex min-w-0 flex-col gap-1 ${className}`}>
-      <label htmlFor={id} className="text-xs font-medium text-ink-2">
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <label htmlFor={id} className="text-xs text-graphite-300">
         {label}
       </label>
-      <Select id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : (e.target.value as T))}>
-        {nullLabel !== undefined ? <option value="">{nullLabel}</option> : null}
+      <SelectInput id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : (e.target.value as T))}>
+        <option value="">默认</option>
         {options.map((o) => (
           <option key={o} value={o}>
             {labels[o]}
           </option>
         ))}
-      </Select>
+      </SelectInput>
     </div>
-  );
-}
-
-function Labeled({ label, children, hint, error, className = '' }: { label: string; children: (id: string) => ReactNode; hint?: string; error?: string | null; className?: string }) {
-  const id = useId();
-  return (
-    <div className={`flex min-w-0 flex-col gap-1 ${className}`}>
-      <label htmlFor={id} className="text-xs font-medium text-ink-2">
-        {label}
-      </label>
-      {children(id)}
-      {error ? <p className="text-xs text-danger">{error}</p> : hint ? <p className="text-xs text-ink-3">{hint}</p> : null}
-    </div>
-  );
-}
-
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <fieldset className="min-w-0 border-t border-rule pt-3 first:border-t-0 first:pt-0">
-      <legend className="float-left mb-2 w-full text-[13px] font-semibold text-ink">{title}</legend>
-      <div className="clear-both">{children}</div>
-    </fieldset>
   );
 }
 
@@ -148,30 +192,50 @@ type Errors = Partial<Record<'focal' | 'est' | 'manualNote' | 'form', string>>;
 
 export type EditorTarget = { mode: 'edit'; shot: Shot } | { mode: 'create'; scene: Scene };
 
-export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose: () => void }) {
+export function ShotEditor({ target }: { target: EditorTarget }) {
   const ws = useWorkspace();
-  const qc = useQueryClient();
   const update = useUpdateShot();
+  const lockToggle = useUpdateShot();
   const create = useCreateShot();
 
-  const editing = target.mode === 'edit' ? target.shot : null;
-  const scene = target.mode === 'create' ? target.scene : (ws.script.scenes.find((s) => s.id === editing?.scene_id) ?? null);
+  const latest = target.mode === 'edit' ? target.shot : null;
+  const scene = target.mode === 'create' ? target.scene : (ws.script.scenes.find((s) => s.id === latest?.scene_id) ?? null);
 
-  // Snapshot of the revision the user started from (INV-03 optimistic concurrency).
-  const [base, setBase] = useState<Shot | null>(editing);
-  const [form, setForm] = useState<FormState>(() =>
-    editing ? formFromShot(editing) : toForm(emptyShotFields(scene ?? { paragraph_ids: [] }), '', false),
+  // The revision the user started from (INV-03 optimistic concurrency).
+  const [base, setBase] = useState<Shot | null>(latest);
+  const initial = useMemo(
+    () => (base ? formFromShot(base) : toForm(emptyShotFields(scene ?? { paragraph_ids: [] }), '', false)),
+    // the create form starts once per scene
+    [base, scene],
   );
+  const [form, setForm] = useState<FormState>(initial);
   const [errors, setErrors] = useState<Errors>({});
+  const [savedAt, setSavedAt] = useState<string | null>(null);
+
+  const dirty = stableKey(form) !== stableKey(initial);
   const locked = base?.locked ?? false;
+  const staleBase = latest !== null && base !== null && latest.revision !== base.revision;
+
+  const { setEditorDirty } = ws;
+  useEffect(() => {
+    setEditorDirty(dirty);
+    return () => setEditorDirty(false);
+  }, [dirty, setEditorDirty]);
+
+  // Picked up a newer revision (lock toggled in the table, another tab…): follow it unless the user has edits.
+  useEffect(() => {
+    if (!latest || !base || latest.revision === base.revision || dirty) return;
+    setBase(latest);
+    setForm(formFromShot(latest));
+    update.reset();
+  }, [latest]); // only a new server revision triggers this
 
   const setF = <K extends keyof ShotFields>(k: K, v: ShotFields[K]) => setForm((f) => ({ ...f, fields: { ...f.fields, [k]: v } }));
   const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const paragraphOptions = useMemo(() => {
     const ids = scene ? scene.paragraph_ids : [...ws.paragraphs.keys()];
-    const list = ids.map((id) => ws.paragraphs.get(id)).filter((p) => p !== undefined);
-    return list;
+    return ids.map((id) => ws.paragraphs.get(id)).filter((p) => p !== undefined);
   }, [scene, ws.paragraphs]);
   const chosenParagraph = form.sourcePid ? ws.paragraphs.get(form.sourcePid) : undefined;
   const quoteMissing = chosenParagraph !== undefined && form.sourceQuote.trim() !== '' && !chosenParagraph.text.includes(form.sourceQuote.trim());
@@ -189,28 +253,25 @@ export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose:
   const conflict = isRevisionConflict(update.error);
   const pending = update.isPending || create.isPending;
 
-  const reloadLatest = async () => {
-    if (!editing) return;
-    await qc.invalidateQueries({ queryKey: keys.shots, exact: true });
-    const latest = qc.getQueryData<Shot[]>(keys.shots)?.find((s) => s.id === editing.id) ?? null;
-    if (latest) {
-      setBase(latest);
-      setForm(formFromShot(latest));
-      update.reset();
-    }
+  const reloadLatest = () => {
+    if (!latest) return;
+    setBase(latest);
+    setForm(formFromShot(latest));
+    setErrors({});
+    update.reset();
   };
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next: Errors = {};
     const focal = parseNumberField(form.focal, { allowEmpty: true, min: 1, max: 2000, label: '焦段' });
-    const est = parseNumberField(form.est, { allowEmpty: false, min: 0.1, max: 3600, label: '预计时长' });
+    const est = parseNumberField(form.est, { allowEmpty: false, min: 0.1, max: EST_SECONDS_MAX, label: '预计时长' });
     if (focal.error) next.focal = focal.error;
     if (est.error) next.est = est.error;
-    if (!editing && form.manualNote.trim() === '') next.manualNote = '手工镜头需要说明来由，例如"导演补充的空镜"';
+    if (!base && form.manualNote.trim() === '') next.manualNote = '手工镜头需要说明来由，例如"导演补充的空镜"';
 
     // Contract: ShotFields.source is required. A manual shot without a chosen
-    // paragraph is anchored to the scene heading with an empty quote.
+    // paragraph points at the scene heading with an empty quote.
     const fallbackPid = scene?.paragraph_ids[0] ?? form.fields.source.paragraph_id;
     const source = form.sourcePid ? { paragraph_id: form.sourcePid, quote: form.sourceQuote.trim() } : { paragraph_id: fallbackPid, quote: '' };
 
@@ -230,12 +291,12 @@ export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose:
     setErrors(next);
     if (Object.keys(next).length > 0 || !parsed.success) return;
 
-    if (editing && base) {
+    if (base) {
       const code = form.code.trim();
       const fieldsChanged = stableKey(parsed.data) !== stableKey(base.fields);
       const codeChanged = code !== '' && code !== base.code;
       if (!fieldsChanged && !codeChanged) {
-        onClose();
+        setForm(formFromShot(base));
         return;
       }
       update.mutate(
@@ -248,161 +309,215 @@ export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose:
             reason: form.reason.trim() || undefined,
           },
         },
-        { onSuccess: onClose },
+        {
+          onSuccess: (shot) => {
+            setBase(shot);
+            setForm(formFromShot(shot));
+            setSavedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }));
+          },
+        },
       );
     } else if (scene) {
       create.mutate(
         { scene_id: scene.id, fields: parsed.data, manual_note: form.manualNote.trim(), code: form.code.trim() || undefined },
         {
           onSuccess: (shot) => {
-            ws.notify(`已新建镜头 ${shot.code}。`);
-            onClose();
+            ws.setEditorDirty(false);
+            ws.notify(`已新建手工镜头 ${shot.code}。`);
+            ws.selectShot(shot, { reveal: true });
           },
         },
       );
     }
   };
 
-  const title = editing ? `编辑镜头 ${base?.code ?? ''}` : `新建手工镜头 · 第 ${scene?.display_no ?? ''} 场`;
   const f = form.fields;
+  const anchor = base?.source_anchor ?? null;
 
   return (
-    <Dialog
-      open
-      onClose={onClose}
-      variant="drawer"
-      busy={pending}
-      title={title}
-      description={scene ? `${scene.display_no} ${scene.heading}` : '这个镜头所属的场景不在当前剧本版本中'}
-      footer={
-        <div className="flex flex-wrap items-center gap-2">
-          <Button type="submit" form="shot-editor-form" variant="primary" busy={pending} disabled={locked || (!editing && !scene)}>
-            {editing ? '保存' : '新建镜头'}
-          </Button>
-          <Button variant="ghost" onClick={onClose} disabled={pending}>
-            取消
-          </Button>
-          {editing ? <span className="ml-auto font-mono text-xs text-ink-3">r{base?.revision}</span> : null}
-        </div>
-      }
-    >
-      <form id="shot-editor-form" onSubmit={submit} noValidate className="flex flex-col gap-4">
-        {locked ? (
-          <Note tone="warn">
-            <Lock aria-hidden className="mr-1 inline size-3.5 align-[-2px]" />
-            镜头已锁定，内容不能修改。先在镜头表里解锁。
-          </Note>
-        ) : null}
-        {conflict ? (
-          <div className="flex flex-col gap-2">
-            <ErrorNotice error={update.error} context="shot-save" />
-            <div>
-              <Button onClick={() => void reloadLatest()}>
-                <RefreshCw aria-hidden className="size-3.5" />
-                放弃我的修改，载入最新版本
-              </Button>
+    <form onSubmit={submit} noValidate className="flex min-h-full flex-col">
+      <div className="flex-1 divide-y divide-graphite-800">
+        {base ? (
+          <Group
+            title={`镜头 ${base.code}`}
+            actions={
+              <>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  busy={lockToggle.isPending}
+                  disabled={dirty}
+                  title={dirty ? '先保存或还原修改' : base.locked ? '解锁后才能修改' : '锁定后，AI 重新拆镜不会改动它'}
+                  onClick={() =>
+                    lockToggle.mutate(
+                      { id: base.id, input: { expected_revision: base.revision, locked: !base.locked } },
+                      {
+                        onSuccess: (shot) => {
+                          setBase(shot);
+                          setForm(formFromShot(shot));
+                        },
+                      },
+                    )
+                  }
+                >
+                  {lockToggle.isPending ? null : base.locked ? <LockOpen aria-hidden className="size-3" /> : <Lock aria-hidden className="size-3" />}
+                  {base.locked ? '解锁' : '锁定'}
+                </Button>
+                <IconButton icon={History} label="修订历史" onClick={() => ws.openRevisions(base)} />
+              </>
+            }
+          >
+            <div className="flex flex-wrap items-center gap-1">
+              <Tag>{ORIGIN_LABEL[base.origin]}</Tag>
+              {base.locked ? (
+                <Tag>
+                  <Lock aria-hidden className="size-3" />
+                  已锁定
+                </Tag>
+              ) : null}
+              {base.required_status !== 'required' ? (
+                <Tag tone={base.required_status === 'waived' ? 'danger' : 'neutral'} title={base.requirement_reason ?? undefined}>
+                  {REQUIRED_STATUS_LABEL[base.required_status]}
+                </Tag>
+              ) : null}
+              {base.needs_relink ? <Tag tone="warn">待重新关联</Tag> : null}
+              {anchor?.match === 'fuzzy' ? <Tag tone="warn">{QUOTE_MATCH_LABEL.fuzzy}</Tag> : null}
+              <span className="ml-auto text-xs text-graphite-300 tabular-nums">r{base.revision}</span>
             </div>
-          </div>
-        ) : update.isError ? (
-          <ErrorNotice error={update.error} context="shot-save" />
-        ) : null}
-        {create.isError ? <ErrorNotice error={create.error} context="shot-save" /> : null}
+            {base.manual_note ? <p className="text-xs break-words text-graphite-300">手工说明：{base.manual_note}</p> : null}
+            {locked ? (
+              <Notice tone="info" title="镜头已锁定">
+                内容不能修改，AI 重新拆镜也不会改动它。要修改先解锁。
+              </Notice>
+            ) : null}
+            {base.needs_relink ? (
+              <Notice tone="warn" title="剧本改版后，原引用找不到了">
+                在下面"剧本出处"里重新选择段落并粘贴引用原文，保存后恢复关联。
+              </Notice>
+            ) : null}
+            {staleBase ? (
+              <Notice tone="warn" title={`这个镜头已在别处修改（r${base.revision} → r${latest?.revision}）`}>
+                <p>保存会被拒绝。可以放弃你的修改，载入最新版本。</p>
+                <Button size="sm" className="mt-1.5" onClick={reloadLatest}>
+                  <RefreshCw aria-hidden className="size-3" />
+                  载入最新版本
+                </Button>
+              </Notice>
+            ) : null}
+            {lockToggle.isError ? <ErrorNotice error={lockToggle.error} context="shot-save" /> : null}
+          </Group>
+        ) : (
+          <Group title={`新建手工镜头 · 第 ${scene?.display_no ?? ''} 场`}>
+            <p className="text-xs text-graphite-300">手工镜头不需要模型，镜号留空时自动分配。</p>
+          </Group>
+        )}
 
-        <fieldset disabled={locked || pending} className="flex min-w-0 flex-col gap-4">
-          <Section title="编号与模板">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <Labeled label="镜号" hint={editing ? '只是显示编号，可随时修改' : '留空自动分配'}>
-                {(id) => <TextInput id={id} value={form.code} onChange={(e) => set('code', e.target.value)} className="font-mono" maxLength={40} />}
-              </Labeled>
-              <EnumSelect label="构图模板" value={f.template} options={BoardTemplate.options} labels={TEMPLATE_LABEL} nullLabel="自动推导" onChange={(v) => setF('template', v)} />
-              <EnumSelect label="画幅" value={f.frame_format} options={FrameFormat.options} labels={FRAME_FORMAT_LABEL} nullLabel="沿用项目画幅" onChange={(v) => setF('frame_format', v)} />
-              <Labeled label="手法">
-                {(id) => (
-                  <Select id={id} value={f.technique_id ?? ''} onChange={(e) => setF('technique_id', e.target.value || null)}>
-                    <option value="">无</option>
-                    {TECHNIQUES.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+        <fieldset disabled={locked || pending} className="min-w-0 divide-y divide-graphite-800">
+          <Group title="编号与构图">
+            <FormRow label="镜号" hint={base ? '只是显示编号，不影响身份' : '留空自动分配'}>
+              {(id) => <TextInput id={id} value={form.code} onChange={(e) => set('code', e.target.value)} className="tabular-nums" maxLength={40} />}
+            </FormRow>
+            <EnumRow label="构图模板" value={f.template} options={BoardTemplate.options} labels={TEMPLATE_LABEL} nullLabel="自动推导" onChange={(v) => setF('template', v)} />
+            <EnumRow label="画幅" value={f.frame_format} options={FrameFormat.options} labels={FRAME_FORMAT_LABEL} nullLabel="沿用项目画幅" onChange={(v) => setF('frame_format', v)} />
+            <FormRow label="手法">
+              {(id) => (
+                <SelectInput id={id} value={f.technique_id ?? ''} onChange={(e) => setF('technique_id', e.target.value || null)}>
+                  <option value="">无</option>
+                  {TECHNIQUES.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                  {f.technique_id && !TECHNIQUES.some((t) => t.id === f.technique_id) ? <option value={f.technique_id}>{f.technique_id}</option> : null}
+                </SelectInput>
+              )}
+            </FormRow>
+          </Group>
+
+          <Group title="机位">
+            <EnumRow label="景别" value={f.shot_size} options={ShotSize.options} labels={SHOT_SIZE_LABEL} onChange={(v) => v && setF('shot_size', v)} />
+            <EnumRow label="角度" value={f.angle} options={CameraAngle.options} labels={ANGLE_LABEL} onChange={(v) => v && setF('angle', v)} />
+            <EnumRow label="镜头" value={f.lens} options={LensClass.options} labels={LENS_LABEL} onChange={(v) => v && setF('lens', v)} />
+            <FormRow label="焦段 mm" hint={errors.focal ?? undefined}>
+              {(id) => (
+                <TextInput
+                  id={id}
+                  value={form.focal}
+                  onChange={(e) => set('focal', e.target.value)}
+                  inputMode="decimal"
+                  placeholder="不指定"
+                  className="tabular-nums"
+                  aria-invalid={Boolean(errors.focal) || undefined}
+                />
+              )}
+            </FormRow>
+            <EnumRow label="运动" value={f.movement} options={Movement.options} labels={MOVEMENT_LABEL} onChange={(v) => v && setF('movement', v)} />
+          </Group>
+
+          <Group title={`人物 ${f.subjects.length}`}>
+            {f.subjects.length === 0 ? <p className="text-xs text-graphite-300">画面里没有人物。</p> : null}
+            {f.subjects.map((s, i) => (
+              <div key={i} className="flex flex-col gap-1.5 rounded-panel border border-graphite-800 bg-graphite-950/40 p-2">
+                <div className="flex items-center gap-1">
+                  <SelectInput aria-label={`人物 ${i + 1}`} value={s.alias} onChange={(e) => setSubject(i, { alias: e.target.value })} className="flex-1">
+                    {aliasOptions(s.alias).map((a) => (
+                      <option key={a} value={a}>
+                        {ws.aliasLabel(a)}
                       </option>
                     ))}
-                    {f.technique_id && !TECHNIQUES.some((t) => t.id === f.technique_id) ? <option value={f.technique_id}>{f.technique_id}</option> : null}
-                  </Select>
-                )}
-              </Labeled>
-            </div>
-          </Section>
-
-          <Section title="机位">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-5">
-              <EnumSelect label="景别" value={f.shot_size} options={ShotSize.options} labels={SHOT_SIZE_LABEL} onChange={(v) => v && setF('shot_size', v)} />
-              <EnumSelect label="角度" value={f.angle} options={CameraAngle.options} labels={ANGLE_LABEL} onChange={(v) => v && setF('angle', v)} />
-              <EnumSelect label="镜头" value={f.lens} options={LensClass.options} labels={LENS_LABEL} onChange={(v) => v && setF('lens', v)} />
-              <Labeled label="焦段（mm）" error={errors.focal}>
-                {(id) => (
-                  <TextInput id={id} value={form.focal} onChange={(e) => set('focal', e.target.value)} inputMode="decimal" placeholder="不指定" className="tabular-nums" aria-invalid={Boolean(errors.focal) || undefined} />
-                )}
-              </Labeled>
-              <EnumSelect label="运动" value={f.movement} options={Movement.options} labels={MOVEMENT_LABEL} onChange={(v) => v && setF('movement', v)} />
-            </div>
-          </Section>
-
-          <Section title="画面">
-            <div className="flex flex-col gap-2">
-              <p className="text-xs font-medium text-ink-2">人物</p>
-              {f.subjects.length === 0 ? <p className="text-xs text-ink-3">画面里没有人物。</p> : null}
-              {f.subjects.map((s, i) => (
-                <div key={i} className="grid grid-cols-2 items-end gap-2 rounded-sheet border border-rule bg-sheet-sunk/40 p-2 sm:grid-cols-[minmax(0,1.4fr)_repeat(4,minmax(0,1fr))_auto]">
-                  <Labeled label="角色" className="col-span-2 sm:col-span-1">
-                    {(id) => (
-                      <Select id={id} value={s.alias} onChange={(e) => setSubject(i, { alias: e.target.value })}>
-                        {aliasOptions(s.alias).map((a) => (
-                          <option key={a} value={a}>
-                            {ws.aliasLabel(a)}
-                          </option>
-                        ))}
-                      </Select>
-                    )}
-                  </Labeled>
-                  <EnumSelect label="画面位置" value={s.screen} options={ScreenPos.options} labels={SCREEN_POS_LABEL} nullLabel="—" onChange={(v) => setSubject(i, { screen: v })} />
-                  <EnumSelect label="景深" value={s.depth} options={DepthPlane.options} labels={DEPTH_LABEL} nullLabel="—" onChange={(v) => setSubject(i, { depth: v })} />
-                  <EnumSelect label="朝向" value={s.facing} options={Facing.options} labels={FACING_LABEL} nullLabel="—" onChange={(v) => setSubject(i, { facing: v })} />
-                  <EnumSelect label="姿势" value={s.pose} options={Pose.options} labels={POSE_LABEL} nullLabel="—" onChange={(v) => setSubject(i, { pose: v })} />
-                  <button
-                    type="button"
+                  </SelectInput>
+                  <IconButton
+                    icon={Trash2}
+                    label={`移除人物 ${ws.aliasLabel(s.alias)}`}
                     onClick={() =>
                       setF(
                         'subjects',
                         f.subjects.filter((_, j) => j !== i),
                       )
                     }
-                    className="inline-flex h-8 items-center justify-center gap-1 rounded-control px-2 text-xs text-ink-3 hover:enabled:bg-sheet hover:enabled:text-danger"
-                    aria-label={`移除人物 ${ws.aliasLabel(s.alias)}`}
-                  >
-                    <Trash2 aria-hidden className="size-3.5" />
-                    <span className="sm:hidden">移除</span>
-                  </button>
+                  />
                 </div>
-              ))}
-              <div className="flex flex-wrap items-center gap-2">
-                <Button
-                  className="h-7 px-2 text-xs"
-                  disabled={characterAliases.length === 0}
-                  onClick={() => {
-                    const used = new Set(f.subjects.map((s) => s.alias));
-                    const alias = characterAliases.find((a) => !used.has(a)) ?? characterAliases[0];
-                    if (alias) setF('subjects', [...f.subjects, emptySubject(alias)]);
-                  }}
-                >
-                  <Plus aria-hidden className="size-3.5" />
-                  添加人物
-                </Button>
-                {characterAliases.length === 0 ? <span className="text-xs text-ink-3">先在"角色 · 地点 · 道具"里新增角色。</span> : null}
+                <div className="grid grid-cols-2 gap-1.5">
+                  <MiniSelect label="画面位置" value={s.screen} options={ScreenPos.options} labels={SCREEN_POS_LABEL} onChange={(v) => setSubject(i, { screen: v })} />
+                  <MiniSelect label="景深" value={s.depth} options={DepthPlane.options} labels={DEPTH_LABEL} onChange={(v) => setSubject(i, { depth: v })} />
+                  <MiniSelect label="朝向" value={s.facing} options={Facing.options} labels={FACING_LABEL} onChange={(v) => setSubject(i, { facing: v })} />
+                  <MiniSelect label="姿势" value={s.pose} options={Pose.options} labels={POSE_LABEL} onChange={(v) => setSubject(i, { pose: v })} />
+                </div>
               </div>
+            ))}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                size="sm"
+                disabled={characterAliases.length === 0}
+                onClick={() => {
+                  const used = new Set(f.subjects.map((s) => s.alias));
+                  const alias = characterAliases.find((a) => !used.has(a)) ?? characterAliases[0];
+                  if (alias) setF('subjects', [...f.subjects, emptySubject(alias)]);
+                }}
+              >
+                <Plus aria-hidden className="size-3" />
+                添加人物
+              </Button>
+              {characterAliases.length === 0 ? <span className="text-xs text-graphite-300">先在角色名单里新增角色。</span> : null}
             </div>
+            <FormRow label="视点人物">
+              {(id) => (
+                <SelectInput id={id} value={f.pov_owner ?? ''} onChange={(e) => setF('pov_owner', e.target.value || null)}>
+                  <option value="">无</option>
+                  {aliasOptions(f.pov_owner ?? '').map((a) => (
+                    <option key={a} value={a}>
+                      {ws.aliasLabel(a)}
+                    </option>
+                  ))}
+                </SelectInput>
+              )}
+            </FormRow>
+          </Group>
 
-            <div className="mt-3 flex flex-col gap-1">
-              <p className="text-xs font-medium text-ink-2">道具与陈设</p>
-              <div className="flex flex-wrap gap-1.5" role="group" aria-label="道具与陈设">
+          <Group title="画面">
+            <div className="flex flex-col gap-1">
+              <p className="text-xs text-graphite-300">道具与陈设</p>
+              <div className="flex flex-wrap gap-1" role="group" aria-label="道具与陈设">
                 {PropKind.options.map((p) => {
                   const on = f.props.includes(p);
                   return (
@@ -411,7 +526,10 @@ export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose:
                       type="button"
                       aria-pressed={on}
                       onClick={() => setF('props', on ? f.props.filter((x) => x !== p) : [...f.props, p])}
-                      className={`h-7 rounded-control border px-2 text-xs ${on ? 'border-graphite bg-graphite text-sheet' : 'border-rule-strong bg-sheet text-ink-2 hover:enabled:text-ink'}`}
+                      className={
+                        'h-6 rounded-control border px-2 text-xs disabled:cursor-not-allowed disabled:opacity-50 ' +
+                        (on ? 'border-graphite-100 bg-graphite-100 text-graphite-950' : 'border-graphite-700 text-graphite-300 hover:enabled:text-graphite-100')
+                      }
                     >
                       {PROP_LABEL[p]}
                     </button>
@@ -419,91 +537,87 @@ export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose:
                 })}
               </div>
             </div>
+            <EnumRow label="环境" value={f.env} options={EnvKind.options} labels={ENV_LABEL} nullLabel="未指定" onChange={(v) => setF('env', v)} />
+            <EnumRow label="主体运动" value={f.subject_motion} options={SubjectMotion.options} labels={SUBJECT_MOTION_LABEL} onChange={(v) => v && setF('subject_motion', v)} />
+            <label className="flex items-center gap-2 text-sm text-graphite-100">
+              <input type="checkbox" checked={f.set_piece} onChange={(e) => setF('set_piece', e.target.checked)} className="size-3.5" />
+              重点段落（大动作、载具、大场面）
+            </label>
+          </Group>
 
-            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <EnumSelect label="环境" value={f.env} options={EnvKind.options} labels={ENV_LABEL} nullLabel="—" onChange={(v) => setF('env', v)} />
-              <EnumSelect label="主体运动" value={f.subject_motion} options={SubjectMotion.options} labels={SUBJECT_MOTION_LABEL} onChange={(v) => v && setF('subject_motion', v)} />
-              <Labeled label="视点人物">
-                {(id) => (
-                  <Select id={id} value={f.pov_owner ?? ''} onChange={(e) => setF('pov_owner', e.target.value || null)}>
-                    <option value="">无</option>
-                    {aliasOptions(f.pov_owner ?? '').map((a) => (
-                      <option key={a} value={a}>
-                        {ws.aliasLabel(a)}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Labeled>
-              <label className="flex items-center gap-2 self-end pb-1.5 text-[13px] text-ink">
-                <input type="checkbox" checked={f.set_piece} onChange={(e) => setF('set_piece', e.target.checked)} className="size-4 accent-graphite" />
-                重点段落（大动作、载具、大场面）
-              </label>
-            </div>
-          </Section>
+          <Group title="内容">
+            <Stacked label="叙事作用" hint="观众从这个镜头得到什么信息或情绪">
+              {(id) => <TextInput id={id} value={f.narrative_purpose} onChange={(e) => setF('narrative_purpose', e.target.value)} maxLength={200} />}
+            </Stacked>
+            <Stacked label="动作">
+              {(id) => <TextArea id={id} value={f.action} onChange={(e) => setF('action', e.target.value)} rows={3} maxLength={500} />}
+            </Stacked>
+            <Stacked label="台词" hint="本镜头内出现的台词原文，没有就留空">
+              {(id) => <TextArea id={id} value={form.dialogue} onChange={(e) => set('dialogue', e.target.value)} rows={2} maxLength={1000} />}
+            </Stacked>
+            <FormRow label="时长（秒）" hint={errors.est ?? '成片中的时长，不是拍摄工时'}>
+              {(id) => (
+                <TextInput
+                  id={id}
+                  value={form.est}
+                  onChange={(e) => set('est', e.target.value)}
+                  inputMode="decimal"
+                  className="tabular-nums"
+                  aria-invalid={Boolean(errors.est) || undefined}
+                />
+              )}
+            </FormRow>
+          </Group>
 
-          <Section title="内容">
-            <div className="grid gap-3">
-              <Labeled label="叙事作用" hint="观众从这个镜头得到什么信息或情绪">
-                {(id) => <TextInput id={id} value={f.narrative_purpose} onChange={(e) => setF('narrative_purpose', e.target.value)} maxLength={200} />}
-              </Labeled>
-              <Labeled label="动作">
-                {(id) => <TextArea id={id} value={f.action} onChange={(e) => setF('action', e.target.value)} rows={2} maxLength={500} />}
-              </Labeled>
-              <Labeled label="台词" hint="本镜头内出现的台词原文，没有就留空">
-                {(id) => <TextArea id={id} value={form.dialogue} onChange={(e) => set('dialogue', e.target.value)} rows={2} maxLength={1000} />}
-              </Labeled>
-              <Labeled label="预计时长（秒）" hint="成片中的时长，不是拍摄工时" error={errors.est} className="max-w-[12rem]">
-                {(id) => <TextInput id={id} value={form.est} onChange={(e) => set('est', e.target.value)} inputMode="decimal" className="tabular-nums" aria-invalid={Boolean(errors.est) || undefined} />}
-              </Labeled>
-            </div>
-          </Section>
+          <Group title="剧本出处">
+            <FormRow label="段落" hint={base ? undefined : '可以不选：手工镜头允许没有出处。'}>
+              {(id) => (
+                <SelectInput id={id} value={form.sourcePid} onChange={(e) => set('sourcePid', e.target.value)}>
+                  {!base || form.sourcePid === '' || base.origin === 'manual' ? <option value="">不关联段落</option> : null}
+                  {staleSource ? <option value={form.sourcePid}>{form.sourcePid}（不在当前场景）</option> : null}
+                  {paragraphOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.id} · {p.text.length > 16 ? `${p.text.slice(0, 16)}…` : p.text}
+                    </option>
+                  ))}
+                </SelectInput>
+              )}
+            </FormRow>
+            {chosenParagraph ? (
+              <p data-paper="" className="rounded-paper bg-paper px-2.5 py-1.5 text-sm leading-relaxed break-words whitespace-pre-wrap text-ink [color-scheme:light]">
+                {chosenParagraph.text}
+              </p>
+            ) : null}
+            {form.sourcePid ? (
+              <Stacked label="引用原文" hint="从上面的段落里复制一段连续原文，用来定位和对照新版本。">
+                {(id) => <TextArea id={id} value={form.sourceQuote} onChange={(e) => set('sourceQuote', e.target.value)} rows={2} maxLength={400} />}
+              </Stacked>
+            ) : null}
+            {quoteMissing ? (
+              <Notice tone="warn" title="引用与原文不一致">
+                这段引用在所选段落里找不到逐字相同的原文，改版后可能被标为"待重新关联"。
+              </Notice>
+            ) : null}
+          </Group>
 
-          <Section title="剧本出处">
-            <div className="grid gap-3">
-              <Labeled label="段落" hint={editing ? undefined : '可以不选：手工镜头允许没有出处。'}>
-                {(id) => (
-                  <Select id={id} value={form.sourcePid} onChange={(e) => set('sourcePid', e.target.value)}>
-                    {!editing || form.sourcePid === '' ? <option value="">不关联段落</option> : null}
-                    {staleSource ? <option value={form.sourcePid}>{form.sourcePid}（不在当前场景）</option> : null}
-                    {paragraphOptions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.id} · {p.text.length > 28 ? `${p.text.slice(0, 28)}…` : p.text}
-                      </option>
-                    ))}
-                  </Select>
-                )}
-              </Labeled>
-              {chosenParagraph ? <p className="rounded-control bg-sheet-sunk px-2.5 py-1.5 text-[13px] break-words whitespace-pre-wrap text-ink-2">{chosenParagraph.text}</p> : null}
-              {form.sourcePid ? (
-                <Labeled label="引用原文" hint="从上面的段落里复制一段连续原文，用来定位和对照新版本。">
-                  {(id) => <TextArea id={id} value={form.sourceQuote} onChange={(e) => set('sourceQuote', e.target.value)} rows={2} maxLength={400} />}
-                </Labeled>
-              ) : null}
-              {quoteMissing ? <Note tone="warn">这段引用在所选段落里找不到逐字相同的原文，保存后可能被标为"待重新关联"。</Note> : null}
-            </div>
-          </Section>
+          <Group title="假设与待确认问题">
+            <Stacked label="假设" hint="每行一条">
+              {(id) => <TextArea id={id} value={form.assumptions} onChange={(e) => set('assumptions', e.target.value)} rows={2} />}
+            </Stacked>
+            <Stacked label="待确认问题" hint="每行一条">
+              {(id) => <TextArea id={id} value={form.questions} onChange={(e) => set('questions', e.target.value)} rows={2} />}
+            </Stacked>
+          </Group>
 
-          <Section title="假设与待确认问题">
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Labeled label="假设" hint="每行一条">
-                {(id) => <TextArea id={id} value={form.assumptions} onChange={(e) => set('assumptions', e.target.value)} rows={3} />}
-              </Labeled>
-              <Labeled label="待确认问题" hint="每行一条">
-                {(id) => <TextArea id={id} value={form.questions} onChange={(e) => set('questions', e.target.value)} rows={3} />}
-              </Labeled>
-            </div>
-          </Section>
-
-          {editing ? (
-            <Section title="修改说明">
-              <Labeled label="说明（可选）" hint="记入修订历史">
+          {base ? (
+            <Group title="修改说明">
+              <Stacked label="说明（可选）" hint="记入修订历史">
                 {(id) => <TextInput id={id} value={form.reason} onChange={(e) => set('reason', e.target.value)} maxLength={300} placeholder="例如：按勘景结果改为长焦" />}
-              </Labeled>
-            </Section>
+              </Stacked>
+            </Group>
           ) : (
-            <Section title="手工说明">
-              <Labeled label="为什么加这个镜头（必填）" error={errors.manualNote}>
+            <Group title="手工说明">
+              <Stacked label="为什么加这个镜头（必填）" error={errors.manualNote}>
                 {(id) => (
                   <TextArea
                     id={id}
@@ -515,13 +629,44 @@ export function ShotEditor({ target, onClose }: { target: EditorTarget; onClose:
                     aria-invalid={Boolean(errors.manualNote) || undefined}
                   />
                 )}
-              </Labeled>
-            </Section>
+              </Stacked>
+            </Group>
           )}
-
-          {errors.form ? <p className="text-xs text-danger">{errors.form}</p> : null}
         </fieldset>
-      </form>
-    </Dialog>
+      </div>
+
+      <div className="sticky bottom-0 flex flex-col gap-2 border-t border-graphite-800 bg-graphite-900 px-3 py-2.5">
+        {errors.form ? <Notice tone="danger" title={errors.form} /> : null}
+        {conflict ? (
+          <div className="flex flex-col gap-1.5">
+            <ErrorNotice error={update.error} context="shot-save" />
+            <Button size="sm" onClick={reloadLatest} disabled={!staleBase}>
+              <RefreshCw aria-hidden className="size-3" />
+              放弃我的修改，载入最新版本
+            </Button>
+          </div>
+        ) : update.isError ? (
+          <ErrorNotice error={update.error} context="shot-save" />
+        ) : null}
+        {create.isError ? <ErrorNotice error={create.error} context="shot-save" /> : null}
+        <div className="flex items-center gap-2">
+          <Button type="submit" variant="primary" busy={pending} disabled={locked || (!base && !scene) || (base !== null && !dirty)}>
+            {base ? '保存' : '新建镜头'}
+          </Button>
+          {base ? (
+            <Button variant="ghost" onClick={() => setForm(initial)} disabled={!dirty || pending}>
+              还原
+            </Button>
+          ) : (
+            <Button variant="ghost" onClick={ws.closeInspector} disabled={pending}>
+              取消
+            </Button>
+          )}
+          <span aria-live="polite" className="ml-auto text-xs text-graphite-300">
+            {dirty ? '有未保存的修改' : savedAt ? `已保存 ${savedAt}` : ''}
+          </span>
+        </div>
+      </div>
+    </form>
   );
 }

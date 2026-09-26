@@ -27,6 +27,7 @@ import { registerLinkRoutes } from './routes/links.ts';
 import { registerCoverageRoutes } from './routes/coverage.ts';
 import { registerBoardRoutes } from './routes/boards.ts';
 import { registerRasterRoutes } from './routes/rasters.ts';
+import { registerExportRoutes } from './routes/export.ts';
 
 export interface CreateAppOptions {
   mode: ServerMode;
@@ -103,6 +104,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerCoverageRoutes(app, deps);
   registerBoardRoutes(app, deps);
   registerRasterRoutes(app, deps);
+  registerExportRoutes(app, deps);
 
   if (opts.mode === 'production') registerStaticRoutes(app, opts.webDir);
 

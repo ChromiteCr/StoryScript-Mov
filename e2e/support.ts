@@ -125,9 +125,21 @@ export async function api<T = unknown>(page: Page, method: string, path: string,
   );
 }
 
-/** Token → cookie, then the project manager. */
-export async function signIn(page: Page, app: RunningApp): Promise<void> {
+/** Token → cookie; resolves once a page title (h1) shows. Returns that title. */
+export async function signInAnywhere(page: Page, app: RunningApp): Promise<string> {
   await page.goto(`${app.base}/#t=${app.token}`);
+  const h1 = page.getByRole('heading', { level: 1 }).first();
+  await h1.waitFor();
+  return (await h1.textContent())?.trim() ?? '';
+}
+
+/**
+ * Token → cookie, then the project manager. A --demo server opens its demo
+ * project on start; that project is closed first ("切换项目").
+ */
+export async function signIn(page: Page, app: RunningApp): Promise<void> {
+  const title = await signInAnywhere(page, app);
+  if (title !== '项目') await page.getByRole('button', { name: /切换项目/ }).click();
   await page.getByRole('heading', { name: '项目', level: 1 }).waitFor();
 }
 

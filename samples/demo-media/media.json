@@ -1,0 +1,305 @@
+{
+  "format": "storyscript-demo-media-v1",
+  "generated_by": "apps/server/src/demo/build-media.ts（scripts/gen-media.ts --small，lavfi testsrc2 + sine，不含任何真实拍摄内容）",
+  "clips_included": true,
+  "clips": [
+    {
+      "rel_path": "S01-001-T01.mp4",
+      "size": 123780,
+      "sha256": "c8d0b822d445254e391cfb8f397cd58ec5f696d1ee694384e28decf2f3d5006f",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_s": 1,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "Constrained Baseline",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 180,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12800,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "bits_per_raw_sample": 8
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 48000,
+            "start_pts": 0,
+            "duration_ts": 48000,
+            "r_frame_rate": null,
+            "avg_frame_rate": null,
+            "bits_per_raw_sample": null
+          }
+        ],
+        "timecode": null,
+        "creation_time": null
+      },
+      "poster": "posters/S01-001-T01.jpg",
+      "encoder": "libopenh264"
+    },
+    {
+      "rel_path": "S01-002-T01.mov",
+      "size": 123675,
+      "sha256": "7248ca96476a525b1d17d7ac21599339c38c399997b5b038a58daf7eeadca382",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_s": 1,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "Constrained Baseline",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 180,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12800,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "bits_per_raw_sample": 8
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 48000,
+            "start_pts": 0,
+            "duration_ts": 48000,
+            "r_frame_rate": null,
+            "avg_frame_rate": null,
+            "bits_per_raw_sample": null
+          }
+        ],
+        "timecode": null,
+        "creation_time": null
+      },
+      "poster": "posters/S01-002-T01.jpg",
+      "encoder": "libopenh264"
+    },
+    {
+      "rel_path": "S01-003-T02.mp4",
+      "size": 124052,
+      "sha256": "4aa39d6d65401515cfa6a950fec35e14a0da26c34993c60306b40d72032f2cef",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_s": 1,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "Constrained Baseline",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 180,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12672,
+            "r_frame_rate": "60/1",
+            "avg_frame_rate": "2500/99",
+            "bits_per_raw_sample": 8
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 48000,
+            "start_pts": 0,
+            "duration_ts": 48000,
+            "r_frame_rate": null,
+            "avg_frame_rate": null,
+            "bits_per_raw_sample": null
+          }
+        ],
+        "timecode": null,
+        "creation_time": null
+      },
+      "poster": "posters/S01-003-T02.jpg",
+      "encoder": "libopenh264"
+    },
+    {
+      "rel_path": "A001C003.mov",
+      "size": 124164,
+      "sha256": "5637c8e42cf14aac839e0b6b743c4724292400a41ef6104bb0c9588b351498f4",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_s": 1,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "h264",
+            "profile": "Constrained Baseline",
+            "pix_fmt": "yuv420p",
+            "width": 320,
+            "height": 180,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12800,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "bits_per_raw_sample": 8
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 48000,
+            "start_pts": 0,
+            "duration_ts": 48000,
+            "r_frame_rate": null,
+            "avg_frame_rate": null,
+            "bits_per_raw_sample": null
+          },
+          {
+            "index": 2,
+            "codec_type": "data",
+            "codec_name": null,
+            "profile": null,
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12800,
+            "r_frame_rate": null,
+            "avg_frame_rate": "12800/512",
+            "bits_per_raw_sample": null
+          }
+        ],
+        "timecode": "01:00:00:00",
+        "creation_time": "2026-01-02T03:04:05.000000Z"
+      },
+      "poster": "posters/A001C003.jpg",
+      "encoder": "libopenh264"
+    },
+    {
+      "rel_path": "IMG_1234.mov",
+      "size": 148056,
+      "sha256": "348469bcce645e8fd77d7e8abe65f38ba791da821f475563cba9f164b7c9eedf",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_s": 1,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "hevc",
+            "profile": "Main 10",
+            "pix_fmt": "yuv420p10le",
+            "width": 320,
+            "height": 180,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12800,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "bits_per_raw_sample": null
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "aac",
+            "profile": "LC",
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 48000,
+            "start_pts": 0,
+            "duration_ts": 48000,
+            "r_frame_rate": null,
+            "avg_frame_rate": null,
+            "bits_per_raw_sample": null
+          }
+        ],
+        "timecode": null,
+        "creation_time": null
+      },
+      "poster": "posters/IMG_1234.jpg",
+      "encoder": "hevc_videotoolbox"
+    },
+    {
+      "rel_path": "B002C001.mov",
+      "size": 703403,
+      "sha256": "0dc47fa70a893fd8316caa2680e87422830ab7810f4f2c72a585260f4463caff",
+      "probe": {
+        "format_name": "mov,mp4,m4a,3gp,3g2,mj2",
+        "duration_s": 1,
+        "streams": [
+          {
+            "index": 0,
+            "codec_type": "video",
+            "codec_name": "prores",
+            "profile": "Standard",
+            "pix_fmt": "yuv422p10le",
+            "width": 320,
+            "height": 180,
+            "time_base_num": 1,
+            "time_base_den": 12800,
+            "start_pts": 0,
+            "duration_ts": 12800,
+            "r_frame_rate": "25/1",
+            "avg_frame_rate": "25/1",
+            "bits_per_raw_sample": 10
+          },
+          {
+            "index": 1,
+            "codec_type": "audio",
+            "codec_name": "pcm_s16le",
+            "profile": null,
+            "pix_fmt": null,
+            "width": null,
+            "height": null,
+            "time_base_num": 1,
+            "time_base_den": 48000,
+            "start_pts": 0,
+            "duration_ts": 48000,
+            "r_frame_rate": null,
+            "avg_frame_rate": null,
+            "bits_per_raw_sample": null
+          }
+        ],
+        "timecode": null,
+        "creation_time": null
+      },
+      "poster": "posters/B002C001.jpg",
+      "encoder": "prores_ks"
+    }
+  ]
+}

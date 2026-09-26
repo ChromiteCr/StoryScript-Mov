@@ -6,18 +6,13 @@ import type {
   StreamInfo,
   Take,
 } from '@storyscript/contracts';
-import { sourceRangeColumns, toCsv, validateSourceRange, type CsvColumn } from '@storyscript/core';
 import {
-  AVAILABILITY_LABEL,
-  COVERAGE_STATUS_LABEL,
-  EVIDENCE_LABEL,
-  FLAG_LABEL,
-  LINK_STATUS_LABEL,
-  MISSING_ORDER,
-  MISSING_REASON_LABEL,
-  RATING_LABEL,
-  REQUIRED_LABEL,
-} from '../../lib/labels-media.ts';
+  coverageCsv as coreCoverageCsv,
+  takeMediaCsv as coreTakeMediaCsv,
+  validateSourceRange,
+  type TakeMediaInput,
+} from '@storyscript/core';
+import { MISSING_ORDER } from '../../lib/labels-media.ts';
 import type { ShotRef } from '../set/model.ts';
 
 /**
@@ -174,132 +169,18 @@ export function missingReport(coverage: readonly CoverageResult[], refs: readonl
 }
 
 // ------------------------------------------------------------ CSV (FR-10)
+// Columns and row builders live in core/export: the server's
+// /api/v1/export/csv/{takes-media,coverage} writes the same tables.
 
-const SR_COLUMNS: CsvColumn[] = [
-  { key: 'stream_index', header: 'stream_index' },
-  { key: 'in_pts', header: 'in_pts' },
-  { key: 'out_pts', header: 'out_pts' },
-  { key: 'time_base_num', header: 'time_base_num' },
-  { key: 'time_base_den', header: 'time_base_den' },
-];
+export { TAKE_MEDIA_COLUMNS, COVERAGE_COLUMNS, takeMediaRows, coverageRows, type TakeMediaInput } from '@storyscript/core';
 
-export const TAKE_MEDIA_COLUMNS: CsvColumn[] = [
-  { key: 'scene', header: '场' },
-  { key: 'shot', header: '镜' },
-  { key: 'take', header: '条次' },
-  { key: 'camera', header: '机位' },
-  { key: 'rating', header: '评级' },
-  { key: 'clip_hint', header: '机内文件名' },
-  { key: 'notes', header: '备注' },
-  { key: 'logged_at', header: '记录时间' },
-  { key: 'unresolved', header: '未对上的镜号' },
-  { key: 'root', header: '素材目录' },
-  { key: 'file', header: '文件' },
-  { key: 'link_status', header: '关联状态' },
-  { key: 'evidence', header: '关联依据' },
-  { key: 'availability', header: '可用性' },
-  { key: 'sha256', header: 'sha256' },
-  ...SR_COLUMNS,
-];
-
-export interface TakeMediaInput {
-  refs: readonly ShotRef[];
-  takes: readonly Take[];
-  links: readonly ShotMediaLink[];
-  assets: ReadonlyMap<string, MediaAssetView>;
-}
-
-type Row = Record<string, unknown>;
-
-/**
- * One row per take × shot × linked clip (a take without media still gets a
- * row), then clips linked to a shot without a take, then takes whose shot
- * labels could not be resolved. Rejected links are left out. source_range is
- * written as five integer columns.
- */
-export function takeMediaRows({ refs, takes, links, assets }: TakeMediaInput): Row[] {
-  const rows: Row[] = [];
-  const open = links.filter((l) => l.status !== 'rejected');
-  const media = (l: ShotMediaLink): Row => {
-    const a = assets.get(l.media_asset_id);
-    return {
-      root: a?.root_label ?? '',
-      file: a?.rel_path ?? l.media_asset_id,
-      link_status: LINK_STATUS_LABEL[l.status],
-      evidence: EVIDENCE_LABEL[l.evidence],
-      availability: a ? AVAILABILITY_LABEL[a.availability] : '',
-      sha256: a?.sha256 ?? '',
-      ...sourceRangeColumns(l.source_range),
-    };
-  };
-  const takeCells = (t: Take): Row => ({
-    take: t.take_no,
-    camera: t.camera_label ?? '',
-    rating: RATING_LABEL[t.rating],
-    clip_hint: t.clip_hint ?? '',
-    notes: t.notes,
-    logged_at: t.logged_at,
-    unresolved: t.unresolved_labels.join('、'),
-  });
-  for (const ref of refs) {
-    const shotCells = { scene: ref.scene_no, shot: ref.shot.code };
-    const mine = takes.filter((t) => t.shot_ids.includes(ref.shot.id)).sort((a, b) => a.take_no - b.take_no);
-    for (const t of mine) {
-      const linked = open.filter((l) => l.shot_id === ref.shot.id && l.take_id === t.id);
-      if (linked.length === 0) rows.push({ ...shotCells, ...takeCells(t) });
-      for (const l of linked) rows.push({ ...shotCells, ...takeCells(t), ...media(l) });
-    }
-    for (const l of open.filter((x) => x.shot_id === ref.shot.id && (x.take_id === null || !mine.some((t) => t.id === x.take_id)))) {
-      rows.push({ ...shotCells, ...media(l) });
-    }
-  }
-  for (const t of takes.filter((x) => x.shot_ids.length === 0)) rows.push({ scene: '', shot: '', ...takeCells(t) });
-  return rows;
-}
-
+/** Set log × clips, with BOM (Excel reads the Chinese headers as UTF-8). */
 export function takeMediaCsv(input: TakeMediaInput): string {
-  return toCsv(takeMediaRows(input), TAKE_MEDIA_COLUMNS, { bom: true });
-}
-
-export const COVERAGE_COLUMNS: CsvColumn[] = [
-  { key: 'scene', header: '场' },
-  { key: 'shot', header: '镜' },
-  { key: 'action', header: '内容' },
-  { key: 'required', header: '必拍状态' },
-  { key: 'status', header: '覆盖状态' },
-  { key: 'missing', header: '漏拍原因' },
-  { key: 'takes', header: '条次数' },
-  { key: 'links', header: '关联数' },
-  { key: 'confirmed', header: '已确认' },
-  { key: 'offline', header: '离线关联' },
-  { key: 'flags', header: '提示' },
-];
-
-export function coverageRows(coverage: readonly CoverageResult[], refs: readonly ShotRef[]): Row[] {
-  const byShot = new Map(coverage.map((c) => [c.shot_id, c] as const));
-  const rows: Row[] = [];
-  for (const ref of refs) {
-    const c = byShot.get(ref.shot.id);
-    if (!c) continue;
-    rows.push({
-      scene: ref.scene_no,
-      shot: ref.shot.code,
-      action: ref.shot.fields.action,
-      required: REQUIRED_LABEL[c.required_status],
-      status: COVERAGE_STATUS_LABEL[c.status],
-      missing: c.missing_reason ? MISSING_REASON_LABEL[c.missing_reason] : '',
-      takes: c.facts.take_count,
-      links: c.facts.link_count,
-      confirmed: c.facts.confirmed_link_count,
-      offline: c.facts.offline_link_count,
-      flags: c.flags.map((f) => FLAG_LABEL[f]).join('、'),
-    });
-  }
-  return rows;
+  return coreTakeMediaCsv(input, { bom: true });
 }
 
 export function coverageCsv(coverage: readonly CoverageResult[], refs: readonly ShotRef[]): string {
-  return toCsv(coverageRows(coverage, refs), COVERAGE_COLUMNS, { bom: true });
+  return coreCoverageCsv(coverage, refs, { bom: true });
 }
 
 /** File name stem safe on every OS: "周末短片-场记与素材-2026-09-26". */

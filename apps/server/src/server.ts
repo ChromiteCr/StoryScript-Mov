@@ -102,7 +102,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
 
   let url: string;
   try {
-    const { app } = createApp({
+    const { app, deps } = createApp({
       mode: opts.mode,
       port,
       token,
@@ -111,6 +111,11 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
       demo: opts.demo ?? false,
       projectSession,
     });
+    // --demo: (re)build the demo project under the state dir and open it before the link is printed
+    if (opts.demo) {
+      const { openDemoProject } = await import('./demo/seed.ts');
+      await openDemoProject(deps, { log });
+    }
     const hono = getRequestListener(app.fetch);
 
     if (opts.mode === 'development') {

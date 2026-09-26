@@ -30,6 +30,7 @@ const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ de
 const SetView = lazy(() => import('./views/set/SetView.tsx').then((m) => ({ default: m.SetView })));
 const MediaView = lazy(() => import('./views/media/MediaView.tsx').then((m) => ({ default: m.MediaView })));
 const BoardsView = lazy(() => import('./views/boards/BoardsPage.tsx'));
+const DeliverView = lazy(() => import('./views/deliver/DeliverView.tsx'));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -203,6 +204,19 @@ function StagePage({ stage, project }: { stage: StageId; project: Project }) {
         }
       >
         {stage === 'set' ? <SetView /> : <MediaView />}
+      </Suspense>
+    );
+  }
+  if (stage === 'deliver') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner label="正在加载…" />
+          </div>
+        }
+      >
+        <DeliverView />
       </Suspense>
     );
   }

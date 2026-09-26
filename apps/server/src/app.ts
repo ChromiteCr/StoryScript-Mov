@@ -17,6 +17,10 @@ import { registerJobRoutes } from './routes/jobs.ts';
 import { registerScriptRoutes } from './routes/scripts.ts';
 import { registerSettingsRoutes } from './routes/settings.ts';
 import { registerShotRoutes } from './routes/shots.ts';
+import { registerTakeRoutes } from './routes/takes.ts';
+import { registerMediaRoutes } from './routes/media.ts';
+import { registerLinkRoutes } from './routes/links.ts';
+import { registerCoverageRoutes } from './routes/coverage.ts';
 
 export interface CreateAppOptions {
   mode: ServerMode;
@@ -83,6 +87,10 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerShotRoutes(app, deps);
   registerDraftRoutes(app, deps);
   registerJobRoutes(app, deps);
+  registerTakeRoutes(app, deps);
+  registerMediaRoutes(app, deps);
+  registerLinkRoutes(app, deps);
+  registerCoverageRoutes(app, deps);
 
   if (opts.mode === 'production') registerStaticRoutes(app, opts.webDir);
 

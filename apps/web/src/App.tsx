@@ -23,6 +23,8 @@ import { ComingSoonView } from './views/ComingSoonView.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { StageOutlineView } from './views/StageOutlineView.tsx';
+import { SetView } from './views/set/SetView.tsx';
+import { MediaView } from './views/media/MediaView.tsx';
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -160,5 +162,7 @@ function Workbench() {
 /** One workflow stage. Script keeps its placeholder until the script page lands. */
 function StagePage({ stage }: { stage: StageId }) {
   if (stage === 'script') return <ComingSoonView view="script" />;
+  if (stage === 'set') return <SetView />;
+  if (stage === 'media') return <MediaView />;
   return <StageOutlineView stage={stage} />;
 }

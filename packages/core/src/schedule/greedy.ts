@@ -1,4 +1,4 @@
-import type { ScheduleBlock, Unplaced, Uuid } from '@storyscript/contracts';
+import type { ScheduleBlock, Unplaced, UnplacedCode, Uuid } from '@storyscript/contracts';
 import { type Model, type SetupModel, availability, hhmm, resourceNames } from './model.ts';
 import { type Interval, overlaps, setCovers, toUtcIso } from './time.ts';
 
@@ -63,7 +63,7 @@ export function greedy(model: Model, order: readonly Uuid[]): GreedyResult {
   for (const s of lockedSetups) {
     attempted.push(s.id);
     const why = !crew ? 'MISSING_INPUT: crew window is missing' : lockedProblem(model, s, placed, occupied);
-    if (why) unplaced.push({ setup_id: s.id, reason: why });
+    if (why) unplaced.push(unplacedOf(s.id, why));
     else occupy(s, s.locks[0]!.start, true, s.locks[0]!.end);
   }
 
@@ -74,20 +74,20 @@ export function greedy(model: Model, order: readonly Uuid[]): GreedyResult {
     if (!s || s.locks.length > 0 || placed.has(id)) continue;
     attempted.push(id);
     if (!crew) {
-      unplaced.push({ setup_id: id, reason: 'MISSING_INPUT: crew window is missing' });
+      unplaced.push(unplacedOf(id, 'MISSING_INPUT: crew window is missing'));
       continue;
     }
     if (!s.complete) {
-      unplaced.push({ setup_id: id, reason: 'MISSING_INPUT: setup has incomplete data' });
+      unplaced.push(unplacedOf(id, 'MISSING_INPUT: setup has incomplete data'));
       continue;
     }
     if (selfPrecedence(model, s)) {
-      unplaced.push({ setup_id: id, reason: SELF_PRECEDENCE });
+      unplaced.push(unplacedOf(id, SELF_PRECEDENCE));
       continue;
     }
     const start = earliestStart(model, s, placed, { lower: cursor, occupied, precedence: true });
     if (start === null) {
-      unplaced.push({ setup_id: id, reason: diagnose(model, s, placed, occupied, cursor) });
+      unplaced.push(unplacedOf(id, diagnose(model, s, placed, occupied, cursor)));
       continue;
     }
     occupy(s, start, false, start + s.total);
@@ -102,6 +102,14 @@ export function greedy(model: Model, order: readonly Uuid[]): GreedyResult {
     unplaced,
     order: [...placedOrder, ...attempted.filter((id) => unplacedIds.has(id))],
   };
+}
+
+const UNPLACED_CODES: readonly UnplacedCode[] = ['NO_SLOT', 'ORDER', 'OCCUPIED', 'PRECEDENCE', 'LOCKED', 'MISSING_INPUT'];
+
+/** Reasons carry a `CODE: ` prefix; the code is also exposed as a field. */
+function unplacedOf(setupId: Uuid, reason: string): Unplaced {
+  const prefix = reason.slice(0, reason.indexOf(':')) as UnplacedCode;
+  return { setup_id: setupId, code: UNPLACED_CODES.includes(prefix) ? prefix : 'NO_SLOT', reason };
 }
 
 const SELF_PRECEDENCE = 'PRECEDENCE: a confirmed "before" constraint points this setup at itself';

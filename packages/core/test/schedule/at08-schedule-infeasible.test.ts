@@ -10,7 +10,7 @@ const L2 = uid(12);
 const [a, b, c, d] = [101, 102, 103, 104].map(uid) as [string, string, string, string];
 const [X, Y, W, V] = [201, 202, 203, 204].map(uid) as [string, string, string, string];
 
-describe('AT-08 feasible data where the greedy heuristic fails → partial with reasons (never proven_infeasible)', () => {
+describe('AT-08 feasible data where a heuristic order fails → partial with reasons (never proven_infeasible)', () => {
   test('tight-window-first ordering pushes the cursor past the only room for a long setup', () => {
     // X needs performer P 14:00–15:00; Y is a 5 h setup. Valid plan: Y 09–14, X 14–15.
     // Greedy ranks X first (its window ends earlier), places it at 14:00, then Y has no 5 h left.
@@ -57,11 +57,15 @@ describe('AT-08 feasible data where the greedy heuristic fails → partial with 
       ],
       constraints: [notAfter(W, Z('11:00'))],
     });
-    const r = schedule(data);
-    expect(r.outcome).toBe('partial');
-    expect(r.contradictions).toEqual([]);
-    expect(r.unplaced.map((u) => u.setup_id)).toEqual([X]);
-    expect(r.unplaced[0]!.reason).toMatch(/^(ORDER|OCCUPIED): /);
+    // the grouped order alone fails → partial with a reason, never proven_infeasible
+    const grouped = reorder(data, [W, V, X]);
+    expect(grouped.outcome).toBe('partial');
+    expect(grouped.contradictions).toEqual([]);
+    expect(grouped.unplaced.map((u) => u.setup_id)).toEqual([X]);
+    expect(grouped.unplaced[0]!.code).toMatch(/^(ORDER|OCCUPIED)$/);
+    expect(grouped.unplaced[0]!.reason).toMatch(/^(ORDER|OCCUPIED): /);
+    // multi-start greedy recovers the valid plan on its own
+    expect(schedule(data).outcome).toBe('feasible');
     expect(reorder(data, [W, X, V]).outcome).toBe('feasible');
   });
 
@@ -72,9 +76,11 @@ describe('AT-08 feasible data where the greedy heuristic fails → partial with 
       setups: [setup(X, 'X', { shots: [a] }), setup(Y, 'Y', { shots: [b] })],
     });
     const r = schedule(data);
-    expect(r.outcome).toBe('partial');
+    // SPEC FR-06: feasible means every required item is placed; the optional
+    // setup stays listed as unplaced instead of blocking approval
+    expect(r.outcome).toBe('feasible');
     expect(r.contradictions).toEqual([]);
-    expect(r.unplaced).toEqual([{ setup_id: X, reason: expect.stringMatching(/^NO_SLOT: /) }]);
+    expect(r.unplaced).toEqual([{ setup_id: X, code: 'NO_SLOT', reason: expect.stringMatching(/^NO_SLOT: /) }]);
     expect(r.violations).toEqual([]); // nothing required is missing
   });
 });

@@ -43,7 +43,9 @@ describe('validate() accepts every greedy placement', () => {
         expect(ScheduleResult.safeParse(r).success).toBe(true);
         if (r.outcome === 'feasible' || r.outcome === 'partial') {
           expect(r.violations).toEqual(validate(input, r.blocks));
-          expect(r.outcome === 'feasible').toBe(r.unplaced.length === 0 && r.violations.length === 0);
+          // feasible ⇔ no violation; an unplaced required setup always yields UNPLACED_REQUIRED,
+          // unplaced optional setups may remain listed in a feasible plan
+          expect(r.outcome === 'feasible').toBe(r.violations.length === 0);
           expect(r.contradictions).toEqual([]);
         } else if (r.outcome === 'proven_infeasible') {
           expect(r.contradictions.length).toBeGreaterThan(0);

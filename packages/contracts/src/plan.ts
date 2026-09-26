@@ -92,6 +92,10 @@ export const ViolationCode = z.enum([
   'CREW_OVERLAP',
   'ESTIMATE_UNCONFIRMED',
   'MISSING_INPUT',
+  /** a block's length differs from setup_min / per_shot_min × shots / reset_min */
+  'DURATION_MISMATCH',
+  /** a setup's parts are not back to back in setup → shoot → reset order */
+  'BLOCK_SEQUENCE',
 ]);
 export type ViolationCode = z.infer<typeof ViolationCode>;
 
@@ -114,8 +118,13 @@ export const Contradiction = z.object({
 });
 export type Contradiction = z.infer<typeof Contradiction>;
 
+export const UnplacedCode = z.enum(['NO_SLOT', 'ORDER', 'OCCUPIED', 'PRECEDENCE', 'LOCKED', 'MISSING_INPUT']);
+export type UnplacedCode = z.infer<typeof UnplacedCode>;
+
 export const Unplaced = z.object({
   setup_id: Uuid,
+  code: UnplacedCode,
+  /** human-readable, prefixed with the code, local times in the plan's zone */
   reason: z.string(),
 });
 export type Unplaced = z.infer<typeof Unplaced>;

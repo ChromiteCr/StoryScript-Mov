@@ -1,9 +1,9 @@
 import type { Constraint, RequiredStatus, Resource, Setup, TimeWindow, Uuid } from '@storyscript/contracts';
 
 /** Stamped into every ScheduleResult; bump when placement behaviour changes. */
-export const SCHEDULE_ALGORITHM_VERSION = 'greedy-1';
+export const SCHEDULE_ALGORITHM_VERSION = 'greedy-multistart-2';
 /** Stamped into every ScheduleResult; bump when validation rules change. */
-export const SCHEDULE_VALIDATOR_VERSION = 'validate-1';
+export const SCHEDULE_VALIDATOR_VERSION = 'validate-2';
 
 /**
  * The scheduler's view of a shot. Deliberately minimal: there is no

@@ -29,6 +29,52 @@ export function defaultOrder(model: Model): Uuid[] {
 }
 
 /**
+ * Alternative starting orders for multi-start greedy. Each respects confirmed
+ * `before` constraints; duplicates are removed. Order matters only as a
+ * deterministic tie-break when two candidates score the same.
+ *  - grouped: the default (location groups ranked by tightest member)
+ *  - tightest: tightest common window first, ignoring location grouping
+ *  - earliest: earliest not_before / lock first, then tightest
+ *  - required: required setups before optional ones, each in default order
+ */
+export function candidateOrders(model: Model): Uuid[][] {
+  const deadline = new Map<Uuid, number>();
+  for (const s of model.setups) deadline.set(s.id, windowEnd(model, s));
+  const byDeadline = (a: SetupModel, b: SetupModel): number =>
+    deadline.get(a.id)! - deadline.get(b.id)! || cmpStr(a.label, b.label) || cmpStr(a.id, b.id);
+  const earliestOf = (s: SetupModel): number => s.locks[0]?.start ?? s.notBefore ?? Number.NEGATIVE_INFINITY;
+
+  const grouped = defaultOrder(model);
+  const tightest = topoByPriority(model, model.setups.slice().sort(byDeadline).map((s) => s.id));
+  const earliest = topoByPriority(
+    model,
+    model.setups
+      .slice()
+      .sort((a, b) => earliestOf(a) - earliestOf(b) || byDeadline(a, b))
+      .map((s) => s.id),
+  );
+  const rank = new Map(grouped.map((id, i) => [id, i]));
+  const required = topoByPriority(
+    model,
+    model.setups
+      .slice()
+      .sort((a, b) => Number(b.required) - Number(a.required) || rank.get(a.id)! - rank.get(b.id)!)
+      .map((s) => s.id),
+  );
+
+  const seen = new Set<string>();
+  const out: Uuid[][] = [];
+  for (const order of [grouped, tightest, earliest, required]) {
+    const key = order.join(',');
+    if (!seen.has(key)) {
+      seen.add(key);
+      out.push(order);
+    }
+  }
+  return out;
+}
+
+/**
  * Resolves the order greedy will follow: an explicit order (manual move or an
  * adopted LLM suggestion) is kept as given — unknown and duplicate ids are
  * dropped, active setups it leaves out are appended in default order.

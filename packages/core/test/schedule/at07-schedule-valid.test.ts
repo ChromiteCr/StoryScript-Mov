@@ -59,8 +59,8 @@ describe('AT-07 schedule: every placed block passes the independent validator', 
     expect(result.violations).toEqual([]);
     expect(validate(INPUT, result.blocks)).toEqual([]);
     expect(ScheduleResult.parse(result)).toEqual(result);
-    expect(result.algorithm_version).toBe('greedy-1');
-    expect(result.validator_version).toBe('validate-1');
+    expect(result.algorithm_version).toBe('greedy-multistart-2');
+    expect(result.validator_version).toBe('validate-2');
   });
 
   test('golden timeline (local wall clock)', () => {

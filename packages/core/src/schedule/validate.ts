@@ -18,6 +18,10 @@ import type { ScheduleInput } from './types.ts';
  *   LOCKED_BLOCK_MOVED confirmed `locked_block`: blocks start at the locked
  *                      start and stay inside the locked span
  *   UNPLACED_REQUIRED  a required (non-waived) shot of a setup has no shoot block
+ *   DURATION_MISMATCH  a part's length differs from setup_min / per_shot_min ×
+ *                      active shots / reset_min (no working time lost)
+ *   BLOCK_SEQUENCE     a placed setup's parts are not back to back in
+ *                      setup → shoot → reset order
  * Unconfirmed constraints are drafts and are ignored.
  */
 export function validate(input: ScheduleInput, blocks: readonly ScheduleBlock[]): Violation[] {
@@ -112,6 +116,54 @@ export function validate(input: ScheduleInput, blocks: readonly ScheduleBlock[])
     if (!x.b.setup_id || !(x.start < x.end)) continue;
     const e = extent.get(x.b.setup_id);
     extent.set(x.b.setup_id, e ? { start: Math.min(e.start, x.start), end: Math.max(e.end, x.end) } : { start: x.start, end: x.end });
+  }
+
+  // DURATION_MISMATCH / BLOCK_SEQUENCE — recomputed from the raw setup, not from greedy's model
+  const MIN = 60_000;
+  const partsBySetup = new Map<Uuid, typeof spans>();
+  for (const x of spans) {
+    if (!x.b.setup_id || x.b.kind === 'buffer') continue;
+    partsBySetup.set(x.b.setup_id, [...(partsBySetup.get(x.b.setup_id) ?? []), x]);
+  }
+  for (const [setupId, parts] of partsBySetup) {
+    const setup = setups.get(setupId);
+    if (!setup) continue;
+    const active = setup.shot_ids.filter((id) => {
+      const shot = shots.get(id);
+      return shot !== undefined && shot.required_status !== 'waived';
+    }).length;
+    const expected = (
+      [
+        ['setup', setup.durations.setup_min * MIN],
+        ['shoot', setup.durations.per_shot_min * MIN * active],
+        ['reset', setup.durations.reset_min * MIN],
+      ] as const
+    ).filter(([, d]) => d > 0);
+    const sorted = parts.slice().sort((p, q) => p.start - q.start);
+    const kinds = sorted.map((x) => x.b.kind).join('→');
+    const want = expected.map(([k]) => k).join('→');
+    if (kinds !== want) {
+      push('BLOCK_SEQUENCE', `setup "${setup.label}" has parts ${kinds || '(none)'}, expected ${want}`, { setup: setupId });
+      continue;
+    }
+    for (let i = 0; i < sorted.length; i++) {
+      const x = sorted[i]!;
+      const len = x.end - x.start;
+      const [, d] = expected[i]!;
+      if (Math.abs(len - d) > 1) {
+        push('DURATION_MISMATCH', `block ${x.b.id} lasts ${Math.round(len / MIN)} min, expected ${Math.round(d / MIN)} min`, {
+          block: x.b.id,
+          setup: setupId,
+        });
+      }
+      const next = sorted[i + 1];
+      if (next && Math.abs(next.start - x.end) > 1) {
+        push('BLOCK_SEQUENCE', `setup "${setup.label}" has a gap or overlap between ${x.b.kind} and ${next.b.kind}`, {
+          block: next.b.id,
+          setup: setupId,
+        });
+      }
+    }
   }
 
   for (const c of input.constraints) {

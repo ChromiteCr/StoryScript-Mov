@@ -27,6 +27,11 @@
   --color-focus: #3e5c76;
 
   --color-ok: #3f6b4a;
+  --color-ok-bg: #e6ede4;
+  --color-info-bg: #e6ebef;
+  /* located script paragraph / quote (a pencil-yellow wash, used sparingly) */
+  --color-mark: #f1e7c4;
+  --color-mark-rule: #d8c68b;
   --color-warn: #7a5a12;
   --color-warn-bg: #f3ecd9;
   --color-warn-rule: #dccb9c;

@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { api } from './lib/api.ts';
 import {
@@ -20,6 +20,9 @@ import { Button, Spinner } from './components/ui.tsx';
 import { ComingSoonView } from './views/ComingSoonView.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
+
+// The script workspace is the heaviest view; load it as its own chunk.
+const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ default: m.ScriptView })));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -110,8 +113,14 @@ function Workbench() {
     );
   } else if (!current) {
     body = <HomeView />;
+  } else if (view === null || view === 'script') {
+    body = (
+      <Suspense fallback={<Spinner label="正在加载…" />}>
+        <ScriptView project={current} />
+      </Suspense>
+    );
   } else {
-    body = <ComingSoonView view={view ?? 'script'} />;
+    body = <ComingSoonView view={view} />;
   }
 
   return (

@@ -1,4 +1,13 @@
-import { useEffect, useId, useState, type ButtonHTMLAttributes, type InputHTMLAttributes, type ReactNode } from 'react';
+import {
+  useEffect,
+  useId,
+  useState,
+  type ButtonHTMLAttributes,
+  type InputHTMLAttributes,
+  type ReactNode,
+  type SelectHTMLAttributes,
+  type TextareaHTMLAttributes,
+} from 'react';
 import { Check, Copy, LoaderCircle } from 'lucide-react';
 
 /** Small shared primitives. Tailwind classes only (CSP: no inline style). */
@@ -46,6 +55,63 @@ export function TextInput({ className = '', ...rest }: InputHTMLAttributes<HTMLI
       {...rest}
     />
   );
+}
+
+export function TextArea({ className = '', ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  return (
+    <textarea
+      className={
+        'w-full min-w-0 rounded-control border border-rule-strong bg-sheet px-2.5 py-1.5 text-sm leading-relaxed text-ink ' +
+        'focus-visible:border-focus aria-[invalid=true]:border-danger ' +
+        className
+      }
+      {...rest}
+    />
+  );
+}
+
+export function Select({ className = '', children, ...rest }: SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      className={
+        'h-8 w-full min-w-0 rounded-control border border-rule-strong bg-sheet px-2 text-sm text-ink ' +
+        'focus-visible:border-focus disabled:cursor-not-allowed disabled:opacity-60 aria-[invalid=true]:border-danger ' +
+        className
+      }
+      {...rest}
+    >
+      {children}
+    </select>
+  );
+}
+
+export type TagTone = 'neutral' | 'ok' | 'warn' | 'danger' | 'info' | 'solid';
+
+const TAG_TONE: Record<TagTone, string> = {
+  neutral: 'border-rule-strong bg-sheet text-ink-2',
+  ok: 'border-ok/40 bg-ok-bg text-ok',
+  warn: 'border-warn-rule bg-warn-bg text-warn',
+  danger: 'border-danger-rule bg-danger-bg text-danger',
+  info: 'border-focus/30 bg-info-bg text-focus',
+  solid: 'border-graphite bg-graphite text-sheet',
+};
+
+/** Small status label. */
+export function Tag({ tone = 'neutral', className = '', children, title }: { tone?: TagTone; className?: string; children: ReactNode; title?: string }) {
+  return (
+    <span
+      title={title}
+      className={`inline-flex h-5 shrink-0 items-center gap-1 rounded-control border px-1.5 text-[11.5px] leading-none whitespace-nowrap ${TAG_TONE[tone]} ${className}`}
+    >
+      {children}
+    </span>
+  );
+}
+
+/** Inline note box (warn/info), used for explanations next to disabled AI buttons etc. */
+export function Note({ tone = 'info', children, className = '' }: { tone?: 'info' | 'warn'; children: ReactNode; className?: string }) {
+  const cls = tone === 'warn' ? 'border-warn-rule bg-warn-bg' : 'border-rule bg-sheet-sunk';
+  return <div className={`rounded-sheet border px-3 py-2 text-[13px] text-ink-2 ${cls} ${className}`}>{children}</div>;
 }
 
 export interface FieldProps {

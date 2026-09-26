@@ -5,6 +5,7 @@ import { useCurrentProject, useHealth } from '../lib/queries.ts';
 import { formatDuration } from '../lib/format.ts';
 import { ErrorNotice } from '../components/ErrorNotice.tsx';
 import { Button, CopyCommand, SectionHeading, Spinner } from '../components/ui.tsx';
+import { TextProviderPanel } from './TextProviderPanel.tsx';
 
 function Panel({ children }: { children: ReactNode }) {
   return <section className="rounded-sheet border border-rule bg-sheet px-5 py-4 sm:px-6">{children}</section>;
@@ -92,20 +93,9 @@ function MediaTools({ health }: { health: HealthInfo }) {
 function Models({ health }: { health: HealthInfo }) {
   return (
     <Panel>
-      <SectionHeading title="模型" description="密钥只保存在本机服务端，页面上不会显示。" />
+      <SectionHeading title="图像模型（实验）" description="密钥只保存在本机服务端，页面上不会显示。" />
       <Rows>
-        <Row label="文本模型">
-          <div className="flex flex-col gap-0.5">
-            <State ok={health.text_provider_configured}>{health.text_provider_configured ? '已配置' : '未配置'}</State>
-            {health.text_provider_configured ? null : (
-              <p className="text-ink-2">
-                拆镜、实体抽取和排序建议需要文本模型；未配置时这些按钮置灰，手工流程照常可用。设置环境变量{' '}
-                <Mono>STORYSCRIPT_LLM_BASE_URL</Mono>、<Mono>STORYSCRIPT_LLM_API_KEY</Mono>、<Mono>STORYSCRIPT_LLM_MODEL</Mono> 后重启即可。
-              </p>
-            )}
-          </div>
-        </Row>
-        <Row label="图像模型（实验）">
+        <Row label="状态">
           <div className="flex flex-col gap-0.5">
             <State ok={health.image_provider_configured}>{health.image_provider_configured ? '已配置' : '未配置'}</State>
             {health.image_provider_configured ? null : (
@@ -193,6 +183,7 @@ export function SettingsView() {
         {health.isError ? <ErrorNotice error={health.error} /> : null}
         {health.data ? (
           <>
+            <TextProviderPanel />
             <MediaTools health={health.data} />
             <Models health={health.data} />
             <Runtime health={health.data} />

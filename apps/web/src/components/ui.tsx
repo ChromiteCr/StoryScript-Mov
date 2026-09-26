@@ -95,9 +95,12 @@ export function IconButton({ icon: Icon, label, className = '', type = 'button',
   );
 }
 
+/** Disabled (e.g. a locked shot's form): quieter frame and text, still readable (graphite-300 on 800 is AA). */
+const FIELD_DISABLED = 'disabled:cursor-not-allowed disabled:border-graphite-800 disabled:text-graphite-300';
+
 const FIELD_CONTROL =
   'h-7 w-full min-w-0 rounded-control border border-graphite-700 bg-graphite-800 px-2 text-sm text-graphite-100 ' +
-  'hover:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger';
+  `hover:enabled:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger ${FIELD_DISABLED}`;
 
 export function TextInput({ className = '', ...rest }: InputHTMLAttributes<HTMLInputElement>) {
   return <input className={`${FIELD_CONTROL} ${className}`} {...rest} />;
@@ -108,7 +111,7 @@ export function TextArea({ className = '', ...rest }: TextareaHTMLAttributes<HTM
     <textarea
       className={
         'w-full min-w-0 rounded-control border border-graphite-700 bg-graphite-800 px-2 py-1.5 text-sm text-graphite-100 ' +
-        'hover:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger ' +
+        `hover:enabled:border-graphite-500 focus-visible:border-accent aria-[invalid=true]:border-danger ${FIELD_DISABLED} ` +
         className
       }
       {...rest}

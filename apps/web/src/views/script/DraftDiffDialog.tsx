@@ -115,7 +115,7 @@ function ItemCard({ item, checked, code, disabled, onToggle }: { item: Breakdown
           onChange={onToggle}
           title={item.blockedReason ?? undefined}
           aria-describedby={item.blockedReason ? `${inputId}-blocked` : undefined}
-          className="mt-1 size-3.5 shrink-0 disabled:cursor-not-allowed"
+          className="mt-1 size-3.5 shrink-0 accent-graphite-100 disabled:cursor-not-allowed"
         />
         <div className="min-w-0 flex-1">
           <label htmlFor={inputId} className="flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -373,7 +373,7 @@ function DiffBody({
                 checked={replace}
                 disabled={!pending || candidates.size === 0 || busy}
                 onChange={(e) => setReplace(e.target.checked)}
-                className="size-3.5"
+                className="size-3.5 accent-graphite-100"
               />
               替换本场未锁定的 AI 镜头{candidates.size > 0 ? `（将归档 ${candidates.size} 个）` : '（没有可替换的）'}
             </label>

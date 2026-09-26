@@ -172,3 +172,8 @@ export function parseNumberField(raw: string, opts: { allowEmpty: boolean; min?:
   if (opts.max !== undefined && n > opts.max) return { value: null, error: `${opts.label}不能大于 ${opts.max}` };
   return { value: n, error: null };
 }
+
+/** Shot.revision as shown to people: 0 is the version as created. */
+export function revisionLabel(revision: number): string {
+  return revision === 0 ? '初版' : `修订 ${revision}`;
+}

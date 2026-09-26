@@ -287,6 +287,7 @@ export const ShotRow = memo(function ShotRow({
         </div>
         <button
           type="button"
+          data-shot-summary=""
           onClick={() => ws.selectShot(shot)}
           aria-current={selected ? 'true' : undefined}
           className={`mt-0.5 block w-full text-left text-sm break-words text-graphite-100 [display:-webkit-box] overflow-hidden [-webkit-box-orient:vertical] [-webkit-line-clamp:2] ${waived ? 'line-through decoration-graphite-300' : ''}`}
@@ -294,8 +295,7 @@ export const ShotRow = memo(function ShotRow({
         >
           {f.action || <span className="text-graphite-300">{summary}</span>}
         </button>
-        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
-          <SourceCell shot={shot} />
+        <div className="mt-1 flex min-w-0 items-center gap-1">
           {shot.origin === 'ai' ? <Tag>AI</Tag> : null}
           {shot.required_status !== 'required' ? (
             <Tag tone={waived ? 'danger' : 'neutral'} title={shot.requirement_reason ? `原因：${shot.requirement_reason}` : undefined}>
@@ -307,6 +307,7 @@ export const ShotRow = memo(function ShotRow({
               {f.questions.length} 个待确认
             </Tag>
           ) : null}
+          <SourceCell shot={shot} />
         </div>
         {update.isError ? <ErrorNotice className="mt-2" error={update.error} context="shot-save" /> : null}
       </div>

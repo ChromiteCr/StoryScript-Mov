@@ -1,7 +1,7 @@
 import type { Shot } from '@storyscript/contracts';
 import { ORIGIN_LABEL, shotSpecLine } from '../../lib/labels.ts';
 import { useShotRevisions } from '../../lib/queries.ts';
-import { changedFieldLabels } from '../../lib/shots.ts';
+import { changedFieldLabels, revisionLabel } from '../../lib/shots.ts';
 import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Spinner, Tag } from '../../components/ui.tsx';
@@ -24,7 +24,7 @@ export function RevisionsDialog({ shot, onClose }: { shot: Shot; onClose: () => 
           return (
             <li key={r.id} className="rounded-panel border border-graphite-800 bg-graphite-950/40 px-3 py-2.5">
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="text-xs text-graphite-100 tabular-nums">r{r.revision}</span>
+                <span className="text-xs text-graphite-100 tabular-nums">{revisionLabel(r.revision)}</span>
                 <Tag>{ORIGIN_LABEL[r.origin]}</Tag>
                 {r.revision === shot.revision ? <Tag>当前</Tag> : null}
                 <time dateTime={r.at} className="ml-auto text-xs text-graphite-300 tabular-nums">

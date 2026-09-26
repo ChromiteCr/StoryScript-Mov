@@ -308,8 +308,10 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const scenesPanel = <ScenesPanel shots={liveShots} />;
   const entitiesPanel = <EntitiesPanel entitiesQuery={entities} />;
 
+  const inspectorKey = !inspector ? 'none' : inspector.kind === 'shot' ? `shot:${inspector.shotId}` : `${inspector.kind}:${inspector.sceneId}:${inspector.kind === 'scene' ? (inspector.focus ?? '') : ''}`;
   const inspectorPanel = (
-    <Panel title={inspectorTitle(inspector, liveShots, script.scenes)} padded={false}>
+    // keyed by target: a new selection starts at the top of the inspector
+    <Panel key={inspectorKey} title={inspectorTitle(inspector, liveShots, script.scenes)} padded={false}>
       <InspectorBody target={inspector} shots={liveShots} />
     </Panel>
   );

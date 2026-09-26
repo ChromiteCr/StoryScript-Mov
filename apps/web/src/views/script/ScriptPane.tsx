@@ -37,7 +37,9 @@ const ParagraphRow = memo(function ParagraphRow({ p, scene, active, quote, onHea
       id={heading ? sceneHeadingDomId(scene.id) : paragraphDomId(p.id)}
       data-paragraph={p.id}
       className={
-        'group relative -mx-2 grid scroll-mt-6 grid-cols-[minmax(0,1fr)] rounded-paper px-2 [content-visibility:auto] md:-ml-14 md:grid-cols-[2.75rem_minmax(0,1fr)] md:gap-x-3 ' +
+        // Wide sheets hang the anchor number in the 48px margin: -ml-11 (44px) =
+        // 8px padding + 28px number column + 8px gap, so the highlight stays on the paper.
+        'group relative -mx-2 grid scroll-mt-6 grid-cols-[minmax(0,1fr)] rounded-paper px-2 [content-visibility:auto] md:-ml-11 md:grid-cols-[1.75rem_minmax(0,1fr)] md:gap-x-2 ' +
         (heading ? 'mt-5 first:mt-0 ' : 'mt-2 first:mt-0 ') +
         (active ? 'bg-accent/20 ring-1 ring-accent-strong/50' : '')
       }

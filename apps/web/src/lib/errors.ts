@@ -83,7 +83,7 @@ const CONTEXT_COPY: Partial<Record<ErrorContext, Partial<Record<ClientErrorCode,
     PROVIDER_ERROR: { title: '模型服务返回错误', detail: '检查 base_url、模型名和 key 是否正确。' },
   },
   'ai-request': {
-    PROVIDER_NOT_CONFIGURED: { title: '还没有配置文本模型', detail: '在"设置 → 文本模型"里填写 base_url、模型和 key。手工流程照常可用。' },
+    PROVIDER_NOT_CONFIGURED: { title: '还没有配置文本模型', detail: '在"设置 → 模型"里填写 base_url、模型和 key。手工流程照常可用。' },
   },
   'script-import': {
     VALIDATION_ERROR: { title: '剧本内容无法导入', detail: null },
@@ -126,6 +126,13 @@ export function describeError(error: unknown, context: ErrorContext = 'general')
     };
   }
 
+  // The server answers "not in this state" with VALIDATION_ERROR + 409 (draft
+  // already applied, draft made for an older script version, shot archived…):
+  // nothing the user typed is wrong, so say what the server said.
+  if (error.code === 'VALIDATION_ERROR' && error.status === 409) {
+    return { title: '当前状态下不能这样操作', detail: error.message || null, technical: technicalLine(error) };
+  }
+
   const copy = CONTEXT_COPY[context]?.[error.code] ?? COPY[error.code];
   let detail = copy.detail;
   if (error.code === 'PROJECT_LOCKED') {
@@ -148,20 +155,41 @@ function isKnownCode(code: string): code is ClientErrorCode {
   return Object.prototype.hasOwnProperty.call(COPY, code);
 }
 
+/**
+ * Job codes the server writes that are not API error codes
+ * (apps/server jobs/queue.ts: a job left over from a previous process).
+ */
+const JOB_ONLY_COPY: Readonly<Record<string, Copy>> = {
+  INTERRUPTED: { title: '任务被中断', detail: '服务重启时任务还没有发出请求，可以重新发起。' },
+};
+
+/** Codes whose server message carries the specific reason (last problem, HTTP status…). */
+const JOB_MESSAGE_CODES: ReadonlySet<string> = new Set([
+  'PROVIDER_ERROR',
+  'PROVIDER_REFUSED',
+  'VALIDATION_ERROR',
+  'ATTEMPTS_EXHAUSTED',
+  'INTERNAL',
+]);
+
 /** Job.error ({ code, message }) in the same plain-language form. */
 export function describeJobError(error: { code: string; message: string } | null): HumanError | null {
   if (!error) return null;
   const technical = `${error.code}：${error.message}`;
-  if (isKnownCode(error.code)) {
-    const copy = CONTEXT_COPY['ai-request']?.[error.code] ?? COPY[error.code];
-    const showMessage = error.code === 'PROVIDER_ERROR' || error.code === 'PROVIDER_REFUSED' || error.code === 'VALIDATION_ERROR';
-    const detail = showMessage && error.message ? `${copy.detail ?? ''}${copy.detail ? ' ' : ''}原因：${error.message}` : copy.detail;
-    return { title: copy.title, detail, technical };
+  const known = JOB_ONLY_COPY[error.code] ?? (isKnownCode(error.code) ? (CONTEXT_COPY['ai-request']?.[error.code] ?? COPY[error.code]) : null);
+  if (known) {
+    const showMessage = JOB_MESSAGE_CODES.has(error.code) && error.message;
+    const detail = showMessage ? `${known.detail ?? ''}${known.detail ? ' ' : ''}原因：${error.message}` : known.detail;
+    return { title: known.title, detail, technical };
   }
   return { title: '任务失败', detail: error.message || null, technical };
 }
 
-/** True for 409 REVISION_CONFLICT (optimistic concurrency). */
+/**
+ * True for REVISION_CONFLICT only (optimistic concurrency). The server also
+ * answers 409 for LOCKED_SHOT, NO_PROJECT_OPEN, PROVIDER_NOT_CONFIGURED and
+ * state errors, which a "reload and retry" cannot fix.
+ */
 export function isRevisionConflict(error: unknown): boolean {
-  return isApiClientError(error) && (error.code === 'REVISION_CONFLICT' || error.status === 409);
+  return isApiClientError(error) && error.code === 'REVISION_CONFLICT';
 }

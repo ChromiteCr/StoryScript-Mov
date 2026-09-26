@@ -125,10 +125,13 @@ export function JobLine({ slot, onSucceeded, onOpenDraft }: JobLineProps) {
           {terminal && data.status !== 'succeeded' ? <IconButton icon={X} label="关闭任务状态" onClick={() => untrackJob(slot)} /> : null}
         </span>
       </div>
-      {data.status === 'outcome_unknown' ? (
+      {data.status === 'outcome_unknown' && !err ? (
         <p className="mt-1 text-xs text-graphite-300">请求已经发出，但无法确认结果。为避免重复计费，不会自动重发；需要时请重新发起。</p>
       ) : null}
-      {data.status === 'cancelled' ? <p className="mt-1 text-xs text-graphite-300">任务已取消。已经发出的请求仍可能完成并计费。</p> : null}
+      {/* the server marks a cancel after a request left the machine as outcome_unknown, so cancelled means nothing was sent */}
+      {data.status === 'cancelled' ? (
+        <p className="mt-1 text-xs text-graphite-300">{data.remote || data.attempts === 0 ? '任务已取消，没有向模型服务发出请求。' : '任务已取消。'}</p>
+      ) : null}
       {err ? (
         <div className="mt-1 text-xs">
           <p className="font-medium text-graphite-100">{err.title}</p>

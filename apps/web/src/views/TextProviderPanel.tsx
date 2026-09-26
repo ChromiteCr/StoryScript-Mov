@@ -220,7 +220,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
       </Field>
       {!fromEnv && view?.key_last4 ? (
         <label className="-mt-1 inline-flex items-center gap-1.5 text-xs text-graphite-300">
-          <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} className="size-3.5" />
+          <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} className="size-3.5 accent-graphite-100" />
           清除已保存的 key
         </label>
       ) : null}

@@ -1,7 +1,7 @@
 import { useCallback, useState, type FormEvent } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { Entity, EntityType, Job } from '@storyscript/contracts';
-import { Check, Pencil, Plus, Sparkles } from 'lucide-react';
+import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles } from 'lucide-react';
 import { formatAliases, parseAliasInput } from '../../lib/drafts.ts';
 import { ENTITIES_SLOT, trackJob, useTrackedJob } from '../../lib/jobs.ts';
 import { ENTITY_TYPE_LABEL } from '../../lib/labels.ts';
@@ -63,21 +63,23 @@ function EntityRow({ entity }: { entity: Entity }) {
         {update.isError ? <p className="text-xs text-graphite-100">保存失败，请重试。</p> : null}
       </div>
       <div className="flex shrink-0 items-center gap-0.5">
+        {/* the status lives in the dot; the button reads as the action it performs */}
         <button
           type="button"
           onClick={() => update.mutate({ id: entity.id, input: { confirmed: !entity.confirmed } })}
           disabled={update.isPending}
           aria-pressed={entity.confirmed}
+          aria-label={entity.confirmed ? `${entity.name} 已确认，取消确认` : `确认 ${entity.name}`}
           className={
-            'inline-flex h-6 items-center gap-1 rounded-control px-1.5 text-xs ' +
+            'inline-flex h-6 items-center gap-1 rounded-control px-1.5 text-xs disabled:opacity-50 ' +
             (entity.confirmed
               ? 'text-graphite-300 hover:bg-graphite-700 hover:text-graphite-100'
-              : 'border border-warn/60 text-graphite-100 hover:bg-graphite-700')
+              : 'border border-graphite-700 text-graphite-100 hover:border-graphite-500 hover:bg-graphite-700')
           }
-          title={entity.confirmed ? '已确认，点击取消确认' : 'AI 抽取的条目需要你确认；点击确认'}
+          title={entity.confirmed ? '已确认，点击取消确认' : 'AI 抽取的条目待你确认：核对名称和别名后点击确认'}
         >
           {entity.confirmed ? <Check aria-hidden className="size-3 text-ok" /> : <span aria-hidden className="size-1.5 rounded-full bg-warn" />}
-          {entity.confirmed ? '已确认' : '待确认'}
+          {entity.confirmed ? '已确认' : '确认'}
         </button>
         <IconButton icon={Pencil} label={`编辑 ${entity.name}`} title="改名 / 编辑别名" onClick={() => setEditing(true)} />
       </div>
@@ -137,9 +139,12 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
   const ws = useWorkspace();
   const drafts = useDrafts();
   const extract = useExtractEntities();
+  const confirmAll = useUpdateEntity();
   const tracked = useTrackedJob(ENTITIES_SLOT);
   const findDraft = useDraftFinder();
   const [adding, setAdding] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+  const [confirmingAll, setConfirmingAll] = useState(false);
 
   const pending = (drafts.data ?? [])
     .filter((d) => d.kind === 'entities' && d.status === 'pending')
@@ -155,6 +160,21 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
     [findDraft, ws],
   );
 
+  /** One PATCH per entity (the API has no bulk route); stops at the first failure. */
+  const confirmEverything = async () => {
+    setConfirmingAll(true);
+    confirmAll.reset();
+    try {
+      for (const e of ws.entities.filter((x) => !x.confirmed)) {
+        await confirmAll.mutateAsync({ id: e.id, input: { confirmed: true } });
+      }
+    } catch {
+      // shown by confirmAll.error
+    } finally {
+      setConfirmingAll(false);
+    }
+  };
+
   const startExtract = () => {
     extract.mutate(undefined, { onSuccess: ({ job_id }) => trackJob(ENTITIES_SLOT, job_id) });
   };
@@ -163,10 +183,18 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
 
   return (
     <Panel
-      title={`角色 · 地点 · 道具${unconfirmed > 0 ? `（${unconfirmed} 待确认）` : ''}`}
+      title={collapsed && ws.entities.length > 0 ? `角色 · 地点 · 道具 ${ws.entities.length}` : '角色 · 地点 · 道具'}
       padded={false}
+      // collapsed: only the header row; the scene list above takes the height
+      className={collapsed ? 'grow-0 basis-auto' : ''}
       tools={
         <>
+          <IconButton
+            icon={collapsed ? ChevronRight : ChevronDown}
+            label={collapsed ? '展开角色、地点和道具' : '折叠角色、地点和道具'}
+            aria-expanded={!collapsed}
+            onClick={() => setCollapsed((c) => !c)}
+          />
           <IconButton
             icon={Sparkles}
             label="AI 抽取角色、地点和道具"
@@ -174,11 +202,19 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
             onClick={startExtract}
             disabled={!ws.ai.enabled || tracked !== null || extract.isPending}
           />
-          <IconButton icon={Plus} label="新增角色、地点或道具" onClick={() => setAdding(true)} />
+          <IconButton
+            icon={Plus}
+            label="新增角色、地点或道具"
+            onClick={() => {
+              setCollapsed(false);
+              setAdding(true);
+            }}
+          />
         </>
       }
     >
-      {adding ? <AddEntityForm onDone={() => setAdding(false)} /> : null}
+      {adding && !collapsed ? <AddEntityForm onDone={() => setAdding(false)} /> : null}
+      {/* the job line stays mounted while collapsed: it opens the draft when extraction ends */}
       {tracked || extract.isError || pending ? (
         <div className="flex flex-col gap-2 border-b border-graphite-800 p-3">
           {extract.isError ? <ErrorNotice error={extract.error} context="ai-request" /> : null}
@@ -193,51 +229,65 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
           ) : null}
         </div>
       ) : null}
-      {entitiesQuery.isPending ? (
-        <div className="p-3">
-          <Spinner label="正在读取…" />
-        </div>
-      ) : entitiesQuery.isError ? (
-        <div className="p-3">
-          <ErrorNotice error={entitiesQuery.error} />
-        </div>
-      ) : ws.entities.length === 0 && !adding ? (
-        <EmptyState
-          quiet
-          title="还没有角色、地点或道具。"
-          description={
-            ws.ai.enabled
-              ? '可以用 AI 抽取生成草案，或点 + 手工添加。拆镜时，人物只能从角色名单里选。'
-              : '点 + 手工添加。AI 抽取需要先在"设置 → 模型"里配置文本模型。拆镜时，人物只能从角色名单里选。'
-          }
-          action={
-            ws.ai.enabled ? (
-              <Button size="sm" onClick={startExtract} disabled={tracked !== null || extract.isPending} title={extractTitle}>
-                <Sparkles aria-hidden className="size-3" />
-                AI 抽取
-              </Button>
-            ) : undefined
-          }
-        />
-      ) : (
-        <div className="flex flex-col py-1">
-          {TYPES.map((t) => {
-            const list = ws.entities.filter((e) => e.type === t);
-            if (list.length === 0) return null;
-            return (
-              <section key={t} aria-label={ENTITY_TYPE_LABEL[t]} className="py-1">
-                <h3 className="px-3 pb-0.5 text-xs text-graphite-300">
-                  {ENTITY_TYPE_LABEL[t]} <span className="tabular-nums">{list.length}</span>
-                </h3>
-                <ul>
-                  {list.map((e) => (
-                    <EntityRow key={e.id} entity={e} />
-                  ))}
-                </ul>
-              </section>
-            );
-          })}
-        </div>
+      {collapsed ? null : (
+        entitiesQuery.isPending ? (
+          <div className="p-3">
+            <Spinner label="正在读取…" />
+          </div>
+        ) : entitiesQuery.isError ? (
+          <div className="p-3">
+            <ErrorNotice error={entitiesQuery.error} />
+          </div>
+        ) : ws.entities.length === 0 && !adding ? (
+          <EmptyState
+            quiet
+            title="还没有角色、地点或道具。"
+            description={
+              ws.ai.enabled
+                ? '可以用 AI 抽取生成草案，或点 + 手工添加。拆镜时，人物只能从角色名单里选。'
+                : '点 + 手工添加。AI 抽取需要先在"设置 → 模型"里配置文本模型。拆镜时，人物只能从角色名单里选。'
+            }
+            action={
+              ws.ai.enabled ? (
+                <Button size="sm" onClick={startExtract} disabled={tracked !== null || extract.isPending} title={extractTitle}>
+                  <Sparkles aria-hidden className="size-3" />
+                  AI 抽取
+                </Button>
+              ) : undefined
+            }
+          />
+        ) : (
+          <div className="flex flex-col py-1">
+            {unconfirmed > 0 ? (
+              <div className="flex flex-col gap-1.5 px-3 pt-1 pb-1.5">
+                <div className="flex items-center gap-1.5 text-xs text-graphite-300">
+                  <span aria-hidden className="size-1.5 shrink-0 rounded-full bg-warn" />
+                  <span className="min-w-0 flex-1">{unconfirmed} 条 AI 抽取的条目待你确认</span>
+                  <Button variant="ghost" size="sm" busy={confirmingAll} onClick={() => void confirmEverything()} title="核对过名单后，一次确认全部条目">
+                    全部确认
+                  </Button>
+                </div>
+                {confirmAll.isError ? <ErrorNotice error={confirmAll.error} /> : null}
+              </div>
+            ) : null}
+            {TYPES.map((t) => {
+              const list = ws.entities.filter((e) => e.type === t);
+              if (list.length === 0) return null;
+              return (
+                <section key={t} aria-label={ENTITY_TYPE_LABEL[t]} className="py-1">
+                  <h3 className="px-3 pb-0.5 text-xs text-graphite-300">
+                    {ENTITY_TYPE_LABEL[t]} <span className="tabular-nums">{list.length}</span>
+                  </h3>
+                  <ul>
+                    {list.map((e) => (
+                      <EntityRow key={e.id} entity={e} />
+                    ))}
+                  </ul>
+                </section>
+              );
+            })}
+          </div>
+        )
       )}
     </Panel>
   );

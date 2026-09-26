@@ -109,7 +109,7 @@ function DraftBody({ detail, onClose }: { detail: DraftDetail; onClose: () => vo
                         disabled={!pending}
                         onChange={(e) => patch(i, { selected: e.target.checked })}
                         aria-label={`保留 ${r.name}`}
-                        className="mt-1.5 size-3.5 shrink-0"
+                        className="mt-1.5 size-3.5 shrink-0 accent-graphite-100"
                       />
                       <div className="grid min-w-0 flex-1 gap-1.5">
                         <TextInput aria-label={`第 ${r.index + 1} 条的名称`} value={r.name} disabled={!pending} onChange={(e) => patch(i, { name: e.target.value })} />

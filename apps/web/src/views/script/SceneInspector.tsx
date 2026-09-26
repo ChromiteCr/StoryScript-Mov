@@ -257,7 +257,7 @@ export function SceneInspector({ scene, shots, focus }: { scene: Scene; shots: r
   return (
     <Inspector>
       <InspectorGroup
-        title={`第 ${scene.display_no} 场`}
+        title="概况"
         actions={
           heading ? (
             <Button variant="ghost" size="sm" onClick={() => ws.locate({ paragraph_id: heading, quote: '' })} title="在剧本原文中定位本场">

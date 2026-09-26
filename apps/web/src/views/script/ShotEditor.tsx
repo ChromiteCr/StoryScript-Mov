@@ -40,7 +40,7 @@ import {
   TEMPLATE_LABEL,
 } from '../../lib/labels.ts';
 import { useCreateShot, useUpdateShot } from '../../lib/queries.ts';
-import { emptyShotFields, emptySubject, linesToList, parseNumberField } from '../../lib/shots.ts';
+import { emptyShotFields, emptySubject, linesToList, parseNumberField, revisionLabel } from '../../lib/shots.ts';
 import { stableKey } from '../../lib/stable.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, IconButton, Notice, SelectInput, Tag, TextArea, TextInput } from '../../components/ui.tsx';
@@ -339,7 +339,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
       <div className="flex-1 divide-y divide-graphite-800">
         {base ? (
           <Group
-            title={`镜头 ${base.code}`}
+            title="概况"
             actions={
               <>
                 <Button
@@ -382,7 +382,9 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
               ) : null}
               {base.needs_relink ? <Tag tone="warn">待重新关联</Tag> : null}
               {anchor?.match === 'fuzzy' ? <Tag tone="warn">{QUOTE_MATCH_LABEL.fuzzy}</Tag> : null}
-              <span className="ml-auto text-xs text-graphite-300 tabular-nums">r{base.revision}</span>
+              <span className="ml-auto text-xs text-graphite-300 tabular-nums" title="每次保存内容、镜号或锁定状态都会记一次修订">
+                {revisionLabel(base.revision)}
+              </span>
             </div>
             {base.manual_note ? <p className="text-xs break-words text-graphite-300">手工说明：{base.manual_note}</p> : null}
             {locked ? (
@@ -396,7 +398,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
               </Notice>
             ) : null}
             {staleBase ? (
-              <Notice tone="warn" title={`这个镜头已在别处修改（r${base.revision} → r${latest?.revision}）`}>
+              <Notice tone="warn" title={`这个镜头已在别处修改（${revisionLabel(base.revision)} → ${revisionLabel(latest?.revision ?? base.revision)}）`}>
                 <p>保存会被拒绝。可以放弃你的修改，载入最新版本。</p>
                 <Button size="sm" className="mt-1.5" onClick={reloadLatest}>
                   <RefreshCw aria-hidden className="size-3" />
@@ -540,7 +542,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
             <EnumRow label="环境" value={f.env} options={EnvKind.options} labels={ENV_LABEL} nullLabel="未指定" onChange={(v) => setF('env', v)} />
             <EnumRow label="主体运动" value={f.subject_motion} options={SubjectMotion.options} labels={SUBJECT_MOTION_LABEL} onChange={(v) => v && setF('subject_motion', v)} />
             <label className="flex items-center gap-2 text-sm text-graphite-100">
-              <input type="checkbox" checked={f.set_piece} onChange={(e) => setF('set_piece', e.target.checked)} className="size-3.5" />
+              <input type="checkbox" checked={f.set_piece} onChange={(e) => setF('set_piece', e.target.checked)} className="size-3.5 accent-graphite-100" />
               重点段落（大动作、载具、大场面）
             </label>
           </Group>

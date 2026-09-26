@@ -269,7 +269,7 @@ export function ImportView({ base, onCancel, onDone }: ImportViewProps) {
           点击行首的"场"字方框，把这一行设为场景标题或取消。共 {lines.length} 行，规则识别出 {detected.size} 个标题
           {overrides.length > 0 ? `，手动调整 ${overrides.length} 处` : ''}。
         </p>
-        <PaperCanvas label="场景预览">
+        <PaperCanvas label="剧本逐行预览">
           <ol className="-mx-2 flex flex-col">
             {lines.map((line, i) => {
               const n = i + 1;

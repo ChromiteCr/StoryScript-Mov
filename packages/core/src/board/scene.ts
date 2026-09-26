@@ -34,6 +34,10 @@ export interface GroundLine {
 export interface FacePrim {
   pts: V2[];
   decor: V2[][];
+  /** world-space outward normal (pencil shading) */
+  n: V3;
+  /** index of the sub-box this face belongs to (in draw order, far → near) */
+  sub: number;
 }
 
 export interface PropItem {
@@ -68,7 +72,7 @@ export interface SubjectItem {
   view: PuppetView | 'top';
   mirror: boolean;
   parts: PuppetPrim[];
-  lines: { pts: V2[]; after: number }[];
+  lines: { pts: V2[]; after: number; key: string }[];
   /** projected head-top → feet length in px (stroke scaling) */
   heightPx: number;
   /** frame-px bbox of the silhouette */
@@ -288,6 +292,12 @@ const FACES: { key: FaceKey; n: V3; idx: [number, number, number, number] }[] = 
 ];
 
 /** World corners of a local box (8, bit order x|y|z). */
+/** World-space corners (8 each) of a prop's sub-boxes (pencil cast shadows). */
+export function propWorldBoxes(p: BoardProp, cam: BoardCamera): V3[][] {
+  const L = localToWorld(propWorldOrigin(p, cam), p.y);
+  return propParts(p).map((lb) => boxCorners(lb, L));
+}
+
 function boxCorners(b: LocalBox, L: (p: V3) => V3): V3[] {
   const out: V3[] = [];
   for (let i = 0; i < 8; i++) {
@@ -316,7 +326,7 @@ export function projectProp(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: n
   });
   subs.sort((a, c) => c.depth - a.depth);
   const faces: FacePrim[] = [];
-  for (const { lb } of subs) {
+  for (const [si, { lb }] of subs.entries()) {
     const corners = boxCorners(lb, L);
     for (const f of FACES) {
       const n = rot(f.n);
@@ -332,7 +342,7 @@ export function projectProp(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: n
         const s = projectSegment(b, L(seg[0]), L(seg[1]));
         if (s) decor.push([px(s[0]), px(s[1])]);
       }
-      faces.push({ pts: poly.map(px), decor });
+      faces.push({ pts: poly.map(px), decor, n, sub: si });
     }
   }
   const center = L([0, p.h / 2, 0]);
@@ -430,7 +440,7 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
         }
       }
       const after = shape.lineAfter[i] ?? -1;
-      return { pts: runs, after: after >= 0 ? (idxMap[after] ?? parts.length - 1) : parts.length - 1 };
+      return { pts: runs, after: after >= 0 ? (idxMap[after] ?? parts.length - 1) : parts.length - 1, key: l.key };
     })
     .filter((l) => l.pts.length >= 2);
   const heightPx = head && foot ? Math.hypot(head[0] - foot[0], head[1] - foot[1]) : 0;

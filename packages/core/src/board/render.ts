@@ -7,15 +7,18 @@
  *  - every text node / attribute value escaped; coordinates fixed to 2 decimals;
  *  - overlay: false ⇒ no <text> at all (AI control image).
  *
- * Modes: 'structure' and 'topview' are implemented; 'pencil' currently falls
- * back to 'structure' (M2 replaces it without changing this signature).
+ * Modes: 'structure', 'topview' (here) and 'pencil' (pencil.ts, same scene,
+ * projection and painter order as structure).
  */
-import type { BoardArrow, BoardSpec, Movement, Pose, RenderMode, Silhouette } from '@storyscript/contracts';
+import type { BoardSpec, Movement, Pose, RenderMode, Silhouette } from '@storyscript/contracts';
 import { cyrb53 } from '../util/hash.ts';
 import { ZH_BOARD, ZH_PROP_KIND } from '../i18n/zh.ts';
-import { cameraBasis, hFov, projectPoint, projectSegment, unprojectToPlane } from './camera.ts';
+import { cameraBasis, hFov, projectSegment, unprojectToPlane } from './camera.ts';
 import { isEnvProp, STREET } from './layout.ts';
 import { clamp, DEG, type V2, type V3 } from './math.ts';
+import { arrowPx, badgePlacement, FONT } from './overlay-geom.ts';
+import { renderPencil } from './pencil.ts';
+import type { PencilLook } from './pencil-look.ts';
 import { buildPuppet, poseTopY, type PuppetView } from './puppets.ts';
 import { buildFrameScene, frameSize, propWorldOrigin, type FrameScene, type PropItem, type SubjectItem } from './scene.ts';
 import { attrs, el, gray, num, polyPath, text } from './svg.ts';
@@ -27,11 +30,14 @@ export interface RenderOptions {
   overlay?: boolean;
   /** paper background rect. Default true. */
   background?: boolean;
+  /** pencil: shot number drawn top-left when spec.overlay.show_code */
+  code?: string | null;
+  /** pencil: look parameters (default: the frozen "宽银幕铅笔分镜" look) and debug layers */
+  pencil?: { look?: PencilLook; layers?: 'all' | 'contour' };
 }
 
-export const RENDERER_VERSION = 'board-m1.0';
+export const RENDERER_VERSION = 'board-m2.0';
 
-const FONT = 'PingFang SC, Hiragino Sans GB, Noto Sans CJK SC, Microsoft YaHei, sans-serif';
 const C = {
   paper: gray(255),
   // far-side limbs of a turned figure: a light tone separates them from near limbs
@@ -55,6 +61,15 @@ const C = {
 
 export function renderBoard(spec: BoardSpec, mode: RenderMode, opts: RenderOptions = {}): string {
   if (mode === 'topview') return renderTopview(spec, opts);
+  if (mode === 'pencil')
+    return renderPencil(spec, {
+      width: opts.width,
+      overlay: opts.overlay,
+      background: opts.background,
+      code: opts.code ?? null,
+      look: opts.pencil?.look,
+      layers: opts.pencil?.layers,
+    });
   return renderStructure(spec, opts);
 }
 
@@ -217,63 +232,6 @@ function arrowSvg(pts: V2[], opts: { width: number; dash?: string; heads?: 'end'
   return g.join('');
 }
 
-/** Candidate [from, to] heights for an anchored arrow, best first. */
-function arrowWorldHeights(spec: BoardSpec, a: BoardArrow & { mode: 'anchored' }): [number, number][] {
-  const subj = (id: string | null) => spec.scene.subjects.find((s) => s.id === id);
-  const nearest = (x: number, z: number) =>
-    spec.scene.subjects.reduce<{ s: (typeof spec.scene.subjects)[number] | null; d: number }>(
-      (best, s) => {
-        const d = Math.hypot(s.x - x, s.z - z);
-        return d < best.d ? { s, d } : best;
-      },
-      { s: null, d: 0.6 },
-    ).s;
-  const from = subj(a.subject_id);
-  if (a.kind === 'eyeline') {
-    const to = nearest(a.world_to.x, a.world_to.z);
-    const eye = (s: typeof from) => (s ? (poseTopY(s.pose) - 0.075) * s.height_m : 1.55);
-    return [[eye(from), eye(to ?? from)]];
-  }
-  const lateral = Math.abs(a.world_to.x - a.world_from.x) > Math.abs(a.world_to.z - a.world_from.z);
-  const top = from ? poseTopY(from.pose) * from.height_m : 1.7;
-  // lateral: through the hips; toward/away: hip height, raised toward the lens height if off-frame
-  const ks = lateral ? [0.5, 0.65, 0.35] : [0.42, 0.6, 0.75, 0.3];
-  return ks.map((k) => [k * top, k * top] as [number, number]);
-}
-
-/**
- * Project an anchored arrow; when its tip leaves the frame, shorten it along the
- * world segment so the head stays visible (e.g. a subject running at the lens).
- */
-function anchoredArrowPx(b: ReturnType<typeof cameraBasis>, from: V3, to: V3, W: number, H: number): V2[] | null {
-  const m = 0.03;
-  const at = (t: number): V2 | null => {
-    const p: V3 = [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t, from[2] + (to[2] - from[2]) * t];
-    const q = projectPoint(b, p);
-    return q.visible ? [q.x, q.y] : null;
-  };
-  const inside = (q: V2 | null) => !!q && q[0] >= m && q[0] <= 1 - m && q[1] >= m && q[1] <= 1 - m;
-  const start = at(0);
-  if (!start) return null;
-  let end = at(1);
-  if (inside(start) && !inside(end)) {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 30; i++) {
-      const mid = (lo + hi) / 2;
-      if (inside(at(mid))) lo = mid;
-      else hi = mid;
-    }
-    end = at(lo);
-  }
-  if (!end) {
-    const seg = projectSegment(b, from, to);
-    if (!seg) return null;
-    return [[seg[0][0] * W, seg[0][1] * H], [seg[1][0] * W, seg[1][1] * H]];
-  }
-  return [[start[0] * W, start[1] * H], [end[0] * W, end[1] * H]];
-}
-
 function cameraMoveSvg(m: Movement | null, W: number, H: number): string {
   if (!m || m === 'static') return '';
   const g: string[] = [`<g${attrs({ 'data-camera-move': m })}>`];
@@ -400,19 +358,8 @@ function overlaySvg(spec: BoardSpec, scene: FrameScene): string {
   const g: string[] = [`<g${attrs({ 'data-layer': 'overlay', transform: `translate(${num(o.offset.x * W)} ${num(o.offset.y * H)})` })}>`];
   g.push(guidesSvg(spec, W, H));
   for (const a of o.arrows) {
-    let pts: V2[] | null = null;
-    if (a.mode === 'anchored') {
-      for (const [y0, y1] of arrowWorldHeights(spec, a)) {
-        pts = anchoredArrowPx(b, [a.world_from.x, y0, a.world_from.z], [a.world_to.x, y1, a.world_to.z], W, H);
-        const s0 = pts?.[0];
-        if (s0 && s0[0] >= 0 && s0[0] <= W && s0[1] >= 0 && s0[1] <= H) break;
-      }
-    } else {
-      pts = [[a.from.x * W, a.from.y * H], [a.to.x * W, a.to.y * H]];
-    }
+    const pts = arrowPx(spec, scene, a);
     if (!pts) continue;
-    const len = Math.hypot(pts[1]![0] - pts[0]![0], pts[1]![1] - pts[0]![1]);
-    if (len < 8 || len > W * 3) continue;
     g.push(`<g${attrs({ 'data-arrow': a.id, 'data-kind': a.kind })}>`);
     g.push(
       a.kind === 'eyeline'
@@ -424,25 +371,10 @@ function overlaySvg(spec: BoardSpec, scene: FrameScene): string {
   g.push(cameraMoveSvg(o.camera_move, W, H));
   // A/B badges above heads (kept inside the frame).
   for (const it of scene.items) {
-    if (it.type !== 'subject' || !it.badge) continue;
     const r = 17;
-    let cx: number;
-    let cy: number;
-    if (it.head && it.head[0] > -W && it.head[0] < 2 * W) {
-      cx = it.head[0];
-      cy = it.head[1] - r - 12;
-    } else if (it.bbox) {
-      cx = (it.bbox.x0 + it.bbox.x1) / 2;
-      cy = it.bbox.y0 - r - 12;
-    } else continue;
-    if (it.bbox) {
-      const vx0 = Math.max(it.bbox.x0, 0);
-      const vx1 = Math.min(it.bbox.x1, W);
-      if (vx1 > vx0) cx = clamp(cx, vx0 + r, vx1 - r);
-    }
-    cx = clamp(cx, r + 8, W - r - 8);
-    cy = clamp(cy, r + 8, H - r - 8);
-    g.push(`<g${attrs({ 'data-badge': it.id })}>${badgeSvg(cx, cy, it.badge, r)}</g>`);
+    const c = badgePlacement(scene, it, r);
+    if (!c || it.type !== 'subject') continue;
+    g.push(`<g${attrs({ 'data-badge': it.id })}>${badgeSvg(c[0], c[1], it.badge, r)}</g>`);
   }
   for (const l of o.labels) {
     g.push(
@@ -740,7 +672,7 @@ export function renderPuppetPreview(
     view,
     mirror,
     parts: shape.parts.map((p) => ({ pts: p.pts.map(px), fill: p.fill, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far })),
-    lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1 })),
+    lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1, key: l.key })),
     heightPx: figure,
     bbox: null,
     head: null,

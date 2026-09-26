@@ -6,6 +6,8 @@ import { CreateProjectInput, Project, RecentProject } from './project.ts';
 import { ParsedScript, Scene, ScreenSides, ScriptFormat, ScriptVersion } from './script.ts';
 import { RequiredStatus, Shot, ShotDraft, ShotFields, ShotRevision } from './shot.ts';
 import { CoverageDecision, CoverageDecisionKind, CoverageResult } from './coverage.ts';
+import { Board, BoardRaster, BoardSpec } from './board.ts';
+import { ImageDialect } from './provider.ts';
 import { LinkCandidate, MediaAsset, ShotMediaLink, SourceRoot } from './media.ts';
 import { Constraint, Plan, Resource, ResourceType, Setup, SetupDurations, TimeWindow, Violation } from './plan.ts';
 import { Take, TakeRating } from './take.ts';
@@ -63,10 +65,26 @@ export const TextProviderView = z.object({
 });
 export type TextProviderView = z.infer<typeof TextProviderView>;
 
+export const ImageProviderView = z.object({
+  base_url: z.string(),
+  model: z.string(),
+  key_last4: z.string().nullable(),
+  source: SettingSource,
+  dialect_override: ImageDialect.nullable(),
+  /** dialect actually used: override, else detected from the host */
+  dialect: ImageDialect,
+  /** matched generations-ref preset id (e.g. volcengine-seedream), if any */
+  preset_id: z.string().nullable(),
+  /** preset verified end-to-end against the real service */
+  verified: z.boolean(),
+  /** e.g. "Gemini 兼容地址不接收参考图，不能用于草图重绘" */
+  warning: z.string().nullable(),
+});
+export type ImageProviderView = z.infer<typeof ImageProviderView>;
+
 export const ProvidersView = z.object({
   text: TextProviderView.nullable(),
-  /** filled in M8 */
-  image: z.null(),
+  image: ImageProviderView.nullable(),
 });
 export type ProvidersView = z.infer<typeof ProvidersView>;
 
@@ -350,6 +368,55 @@ export const CoverageDecisionInput = z.object({
   reason: z.string().min(1),
 });
 
+
+// ---------------------------------------------------------------- M4 -------
+// Boards are laid out on the server (core layoutBoard) and rendered in the
+// browser (core renderBoard). A board is stale when its basis_content_hash
+// differs from the shot's current content_hash; the user chooses to
+// regenerate (new layout, loses manual edits) or keep (re-baselines).
+
+export const BoardView = Board.extend({
+  stale: z.boolean(),
+  shot_code: z.string(),
+  scene_id: Uuid,
+  /** adopted AI raster for this board version, if any (M8) */
+  adopted_raster_id: Uuid.nullable(),
+});
+export type BoardView = z.infer<typeof BoardView>;
+
+export const SaveBoardInput = z.object({
+  expected_revision: z.number().int().nonnegative(),
+  spec: BoardSpec,
+});
+export const BoardRevisionInput = z.object({ expected_revision: z.number().int().nonnegative() });
+
+// ---------------------------------------------------------------- M8 -------
+
+export const SaveImageProviderInput = z.object({
+  base_url: z.url(),
+  model: z.string().min(1),
+  api_key: z.string().nullable().optional(),
+  dialect_override: ImageDialect.nullable(),
+});
+
+export const TestImageProviderInput = z.object({
+  /** false: free checks only (GET /models); true: one smallest paid image after confirmation */
+  paid: z.boolean(),
+});
+
+export const RedrawInput = z.object({
+  /** the user saw the destination host, data sent and "cost per the provider's bill" */
+  confirmed: z.boolean(),
+  quality: z.enum(['low', 'medium', 'high']),
+});
+
+export const RasterView = BoardRaster.extend({
+  /** same-origin URL of the post-processed raster PNG, null while pending/failed */
+  image_url: z.string().nullable(),
+  stale: z.boolean(),
+});
+export type RasterView = z.infer<typeof RasterView>;
+
 // -------------------------------------------------------------- registry ---
 
 export const Api = {
@@ -440,4 +507,18 @@ export const Api = {
   reviewLink: { method: 'PATCH', path: '/api/v1/links/:id', input: ReviewLinkInput, output: ShotMediaLink },
   coverage: { method: 'GET', path: '/api/v1/coverage', output: z.array(CoverageResult) },
   addCoverageDecision: { method: 'POST', path: '/api/v1/shots/:id/coverage-decisions', input: CoverageDecisionInput, output: CoverageDecision },
+  // M4 — boards
+  listBoards: { method: 'GET', path: '/api/v1/boards', output: z.array(BoardView) },
+  shotBoardVersions: { method: 'GET', path: '/api/v1/shots/:id/boards', output: z.array(Board) },
+  regenerateBoard: { method: 'POST', path: '/api/v1/shots/:id/boards', output: BoardView },
+  saveBoard: { method: 'PATCH', path: '/api/v1/boards/:id', input: SaveBoardInput, output: BoardView },
+  keepBoard: { method: 'POST', path: '/api/v1/boards/:id/keep', input: BoardRevisionInput, output: BoardView },
+
+  // M8 — image provider & AI pencil redraw (experimental)
+  saveImageProvider: { method: 'PUT', path: '/api/v1/settings/providers/image', input: SaveImageProviderInput, output: ProvidersView },
+  testImageProvider: { method: 'POST', path: '/api/v1/settings/providers/image/test', input: TestImageProviderInput, output: ProviderTestResult },
+  requestRedraw: { method: 'POST', path: '/api/v1/boards/:id/redraw', input: RedrawInput, output: JobAccepted },
+  listRasters: { method: 'GET', path: '/api/v1/boards/:id/rasters', output: z.array(RasterView) },
+  adoptRaster: { method: 'POST', path: '/api/v1/rasters/:id/adopt', output: RasterView },
+  rejectRaster: { method: 'POST', path: '/api/v1/rasters/:id/reject', output: RasterView },
 } as const;

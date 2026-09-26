@@ -98,8 +98,36 @@
 
 ## 数据库与安全（Track B）
 
-（由 lead 补充）
+**结论：继续使用 node:sqlite，不需要切换到后备驱动 better-sqlite3。**
+
+- **运行环境**：Node 26.10.0 自带的 node:sqlite 链接 SQLite 3.53.4，FTS5 可用（v0.1 检索只用 LIKE）。运行时不打印 ExperimentalWarning。
+- **DbPort**：
+  - 打开时启用 WAL、foreign_keys=ON 和 busy_timeout；
+  - 支持事务、SAVEPOINT 嵌套，拒绝异步回调，支持命名参数；
+  - 另提供 `backup()`，内部调用模块级的 `sqlite.backup(db, path)`。
+- **迁移**：
+  - 迁移脚本以 TS 常量内嵌，方便打包；
+  - 当前 user_version 为 1，共 22 张 STRICT 表，布尔和枚举字段带 CHECK 约束；coverage_decision 用触发器保证只追加；
+  - 只在 0 < 当前版本 < 最新版本时，才先备份到 `recovery/`；
+  - 迁移失败会整体回滚；数据库版本比程序新时拒绝打开，且不改动文件。
+- **备份**：在 WAL 活跃、有 500 行未 checkpoint 时执行备份，备份文件可以打开，integrity_check 返回 ok。
+- **LIKE 性能**：1 万行中文 `search_text`，查询 `LIKE '%客厅%'` 的中位数为 1.3–1.4 ms（目标 < 20 ms）。
+- **项目锁**：
+  - 同主机上持锁进程仍存活时返回 PROJECT_LOCKED；
+  - 陈旧锁（pid 已不存在）可以接管；
+  - 不接管其他主机的锁。
+- **安全（AT-17 起点，共 25 个测试）**：
+  - Host 与 Origin 校验：伪造 Host 返回 403，在 Hono 之前、socket 层就拦截；跨源 POST 返回 403，缺 Origin 的 POST 也返回 403；
+  - 会话：缺 cookie 或令牌错误返回 401，并附中文提示；fragment 令牌换成 HttpOnly、SameSite=Strict 的 cookie；
+  - 生产环境 CSP 与规格完全一致；不开 CORS；静态文件路径穿越被拒绝；
+  - runtime.json 权限为 0600。
+- **开发模式**：Vite 以 middleware 模式与 API 同端口，HMR 走 port+1（ws 只绑 127.0.0.1）。开发环境的 CSP 放宽为允许 'unsafe-inline' 和 ws:。已在内置浏览器验证：令牌换 cookie → 首页 → 新建项目，全流程可用。
+- **打包**：
+  - tsdown 把 contracts 和 core 内联进产物，vite 不打包，产物约 92 kB；前端构建产物复制到包内的 `web/`；
+  - `npm pack` 后在全新的临时 HOME 下执行 `npx ./storyscript-mov-0.0.0.tgz doctor`，退出码为 0；
+  - 发布包目前还缺 README 和 LICENSE，M10 发布前补齐。
 
 ## LLM（待用户提供 key）
 
-（由 lead 补充）
+- structuredCall 已按计划设计（`maxRetries:0`；能力阶梯 json_schema → json_object → prompt_only；jsonrepair → zod → 业务校验 → 带错误回灌的修复；每步最多外发 3 次）。
+- M3 会先用假的 OpenAI 兼容服务验证。等用户在环境变量 `STORYSCRIPT_LLM_*` 中配置好 key，再跑 `fixtures/scripts` 下的真实评测。评测期望清单已于 2026-09-26 预先提交，时间早于任何真实调用。

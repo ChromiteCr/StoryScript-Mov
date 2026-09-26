@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "storyscript-dev",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["tsx", "apps/server/src/cli.ts", "start", "--dev", "--port", "4700", "--no-open"],
+      "port": 4700
+    }
+  ]
+}

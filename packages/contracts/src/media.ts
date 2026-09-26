@@ -59,8 +59,11 @@ export const SourceRoot = z.object({
 export type SourceRoot = z.infer<typeof SourceRoot>;
 
 export const MediaKind = z.enum(['video', 'audio', 'image', 'other']);
+export type MediaKind = z.infer<typeof MediaKind>;
 export const HashStatus = z.enum(['pending', 'done', 'source_changed', 'failed', 'skipped']);
+export type HashStatus = z.infer<typeof HashStatus>;
 export const Availability = z.enum(['online', 'offline']);
+export type Availability = z.infer<typeof Availability>;
 
 export const MediaAsset = z.object({
   id: Uuid,

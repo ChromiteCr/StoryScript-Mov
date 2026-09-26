@@ -15,7 +15,7 @@
     "web"
   ],
   "scripts": {
-    "dev": "tsx watch --clear-screen=false src/cli.ts start --dev",
+    "dev": "tsx watch --clear-screen=false src/cli.ts start --dev --port 4700",
     "start": "tsx src/cli.ts start",
     "build": "tsdown"
   },

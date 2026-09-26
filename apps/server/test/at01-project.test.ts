@@ -131,10 +131,9 @@ describe('AT-01 project lifecycle (API)', () => {
     expect((await call('/api/v1/projects', { dir, ...input })).status).toBe(201);
     await call('/api/v1/projects/close', {});
     const again = await call('/api/v1/projects', { dir, ...input, name: '另一个' });
-    expect(again.status).toBe(400);
+    expect(again.status).toBe(409);
     const err = ApiError.parse(await again.json()).error;
-    expect(err.code).toBe('VALIDATION_ERROR');
-    expect(err.details).toMatchObject({ reason: 'PROJECT_EXISTS' });
+    expect(err.code).toBe('PROJECT_EXISTS');
   });
 
   test('input validation: relative dir, bad timezone, bad aspect → 400', async () => {

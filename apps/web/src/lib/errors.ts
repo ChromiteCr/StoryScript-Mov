@@ -34,6 +34,7 @@ const COPY: Record<ClientErrorCode, Copy> = {
     title: '这个项目正在别处打开',
     detail: '另一个 StoryScript-Mov 进程持有项目锁（project.lock）。先在那边关闭项目；如果那个进程已经退出，再打开一次即可接管。',
   },
+  PROJECT_EXISTS: { title: '这个目录里已经有项目了', detail: '请用"打开已有项目"打开它，或者换一个空目录新建。' },
   NO_PROJECT_OPEN: { title: '当前没有打开的项目', detail: '回到首页打开或新建一个项目。' },
   SCHEMA_VERSION_UNSUPPORTED: {
     title: '无法打开这个版本的项目',

@@ -15,7 +15,7 @@
   "scripts": {
     "dev": "npm run dev -w storyscript-mov",
     "start": "npm run build -w @storyscript/web && npm run start -w storyscript-mov",
-    "build": "npm run build -w @storyscript/web && npm run build -w storyscript-mov",
+    "build": "npm run build -w @storyscript/web && node scripts/copy-web.mjs && npm run build -w storyscript-mov",
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc -p tsconfig.core.json && tsc -p tsconfig.json && tsc -p apps/web/tsconfig.json",

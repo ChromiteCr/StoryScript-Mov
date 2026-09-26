@@ -97,7 +97,7 @@ export async function createProject(
   mkdirSync(abs, { recursive: true });
   const real = realpathSync(abs);
   if (existsSync(manifestPath(real)) || existsSync(dbPath(real))) {
-    throw new AppError('VALIDATION_ERROR', '该目录已有项目，请直接打开或换一个空目录', 400, { dir: real, reason: 'PROJECT_EXISTS' });
+    throw new AppError('PROJECT_EXISTS', '该目录已有项目，请直接打开或换一个空目录', 409, { dir: real });
   }
 
   const lock = acquireLock(real);

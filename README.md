@@ -21,7 +21,7 @@ npm run dev
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
-| S0 | 2026-09-26 | 项目骨架：npm workspaces、contracts v1、v0.1 规格与计划、洁净室规则 | milestone |
+| S0 | 2026-09-26 | M0 骨架完成：contracts v1、本地 Web 安全外壳（令牌换 cookie、Host/Origin、CSP）、node:sqlite 与迁移、项目锁、CLI（start/doctor/open）、前端外壳、媒体与渲染 spike、打包冒烟 | milestone |
 
 ## 许可证
 

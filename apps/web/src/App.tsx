@@ -23,6 +23,7 @@ import { Button, Spinner } from './components/ui.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
 import { StageOutlineView } from './views/StageOutlineView.tsx';
+import { PlanView } from './views/plan/PlanView.tsx';
 
 // The script workspace is the heaviest page; it loads as its own chunk.
 const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ default: m.ScriptView })));
@@ -175,5 +176,6 @@ function StagePage({ stage, project }: { stage: StageId; project: Project }) {
       </Suspense>
     );
   }
+  if (stage === 'plan') return <PlanView />;
   return <StageOutlineView stage={stage} />;
 }

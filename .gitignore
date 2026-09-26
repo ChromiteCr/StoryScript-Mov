@@ -10,3 +10,7 @@ coverage/
 playwright-report/
 test-results/
 *.tsbuildinfo
+
+# agent worktrees and local artifacts
+.claude/worktrees/
+.look/

@@ -29,6 +29,7 @@ import { PlanView } from './views/plan/PlanView.tsx';
 const ScriptView = lazy(() => import('./views/ScriptView.tsx').then((m) => ({ default: m.ScriptView })));
 const SetView = lazy(() => import('./views/set/SetView.tsx').then((m) => ({ default: m.SetView })));
 const MediaView = lazy(() => import('./views/media/MediaView.tsx').then((m) => ({ default: m.MediaView })));
+const BoardsView = lazy(() => import('./views/boards/BoardsPage.tsx'));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -175,6 +176,19 @@ function StagePage({ stage, project }: { stage: StageId; project: Project }) {
         }
       >
         <ScriptView project={project} />
+      </Suspense>
+    );
+  }
+  if (stage === 'boards') {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex h-full items-center justify-center">
+            <Spinner label="正在加载…" />
+          </div>
+        }
+      >
+        <BoardsView />
       </Suspense>
     );
   }

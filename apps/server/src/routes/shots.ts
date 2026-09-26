@@ -15,6 +15,7 @@ import { listActiveShots, listShotRevisions } from '../db/repos/shot.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
 import { archiveShot, createShot, requireShot, setNarrativeOrder, setRequirement, updateShot } from '../services/shots.ts';
+import { ensuringBoard } from '../services/boards/boards.ts';
 
 /** Shots (FR-03 manual operations). All writes return only after the transaction committed. */
 export function registerShotRoutes(app: Hono, deps: AppDeps): void {
@@ -24,7 +25,8 @@ export function registerShotRoutes(app: Hono, deps: AppDeps): void {
 
   app.post(Api.createShot.path, async (c) => {
     const input = await parseBody(c, CreateShotInput);
-    return respond(c, Shot, createShot(db(), input), 201);
+    const d = db();
+    return respond(c, Shot, d.tx(() => ensuringBoard(d, createShot(d, input))), 201);
   });
 
   // static path before /shots/:id

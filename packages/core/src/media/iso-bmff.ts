@@ -550,7 +550,7 @@ const AAC_PROFILES: Record<number, string> = { 1: 'Main', 2: 'LC', 3: 'SSR', 4: 
  * explicit object type, an LC config may announce SBR (HE-AAC) and PS
  * (HE-AACv2) through the backward-compatible sync extensions 0x2b7 / 0x548.
  */
-function aacProfile(dsi: Uint8Array | null): string | null {
+export function aacProfileFromConfig(dsi: Uint8Array | null): string | null {
   if (!dsi || dsi.length < 2) return null;
   let base: string | null = null;
   try {
@@ -622,7 +622,7 @@ function parseSound(b: Uint8Array, entry: Box, tag: string): CodecInfo {
       name = mp4aCodec(es?.oti ?? null);
       if (name === 'aac') {
         const oti = es?.oti ?? 0x40;
-        profile = oti === 0x66 ? 'Main' : oti === 0x67 ? 'LC' : oti === 0x68 ? 'SSR' : aacProfile(es?.dsi ?? null);
+        profile = oti === 0x66 ? 'Main' : oti === 0x67 ? 'LC' : oti === 0x68 ? 'SSR' : aacProfileFromConfig(es?.dsi ?? null);
       }
       break;
     }
@@ -1097,13 +1097,15 @@ async function findMoov(read: ReadAt, fileSize: number): Promise<TopBox | Failur
   let off = 0;
   for (let n = 1; off + 8 <= fileSize; n++) {
     if (n > MAX_TOP_LEVEL_BOXES) return no('malformed', `more than ${MAX_TOP_LEVEL_BOXES} top-level boxes`);
-    const h = await read(off, Math.min(16, fileSize - off));
+    // 8 bytes, then 8 more only for a 64-bit size, so no payload byte is touched.
+    const h = await read(off, 8);
     if (h.length < 8) return no('malformed', `short read at offset ${off}`);
     let size: number | null = u32(h, 0);
     const type = fourcc(h, 4);
     let hdr = 8;
     if (size === 1) {
-      size = h.length >= 16 ? u64(h, 8) : null;
+      const large = off + 16 <= fileSize ? await read(off + 8, 8) : new Uint8Array(0);
+      size = large.length >= 8 ? u64(large, 0) : null;
       hdr = 16;
     } else if (size === 0) {
       size = fileSize - off;

@@ -1,11 +1,29 @@
 import { cpSync, existsSync, mkdirSync, readdirSync, statSync, writeFileSync } from 'node:fs';
+import { Socket } from 'node:net';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
-import type { BoardView, CoverageResult, HealthInfo, Job, MediaAssetView, Plan, PlanDetail, Project, Shot, ShotMediaLink, Take } from '@storyscript/contracts';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
+import type {
+  BoardView,
+  CoverageResult,
+  DraftDetail,
+  HealthInfo,
+  Job,
+  MediaAssetView,
+  Plan,
+  PlanDetail,
+  Project,
+  Shot,
+  ShotMediaLink,
+  Take,
+} from '@storyscript/contracts';
 import { ProjectExport } from '@storyscript/contracts';
+import { ORDER_PROMPT_VERSION, reorderSchedule } from '@storyscript/core';
+import type { ReplayChat } from '../src/adapters/llm/replay-chat.ts';
+import { DEMO_CLIENT, resolveAi } from '../src/ai/runtime.ts';
 import { demoAssetsAt, readDemoMedia, resolveDemoAssets } from '../src/demo/assets.ts';
 import { DEMO_MEDIA_BUDGET_BYTES } from '../src/demo/media-manifest.ts';
 import { DEMO_MARKER_FILE, DEMO_PROJECT_NAME, DemoSetupError, demoProjectDir, openDemoProject } from '../src/demo/seed.ts';
+import { currentInput, requirePlan } from '../src/services/plan/plans.ts';
 import { BREAKDOWN_REQUEST, makeM3App, waitJob, type M3App } from './helpers/m3-app.ts';
 
 /**
@@ -129,13 +147,17 @@ describe('--demo project', () => {
     const job = await waitJob(app, accepted.data.job_id);
     expect(job).toMatchObject<Partial<Job>>({ status: 'succeeded', remote: false });
 
-    // the order suggestion has no recording for this plan → a clear failure, not a silent fallback
-    const plans = (await app.get<Plan[]>('/api/v1/plans')).data;
-    const sug = await app.post<{ job_id: string }>(`/api/v1/plans/${plans[0]!.id}/suggest-order`);
+    // the order recording pairs setup keys (u1 …) with the seeded order; after a
+    // manual move there is no recording for this plan → a clear failure, not a stale replay
+    const plan = (await app.get<Plan[]>('/api/v1/plans')).data[0]!;
+    const [a, b, ...rest] = plan.result.order;
+    const moved = await app.post<PlanDetail>(`/api/v1/plans/${plan.id}/reorder`, { expected_revision: plan.revision, order: [b, a, ...rest] });
+    expect(moved.status).toBe(200);
+    const sug = await app.post<{ job_id: string }>(`/api/v1/plans/${plan.id}/suggest-order`);
     expect(sug.status).toBe(202);
     const sj = await waitJob(app, sug.data.job_id);
-    expect(sj.status).toBe('failed');
-    expect(sj.error?.message).toMatch(/演示模式/);
+    expect(sj).toMatchObject<Partial<Job>>({ status: 'failed', remote: false });
+    expect(sj.error?.message).toMatch(/演示模式没有这份计划的排序建议录制/);
   });
 
   test('refuses to reset a folder that is not a demo copy', async () => {
@@ -165,6 +187,64 @@ describe('--demo project', () => {
     const noMedia = await openDemoProject(app.handle.deps, { assets: { ...assets, mediaDir: null } });
     expect(noMedia.assets).toBe(0);
     expect(noMedia.warnings.join('\n')).toMatch(/samples\/demo-media/);
+  });
+});
+
+describe('--demo AI 排序建议 (replay)', () => {
+  test('answers from the recording: every setup once, the independent validator accepts it, adopt works, nothing sent', async () => {
+    await openDemoProject(app.handle.deps);
+    const fetchSpy = vi.spyOn(globalThis, 'fetch');
+    const connectSpy = vi.spyOn(Socket.prototype, 'connect');
+    try {
+      const plan = (await app.get<Plan[]>('/api/v1/plans')).data[0]!;
+      expect(plan.status).toBe('approved');
+      const before = plan.result.order;
+
+      const accepted = await app.post<{ job_id: string }>(`/api/v1/plans/${plan.id}/suggest-order`);
+      expect(accepted.status).toBe(202);
+      const job = await waitJob(app, accepted.data.job_id);
+      expect(job).toMatchObject<Partial<Job>>({ kind: 'suggest_order', status: 'succeeded', remote: false, attempts: 1, error: null });
+
+      // the replay answered: the demo is still a replay, not a real model
+      const health = (await app.get<HealthInfo>('/api/v1/health')).data;
+      expect(health.demo).toBe(true);
+      const chat = resolveAi(app.handle.deps).chat as ReplayChat;
+      expect(chat.kind).toBe('replay');
+      expect(chat.requests.at(-1)?.meta?.prompt_version).toBe(ORDER_PROMPT_VERSION);
+
+      const detail = (await app.get<DraftDetail>(`/api/v1/drafts/${job.result_ref}`)).data;
+      expect(detail.draft).toMatchObject({ kind: 'order', status: 'pending', model: DEMO_CLIENT.model, prompt_version: ORDER_PROMPT_VERSION, issues: [] });
+      const parsed = detail.draft.parsed as { setup_order: string[]; rationale: string };
+      expect([...parsed.setup_order].sort()).toEqual([...before].sort());
+      expect(parsed.setup_order).not.toEqual(before); // a real suggestion, not the current order echoed
+      expect(parsed.rationale).toMatch(/^[^a-zA-Z]*$/); // plain Chinese, no setup keys (u1 …)
+      expect(parsed.rationale).not.toMatch(/可行|最优/);
+
+      // the independent schedule validator accepts the suggested order as it is
+      const db = app.handle.projectSession.require().db;
+      const checked = reorderSchedule(currentInput(db, requirePlan(db, plan.id)), parsed.setup_order);
+      expect(checked.outcome).toBe('feasible');
+      expect(checked.violations).toEqual([]);
+      expect(checked.unplaced).toEqual([]);
+      expect(checked.order).toEqual(parsed.setup_order);
+
+      // adopting goes through the same validator; the day can be approved again
+      const adopted = await app.post<PlanDetail>(`/api/v1/plans/${plan.id}/adopt-suggestion`, {
+        expected_revision: plan.revision,
+        draft_id: detail.draft.id,
+      });
+      expect(adopted.status).toBe(200);
+      expect(adopted.data.plan.result.order).toEqual(parsed.setup_order);
+      expect(adopted.data.plan.result.outcome).toBe('feasible');
+      expect(adopted.data.plan.status).toBe('draft');
+      expect(adopted.data.approval).toEqual({ ok: true, blockers: [] });
+
+      expect(fetchSpy).not.toHaveBeenCalled();
+      expect(connectSpy).not.toHaveBeenCalled();
+    } finally {
+      fetchSpy.mockRestore();
+      connectSpy.mockRestore();
+    }
   });
 });
 

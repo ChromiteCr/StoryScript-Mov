@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, test } from 'vitest';
 import type { DraftDetail, Job, PlanDetail, Setup } from '@storyscript/contracts';
+import { orderReplayKey } from '../src/adapters/llm/replay-chat.ts';
 import { startFakeOpenAI, reply, type FakeOpenAI } from './helpers/fake-openai.ts';
 import { TEST_KEY, llmEnv } from './helpers/m3-app.ts';
 import { W, expectOk, makePlanApp, makeResource, makeSetup, makeShot, seedWorld, waitJob, type PlanApp } from './helpers/plan-app.ts';
@@ -148,5 +149,25 @@ describe('suggest-order without a usable model', () => {
     } finally {
       app.close();
     }
+  });
+});
+
+describe('order replay key', () => {
+  test('pairs each positional key with its setup label: the same setups in another order → another recording', () => {
+    const ab = orderReplayKey([
+      { key: 'u1', label: '场1 · 平视' },
+      { key: 'u2', label: '场2 · 俯拍' },
+    ]);
+    const ba = orderReplayKey([
+      { key: 'u1', label: '场2 · 俯拍' },
+      { key: 'u2', label: '场1 · 平视' },
+    ]);
+    expect(ab).not.toBe(ba);
+    // labels compare normalised (spacing, full-width forms), like scene headings
+    const spaced = orderReplayKey([
+      { key: 'u1', label: '场１　·　平视' },
+      { key: 'u2', label: '场2 ·俯拍' },
+    ]);
+    expect(spaced).toBe(ab);
   });
 });

@@ -41,7 +41,9 @@ import { readDemoMedia, resolveDemoAssets, type DemoAssets } from './assets.ts';
  *   AI       entity extraction and per-scene breakdown answered by the replay
  *            recordings (fixtures/replay), applied → shots + automatic boards
  *   plan     cast, two locations and a dolly; setups derived and confirmed;
- *            one shooting day computed and approved (today, project zone)
+ *            one shooting day computed and approved (today, project zone);
+ *            "AI 排序建议" on that day replays 01-bookshop.order-v1.json
+ *            (keyed by the setups in the seeded order, see orderReplayKey)
  *   set      takes, one of them covering two shots, one with a clip name,
  *            one with a hand-written label that matches no shot
  *   media    pre-probed lavfi footage from samples/demo-media (metadata and

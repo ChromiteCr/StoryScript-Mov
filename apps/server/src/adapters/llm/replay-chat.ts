@@ -39,6 +39,19 @@ export function scriptReplayKey(paragraphs: readonly { text: string }[]): string
   return contentHash(['script', paragraphs.map((p) => normalizeForMatch(p.text))]);
 }
 
+/**
+ * Replay key of a shooting-order suggestion: the setups as the prompt lists
+ * them, key and normalised label in prompt order. The model names setups only
+ * by these positional keys (u1 …), so a recording means the same thing only
+ * for the same key → setup pairing; after a reorder the lookup misses instead
+ * of replaying a stale order. Date, times and durations stay out, like the
+ * scene key leaves out everything but the heading, so the demo day replays
+ * on whatever date it is seeded.
+ */
+export function orderReplayKey(setups: readonly { key: string; label: string }[]): string {
+  return contentHash(['order', setups.map((s) => [s.key, normalizeForMatch(s.label)])]);
+}
+
 /** fixtures/replay in a source checkout (or under the current directory). */
 export function resolveReplayDir(): string {
   const candidates = [

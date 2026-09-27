@@ -12,6 +12,7 @@ import {
 } from '@storyscript/core';
 import { MAX_ATTEMPTS, usageRecord } from '../../ai/jobs.ts';
 import { projectContext, resolveAi } from '../../ai/runtime.ts';
+import { orderReplayKey } from '../../adapters/llm/replay-chat.ts';
 import { structuredCall } from '../../adapters/llm/structured.ts';
 import type { DbPort } from '../../db/port.ts';
 import { insertDraft } from '../../db/repos/draft.ts';
@@ -98,8 +99,7 @@ export function orderPromptContext(db: DbPort, plan: Plan, input: ScheduleInput)
   }
 
   const messages = buildOrderMessages({ date: plan.date, timezone: plan.timezone, setups, availability, constraints });
-  const replayKey = contentHash(['order', active.map((s) => s.label).sort()]);
-  return { messages, keys, replayKey };
+  return { messages, keys, replayKey: orderReplayKey(setups) };
 }
 
 /** Lenient pre-normalisation: keys trimmed and lower-cased, a missing rationale becomes "". */

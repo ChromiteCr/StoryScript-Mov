@@ -3,6 +3,7 @@ import { clearRuntime, readRuntime, resolveStateDir } from './config/paths.ts';
 import { runDoctor } from './doctor.ts';
 import { isPidAlive } from './project/lock.ts';
 import { startServer } from './server.ts';
+import { SHUTDOWN_GRACE_MS } from './shutdown.ts';
 import { APP_VERSION } from './version.ts';
 
 const HELP = `StoryScript-Mov ${APP_VERSION} — 本地运行的实拍分镜工作台
@@ -13,6 +14,7 @@ const HELP = `StoryScript-Mov ${APP_VERSION} — 本地运行的实拍分镜工�
   start    启动服务（默认）
   doctor   检查运行环境（Node、SQLite、ffmpeg、状态目录）
   open     在浏览器中重新打开正在运行的服务
+  server   服务器版：多个队伍共用一个网站（storyscript-mov server --help）
 
 选项：
   --port <n>   监听端口（默认随机；只监听 127.0.0.1）
@@ -24,8 +26,6 @@ const HELP = `StoryScript-Mov ${APP_VERSION} — 本地运行的实拍分镜工�
 
 环境变量：STORYSCRIPT_HOME 指定状态目录（默认 ~/.config/storyscript-mov）`;
 
-/** How long a graceful shutdown may take before the process exits anyway. */
-const SHUTDOWN_GRACE_MS = 5_000;
 
 function parsePort(raw: string | undefined): number | null {
   if (raw === undefined) return 0;
@@ -86,6 +86,10 @@ async function cmdStart(opts: { port: number; noOpen: boolean; dev: boolean; dem
 
 /** CLI entry (after the Node version shim). Returns an exit code, or undefined while the server keeps running. */
 export async function main(argv: string[]): Promise<number | undefined> {
+  if (argv[0] === 'server') {
+    const { runServerCli } = await import('./hosted/cli.ts');
+    return runServerCli(argv.slice(1));
+  }
   let parsed;
   try {
     parsed = parseArgs({

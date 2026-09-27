@@ -74,7 +74,8 @@ export function MediaView() {
   const report = useMemo(() => missingReport(coverage.data ?? [], refs), [coverage.data, refs]);
 
   const h = health.data;
-  const ffmpegOk = !h || Boolean(h.ffmpeg.path && h.ffprobe.path);
+  // a hosted server never reads footage, so its ffmpeg does not matter
+  const ffmpegOk = !h || h.hosted || Boolean(h.ffmpeg.path && h.ffprobe.path);
   const projectName = project.data?.name ?? '项目';
   const selectedAsset = selected ? assetMap.get(selected) ?? null : null;
 

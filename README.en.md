@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S1-blue)
+![version](https://img.shields.io/badge/version-S1a-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -54,6 +54,10 @@ cd storyscript-mov
 npm ci
 npm start
 ```
+
+## Server mode (several teams, one site)
+
+For a class, club or short-film festival you can host it on a server: each team signs in with a team code or invite link and gets its own project. Scripts, shots, boards, plans and camera logs live on the server; footage is never uploaded. See [docs/SERVER.md](docs/SERVER.md) (Chinese). Adding local footage folders in server mode is still in progress; the local single-user app is unchanged.
 
 ## Models (bring your own key)
 

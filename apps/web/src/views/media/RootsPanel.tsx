@@ -196,6 +196,7 @@ function AddRootForm({ onAdded, initiallyOpen }: { onAdded: () => void; initiall
 }
 
 export function RootsList({ roots, assets, ffmpegOk }: { roots: readonly SourceRoot[]; assets: readonly MediaAssetView[]; ffmpegOk: boolean }) {
+  const hosted = useHealth().data?.hosted ?? false;
   return (
     <div className="flex flex-col">
       {roots.length === 0 ? (
@@ -207,7 +208,15 @@ export function RootsList({ roots, assets, ffmpegOk }: { roots: readonly SourceR
           ))}
         </ul>
       )}
-      <AddRootForm initiallyOpen={roots.length === 0} onAdded={() => undefined} />
+      {hosted ? (
+        <div className="border-t border-graphite-800 px-3 py-3">
+          <Notice tone="info" title="服务器版：素材留在你的电脑上">
+            服务器不读取也不保存视频文件。从本机添加素材文件夹的功能正在开发，完成前可以先在现场页记录条次和机内文件名。
+          </Notice>
+        </div>
+      ) : (
+        <AddRootForm initiallyOpen={roots.length === 0} onAdded={() => undefined} />
+      )}
     </div>
   );
 }

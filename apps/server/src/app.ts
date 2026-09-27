@@ -1,6 +1,7 @@
 import { Hono } from 'hono';
 import { chooseFolder } from './adapters/platform/choose-folder.ts';
-import type { AppDeps } from './deps.ts';
+import { Api } from '@storyscript/contracts';
+import type { AppDeps, HostedTeam } from './deps.ts';
 import { detectTools, type ToolsInfo } from './diagnostics.ts';
 import { errorBody, onError } from './http/errors.ts';
 import { ProjectSession } from './project/session.ts';
@@ -43,6 +44,12 @@ export interface CreateAppOptions {
   projectSession?: ProjectSession;
   tools?: () => Promise<ToolsInfo>;
   chooseFolder?: () => Promise<string | null>;
+  /**
+   * Hosted server mode: this instance serves one team behind the hosted
+   * gateway (hosted/gateway.ts), which already checked Host, Origin and the
+   * team session; the static frontend is served by the gateway too.
+   */
+  hosted?: HostedTeam;
 }
 
 export interface AppHandle {
@@ -53,6 +60,30 @@ export interface AppHandle {
 }
 
 const isApiPath = (path: string) => path === '/api' || path.startsWith('/api/');
+
+/** What a team on a shared server must not do; registered before the real routes, so they never run. */
+const HOSTED_DENIED: { routes: (keyof typeof Api)[]; message: string }[] = [
+  {
+    routes: ['createProject', 'openProject', 'closeProject'],
+    message: '服务器版中每个队伍固定使用一个项目，不能新建、打开或关闭其他项目。',
+  },
+  { routes: ['chooseFolder'], message: '服务器版不能在服务器上弹出文件夹选择框。' },
+  {
+    routes: ['saveTextProvider', 'testTextProvider', 'saveImageProvider', 'testImageProvider'],
+    message: '服务器版的模型由管理员在服务器上配置，队伍不能修改或测试。',
+  },
+  {
+    routes: ['addRoot', 'scanRoot', 'checkRoot'],
+    message: '服务器版不读取服务器上的目录。素材请在浏览器里从本机添加。',
+  },
+];
+
+function registerHostedLimits(app: Hono): void {
+  for (const { routes, message } of HOSTED_DENIED) {
+    for (const r of routes) app.on(Api[r].method, Api[r].path, (c) => c.json(errorBody('FORBIDDEN', message), 403));
+  }
+  app.get(Api.recentProjects.path, (c) => c.json({ data: [] }));
+}
 
 /**
  * The Hono application: security middleware first (headers → Host → Origin →
@@ -71,6 +102,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
     projectSession,
     tools: opts.tools ?? (() => detectTools()),
     chooseFolder: opts.chooseFolder ?? (() => chooseFolder()),
+    hosted: opts.hosted ?? null,
   };
 
   const app = new Hono();
@@ -80,9 +112,13 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   );
 
   app.use('*', headersMiddleware(opts.mode));
-  app.use('*', hostGuard(opts.port));
-  app.use('*', originGuard(opts.port));
-  app.use('*', authGuard(sessions));
+  if (opts.hosted) {
+    registerHostedLimits(app);
+  } else {
+    app.use('*', hostGuard(opts.port));
+    app.use('*', originGuard(opts.port));
+    app.use('*', authGuard(sessions));
+  }
 
   registerSessionRoutes(app, deps);
   registerHealthRoutes(app, deps);
@@ -106,7 +142,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerRasterRoutes(app, deps);
   registerExportRoutes(app, deps);
 
-  if (opts.mode === 'production') registerStaticRoutes(app, opts.webDir);
+  if (opts.mode === 'production' && !opts.hosted) registerStaticRoutes(app, opts.webDir);
 
   return { app, sessions, projectSession, deps };
 }

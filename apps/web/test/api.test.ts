@@ -15,6 +15,8 @@ const HEALTH: HealthInfo = {
   image_provider_configured: false,
   demo: false,
   home_dir: '/home/someone',
+  hosted: false,
+  team_name: null,
 };
 
 interface Call {

@@ -15,6 +15,8 @@ export type ServerMode = 'production' | 'development';
 
 export const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
 export const SESSION_PATH = '/api/v1/session';
+/** public: tells the sign-in screen what kind of server this is */
+export const SITE_PATH = '/api/v1/site';
 export const UNAUTHORIZED_MESSAGE = '未登录或会话已失效：请使用终端打印的链接，或运行 storyscript-mov open';
 
 export function allowedHosts(port: number): string[] {
@@ -101,7 +103,8 @@ export function authGuard(sessions: SessionStore): MiddlewareHandler {
     const path = c.req.path;
     const isApi = path === '/api' || path.startsWith('/api/');
     const isExchange = c.req.method === 'POST' && path === SESSION_PATH;
-    if (isApi && !isExchange && !sessions.has(getCookie(c, SESSION_COOKIE))) {
+    const isPublic = c.req.method === 'GET' && path === SITE_PATH;
+    if (isApi && !isExchange && !isPublic && !sessions.has(getCookie(c, SESSION_COOKIE))) {
       return c.json(errorBody('UNAUTHORIZED', UNAUTHORIZED_MESSAGE), 401);
     }
     await next();

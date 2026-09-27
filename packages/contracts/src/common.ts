@@ -37,6 +37,8 @@ export const ErrorCode = z.enum([
   'SCHEMA_VERSION_UNSUPPORTED',
   'UNAUTHORIZED',
   'FORBIDDEN',
+  /** hosted server: too many wrong team codes from this address; retry later */
+  'TOO_MANY_ATTEMPTS',
   'INTERNAL',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

@@ -42,10 +42,22 @@ export const HealthInfo = z.object({
   text_provider_configured: z.boolean(),
   image_provider_configured: z.boolean(),
   demo: z.boolean(),
-  /** the user's home directory, so the UI can show paths under it as ~/… */
+  /** the user's home directory, so the UI can show paths under it as ~/… ("" on a hosted server) */
   home_dir: z.string(),
+  /** hosted server mode: one fixed project per team, footage read in the browser, settings by the admin */
+  hosted: z.boolean(),
+  /** hosted: the signed-in team's display name */
+  team_name: z.string().nullable(),
 });
 export type HealthInfo = z.infer<typeof HealthInfo>;
+
+/** Public (no session needed): what kind of server this is, for the sign-in screen. */
+export const SiteInfo = z.object({
+  hosted: z.boolean(),
+  /** hosted: the site name the admin chose; local: "StoryScript-Mov" */
+  name: z.string(),
+});
+export type SiteInfo = z.infer<typeof SiteInfo>;
 
 export const OpenProjectInput = z.object({ dir: z.string().min(1) });
 export type OpenProjectInput = z.infer<typeof OpenProjectInput>;
@@ -424,6 +436,9 @@ export type RasterView = z.infer<typeof RasterView>;
 export const Api = {
   // M0
   session: { method: 'POST', path: '/api/v1/session', input: SessionInput },
+  /** hosted server: sign out (drops this browser's session) */
+  logout: { method: 'DELETE', path: '/api/v1/session' },
+  site: { method: 'GET', path: '/api/v1/site', output: SiteInfo },
   health: { method: 'GET', path: '/api/v1/health', output: HealthInfo },
   recentProjects: { method: 'GET', path: '/api/v1/projects/recent', output: z.array(RecentProject) },
   createProject: { method: 'POST', path: '/api/v1/projects', input: CreateProjectInput, output: Project },

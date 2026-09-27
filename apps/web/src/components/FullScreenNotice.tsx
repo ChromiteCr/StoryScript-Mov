@@ -1,6 +1,8 @@
-import type { ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import { KeyRound, Unplug } from 'lucide-react';
-import { Button, CopyCommand, Spinner } from './ui.tsx';
+import { Button, CopyCommand, Spinner, TextInput } from './ui.tsx';
+import { ErrorNotice } from './ErrorNotice.tsx';
+import { api } from '../lib/api.ts';
 import { describeError } from '../lib/errors.ts';
 
 function Shell({ children }: { children: ReactNode }) {
@@ -20,6 +22,53 @@ export function SessionExpiredScreen() {
         请使用终端打印的链接，或运行 <CopyCommand command="storyscript-mov open" />
       </p>
       <p className="mt-4 text-xs text-graphite-300">本地服务每次启动都会生成新的访问链接。重启之后，旧标签页需要用新链接重新打开。</p>
+    </Shell>
+  );
+}
+
+/** Hosted server: sign in with the team code the admin handed out (an invite link does the same). */
+export function SignInScreen({ siteName, onSignedIn }: { siteName: string; onSignedIn: () => void }) {
+  const [code, setCode] = useState('');
+  const [error, setError] = useState<unknown>(null);
+  const [busy, setBusy] = useState(false);
+  const id = useId();
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      await api.call('session', { token: code.trim() });
+      onSignedIn();
+    } catch (err) {
+      setError(err);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Shell>
+      <KeyRound aria-hidden className="size-5 text-graphite-300" />
+      <h1 className="mt-3 text-lg font-medium">{siteName}</h1>
+      <p className="mt-1.5 text-graphite-300">输入队伍口令登录。口令由管理员发放；打开管理员发的邀请链接也能直接登录。</p>
+      <form onSubmit={(e) => void submit(e)} className="mt-5 flex flex-col gap-2" noValidate>
+        <label htmlFor={id} className="text-xs text-graphite-300">
+          队伍口令
+        </label>
+        <TextInput
+          id={id}
+          value={code}
+          onChange={(e) => setCode(e.target.value)}
+          autoComplete="off"
+          autoCapitalize="characters"
+          spellCheck={false}
+          placeholder="XXXX-XXXX-XXXX-XXXX"
+          className="font-mono tracking-wider"
+        />
+        {error ? <ErrorNotice error={error} context="sign-in" /> : null}
+        <Button type="submit" variant="primary" className="mt-2 self-start" busy={busy} disabled={code.trim() === ''}>
+          登录
+        </Button>
+      </form>
     </Shell>
   );
 }

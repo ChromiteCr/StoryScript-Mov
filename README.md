@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S1-blue)
+![version](https://img.shields.io/badge/version-S1a-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -82,6 +82,18 @@ npm start
 
 > 如果坚持用 Homebrew 的 `node@24`：它是 keg-only 包，默认不会进入 PATH。需要按 `brew info node@24` 的提示把它加进 PATH，否则 `npx` 仍会用旧版 Node。
 
+## 服务器版（多个队伍共用一个网站）
+
+课堂、社团或短片节可以把它部署到一台服务器上：每个队伍用口令或邀请链接登录，各自有一个项目；剧本、镜头表、分镜、计划和场记存在服务器上，视频素材不上传。
+
+```bash
+storyscript-mov server init --data /srv/storyscript --origin https://story.example.com
+storyscript-mov server team add team-1 --name "一组" --data /srv/storyscript
+storyscript-mov server start --data /srv/storyscript
+```
+
+需要 HTTPS 和反向代理（Nginx 或 Caddy）。完整步骤见 [docs/SERVER.md](docs/SERVER.md)。服务器版中，从本机添加素材文件夹的功能还在开发。单机版的用法不变。
+
 ## 配置模型（BYOK）
 
 所有模型调用都走你自己配置的服务。只有你点击 AI 按钮时才会外发，发送前会告诉你发送什么、发往哪里。
@@ -109,6 +121,7 @@ API key 只保存在本机的 `~/.config/storyscript-mov/credentials.json`（权
 | 排期、独立校验、批准闸门、拍摄单、打板卡、场记模板 | | 转录、打板 OCR、剪辑软件交换（OTIO） |
 | 场记、素材只读导入、候选审核、覆盖状态与漏拍清单 | | 3D 取景助手、参考图库 |
 | 分镜 PDF、CSV（防公式注入、整数时间码列）、项目 JSON 导出 | | 桌面安装包、Windows/Linux 验证 |
+| 服务器版：多队伍口令登录、每队一个项目（[部署指南](docs/SERVER.md)） | | 服务器版从本机添加素材文件夹（开发中） |
 
 平台：只在 macOS Apple Silicon 加 Chrome 上验证过；Safari 尽力支持；Linux 预计可用但未验证；Windows 未验证。
 
@@ -149,6 +162,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S1a | 2026-09-27 | 服务器版第一期：`storyscript-mov server` 命令（init、team add/list/reset/remove、start），多个队伍共用一个网站；队伍口令或邀请链接登录（口令只存哈希，登录保持 30 天、服务重启不掉线、输错按地址限速），每队一个独立项目、互相看不到；服务器上禁用新建/打开项目、文件夹选择框、服务器目录素材和模型设置，健康检查不再暴露服务器路径；登录页、标题栏队伍名与退出登录；部署指南 docs/SERVER.md（systemd、Nginx/Caddy、备份与升级）。单机版用法不变 | feat |
 | S1 | 2026-09-27 | v0.1 开发预览版（npm 0.1.0）可以发布：剧本拆镜、宽银幕铅笔分镜、拍摄计划、现场场记、素材回链与漏拍、交付导出六个页面全链路可用，无 key 可走完整流程；`--demo` 随包附带；两条安装路径（npx 发布包、源码 npm ci）与发布包内容规则都有自动化冒烟；README 截图与动图来自演示项目。待办：文本模型实测拆镜评测、铅笔画风变体定稿、真实小拍摄验证 | milestone |
 | S0n | 2026-09-27 | 发布准备（M10）：README 首屏动图、六格铅笔分镜样张和六个工作流页面截图，全部由 `npm run readme:media` 从演示项目生成；发布包补上仓库/主页/问题反馈地址，包内 README 的相对图片与链接改写为 GitHub 地址（npm 页面也能显示）；源码安装写明仓库地址 | feat |
 | S0m5 | 2026-09-27 | 演示项目的"AI 排序建议"可用：回放一份原创的排序录制，经独立校验后可采纳（录制按 setup 键与名称配对，改过顺序后不会错放旧答案）；素材页错误文案并入统一的错误说明表；计划页的 409 提示按被拒的操作命名（批准/重新计算/调整顺序/采纳建议），不再一律写"计划还不能批准" | fix |

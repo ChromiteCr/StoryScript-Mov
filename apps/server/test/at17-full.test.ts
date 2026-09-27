@@ -158,9 +158,12 @@ describe('AT-17 every route: Host, Origin and session cookie', () => {
 
   test.each(GET_ROUTES.map((r) => [routeKey(r), r] as const))('%s: no or forged cookie → 401; rebinding Host → 403; never CORS', async (_name, r) => {
     const anonymous: Record<string, string>[] = [{ host: HOST }, { host: HOST, origin: EVIL }, { host: HOST, cookie: 'ssm_session=forged' }];
+    // the one public GET: the sign-in screen asks what kind of server this is, and learns nothing else
+    const isPublic = r.path === Api.site.path;
     for (const headers of anonymous) {
       const res = await send(r, headers);
-      expect(res.status, `${routeKey(r)} ${JSON.stringify(headers)}`).toBe(401);
+      expect(res.status, `${routeKey(r)} ${JSON.stringify(headers)}`).toBe(isPublic ? 200 : 401);
+      if (isPublic) expect(await res.json()).toEqual({ data: { hosted: false, name: 'StoryScript-Mov' } });
       expect(res.headers.get('access-control-allow-origin')).toBeNull();
     }
     for (const host of [`evil.example:${PORT}`, 'evil.example', `127.0.0.1.nip.io:${PORT}`, `[::1]:${PORT}`, `0.0.0.0:${PORT}`]) {

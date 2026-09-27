@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Project } from '@storyscript/contracts';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './lib/api.ts';
 import {
   bootstrapSession,
@@ -16,7 +16,7 @@ import { isStage, type StageId } from './lib/stages.ts';
 import { resetSaveState } from './lib/saveStatus.ts';
 import { DemoBanner } from './components/DemoBanner.tsx';
 import { ErrorNotice } from './components/ErrorNotice.tsx';
-import { ConnectingScreen, SessionExpiredScreen, UnreachableScreen } from './components/FullScreenNotice.tsx';
+import { ConnectingScreen, SessionExpiredScreen, SignInScreen, UnreachableScreen } from './components/FullScreenNotice.tsx';
 import { PageBar } from './components/PageBar.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
@@ -78,7 +78,17 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  if (expired || state.kind === 'expired') return <SessionExpiredScreen />;
+  if (expired || state.kind === 'expired') {
+    return (
+      <SignedOut
+        onSignedIn={() => {
+          resetSessionExpired();
+          setState({ kind: 'checking' });
+          setAttempt((a) => a + 1);
+        }}
+      />
+    );
+  }
   if (state.kind === 'checking') return <ConnectingScreen />;
   if (state.kind === 'unreachable') {
     return (
@@ -92,6 +102,14 @@ export function App() {
     );
   }
   return <Workbench />;
+}
+
+/** No session: a hosted server asks for the team code; the local app points at the terminal link. */
+function SignedOut({ onSignedIn }: { onSignedIn: () => void }) {
+  const site = useQuery({ queryKey: ['site'], queryFn: ({ signal }) => api.call('site', undefined, { signal }), retry: false });
+  if (site.isPending) return <ConnectingScreen />;
+  if (site.data?.hosted) return <SignInScreen siteName={site.data.name} onSignedIn={onSignedIn} />;
+  return <SessionExpiredScreen />;
 }
 
 function Workbench() {
@@ -141,6 +159,7 @@ function Workbench() {
       <TitleBar
         project={current}
         view={view}
+        team={health.data?.hosted ? (health.data.team_name ?? '') : null}
         switching={close.isPending}
         onSwitchProject={() =>
           close.mutate(undefined, {

@@ -26,6 +26,8 @@ const HEALTH: HealthInfo = {
   image_provider_configured: false,
   demo: true,
   home_dir: '/home/someone',
+  hosted: false,
+  team_name: null,
 };
 
 const json = (status: number, body: unknown) =>

@@ -115,7 +115,13 @@ function General({ health, project }: { health: HealthInfo; project: Project | n
         <InspectorRow label="版本">
           <Num>{health.app_version}</Num>
         </InspectorRow>
-        <InspectorRow label="运行模式">{health.demo ? '演示回放：模型输出来自录制的样例，不是真实调用' : '正常'}</InspectorRow>
+        <InspectorRow label="运行模式">
+          {health.hosted
+            ? `服务器版（${health.team_name ?? '队伍'}）`
+            : health.demo
+              ? '演示回放：模型输出来自录制的样例，不是真实调用'
+              : '正常'}
+        </InspectorRow>
       </InspectorGroup>
     </Inspector>
   );
@@ -125,38 +131,46 @@ function Environment({ health }: { health: HealthInfo }) {
   const missing = missingTools(health);
   return (
     <Inspector>
-      <InspectorGroup
-        title="媒体工具"
-        note={
-          <>
-            <p className="text-graphite-300">素材扫描、元数据读取和海报帧都依赖本机安装的 ffmpeg 与 ffprobe。</p>
-            {missing.length > 0 ? (
-              <Notice tone="warn" title="素材导入不可用" className="mt-2">
-                <p className="leading-7">
-                  没有找到 {missing.join(' 和 ')}。用 Homebrew 安装 <CopyCommand command="brew install ffmpeg" />
-                  （ffprobe 会一起装好），然后重启 storyscript-mov。剧本、分镜、排期、场记和导出不受影响。
-                </p>
-              </Notice>
-            ) : null}
-          </>
-        }
-      >
-        <ToolRow name="ffmpeg" tool={health.ffmpeg} />
-        <ToolRow name="ffprobe" tool={health.ffprobe} />
-        <InspectorRow label="可用编码器">
-          {health.encoders.length > 0 ? (
-            <ul className="flex flex-wrap gap-1">
-              {health.encoders.map((e) => (
-                <li key={e} className="rounded-control border border-graphite-700 bg-graphite-800 px-1.5 font-mono text-xs leading-5">
-                  {e}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <span className="text-graphite-300">未检测到</span>
-          )}
-        </InspectorRow>
-      </InspectorGroup>
+      {health.hosted ? (
+        <div className="px-3 py-3">
+          <Notice tone="info" title="服务器版不在服务器上处理素材">
+            素材留在各自的电脑上，服务器不需要 ffmpeg。
+          </Notice>
+        </div>
+      ) : (
+        <InspectorGroup
+          title="媒体工具"
+          note={
+            <>
+              <p className="text-graphite-300">素材扫描、元数据读取和海报帧都依赖本机安装的 ffmpeg 与 ffprobe。</p>
+              {missing.length > 0 ? (
+                <Notice tone="warn" title="素材导入不可用" className="mt-2">
+                  <p className="leading-7">
+                    没有找到 {missing.join(' 和 ')}。用 Homebrew 安装 <CopyCommand command="brew install ffmpeg" />
+                    （ffprobe 会一起装好），然后重启 storyscript-mov。剧本、分镜、排期、场记和导出不受影响。
+                  </p>
+                </Notice>
+              ) : null}
+            </>
+          }
+        >
+          <ToolRow name="ffmpeg" tool={health.ffmpeg} />
+          <ToolRow name="ffprobe" tool={health.ffprobe} />
+          <InspectorRow label="可用编码器">
+            {health.encoders.length > 0 ? (
+              <ul className="flex flex-wrap gap-1">
+                {health.encoders.map((e) => (
+                  <li key={e} className="rounded-control border border-graphite-700 bg-graphite-800 px-1.5 font-mono text-xs leading-5">
+                    {e}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <span className="text-graphite-300">未检测到</span>
+            )}
+          </InspectorRow>
+        </InspectorGroup>
+      )}
       <InspectorGroup title="运行环境">
         <InspectorRow label="Node">
           <Num>{health.node}</Num>
@@ -170,6 +184,24 @@ function Environment({ health }: { health: HealthInfo }) {
 }
 
 function Models() {
+  const health = useHealth().data;
+  if (health?.hosted) {
+    // teams cannot see, change or test the server's keys
+    const state = (on: boolean) => (on ? '已由管理员配置' : '未配置');
+    return (
+      <Inspector>
+        <div className="px-3 py-3">
+          <Notice tone="info" title="服务器版的模型由管理员在服务器上配置">
+            队伍不能查看或修改 key。没有配置文本模型时，拆镜和实体抽取可以手工完成；没有配置图像模型时，AI 铅笔重绘不可用。
+          </Notice>
+        </div>
+        <InspectorGroup title="当前状态">
+          <InspectorRow label="文本模型">{state(health.text_provider_configured)}</InspectorRow>
+          <InspectorRow label="图像模型">{state(health.image_provider_configured)}</InspectorRow>
+        </InspectorGroup>
+      </Inspector>
+    );
+  }
   return (
     <Inspector>
       <TextProviderPanel />

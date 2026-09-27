@@ -1,5 +1,5 @@
 import type { Hono } from 'hono';
-import { setCookie } from 'hono/cookie';
+import { deleteCookie, getCookie, setCookie } from 'hono/cookie';
 import { Api, SessionInput } from '@storyscript/contracts';
 import type { AppDeps } from '../deps.ts';
 import { AppError } from '../http/errors.ts';
@@ -14,6 +14,13 @@ export function registerSessionRoutes(app: Hono, deps: AppDeps): void {
     const id = deps.sessions.exchange(token);
     if (!id) throw new AppError('UNAUTHORIZED', `令牌无效。${UNAUTHORIZED_MESSAGE}`, 401);
     setCookie(c, SESSION_COOKIE, id, { httpOnly: true, sameSite: 'Strict', path: '/' });
+    return c.body(null, 204);
+  });
+
+  app.delete(Api.logout.path, (c) => {
+    const id = getCookie(c, SESSION_COOKIE);
+    if (id) deps.sessions.revoke(id);
+    deleteCookie(c, SESSION_COOKIE, { path: '/' });
     return c.body(null, 204);
   });
 }

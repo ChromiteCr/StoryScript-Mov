@@ -1,3 +1,4 @@
+import { homedir } from 'node:os';
 import type { Hono } from 'hono';
 import { Api, type HealthInfo } from '@storyscript/contracts';
 import { providerFlags } from '../config/providers.ts';
@@ -19,6 +20,7 @@ export function registerHealthRoutes(app: Hono, deps: AppDeps): void {
       project_open: deps.projectSession.isOpen,
       ...providerFlags(deps.stateDir, deps.env),
       demo: deps.demo,
+      home_dir: homedir(),
     };
     return c.json({ data });
   });

@@ -7,7 +7,8 @@ import { EmptyState } from '../../components/workspace.tsx';
 import { formatProgress, JOB_STATUS_LABEL } from '../../lib/jobs.ts';
 import { FFMPEG_INSTALL_COMMAND } from '../../lib/labels-media.ts';
 import { useAddRoot, useCheckRoot, useJobProgress, useScanRoot, type AssetFilter } from '../../lib/queries-media.ts';
-import { normalizePastedPath } from '../../lib/format.ts';
+import { displayPath, normalizePastedPath } from '../../lib/format.ts';
+import { useHealth } from '../../lib/queries.ts';
 import { MediaErrorNotice } from './shared.tsx';
 
 /**
@@ -63,6 +64,7 @@ function RootRow({ root, assets, scanDisabled }: { root: SourceRoot; assets: rea
   const offline = mine.filter((a) => a.availability === 'offline').length;
   const changed = mine.filter((a) => a.hash_status === 'source_changed').length;
   const progress = running ? formatProgress(job.data?.progress ?? null) : null;
+  const home = useHealth().data?.home_dir;
 
   return (
     <li className="flex flex-col gap-1.5 px-3 py-2.5">
@@ -71,7 +73,7 @@ function RootRow({ root, assets, scanDisabled }: { root: SourceRoot; assets: rea
         <span className="shrink-0 text-xs text-graphite-300 tabular-nums">{mine.length} 个</span>
       </div>
       <p className="truncate font-mono text-xs text-graphite-300" title={root.abs_path}>
-        {root.abs_path}
+        {displayPath(root.abs_path, home)}
       </p>
       {offline > 0 || changed > 0 ? (
         <p className="text-xs text-graphite-100">

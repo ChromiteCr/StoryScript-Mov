@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { basename, formatDuration, isValidTimeZone, normalizePastedPath, parseDurationInput } from '../src/lib/format.ts';
+import { basename, displayPath, formatDuration, isValidTimeZone, normalizePastedPath, parseDurationInput } from '../src/lib/format.ts';
 import { parseView } from '../src/lib/route.ts';
 
 describe('input helpers', () => {
@@ -39,6 +39,21 @@ describe('input helpers', () => {
     expect(isValidTimeZone('UTC')).toBe(true);
     expect(isValidTimeZone('Mars/Olympus')).toBe(false);
     expect(isValidTimeZone('')).toBe(false);
+  });
+});
+
+describe('displayPath', () => {
+  it('shows paths under home as ~/…', () => {
+    expect(displayPath('/Users/someone/Footage/Day1', '/Users/someone')).toBe('~/Footage/Day1');
+    expect(displayPath('/Users/someone', '/Users/someone/')).toBe('~');
+    expect(displayPath('C:\\Users\\someone\\Footage', 'C:\\Users\\someone')).toBe('~\\Footage');
+  });
+
+  it('leaves everything else alone', () => {
+    expect(displayPath('/Users/someone2/Footage', '/Users/someone')).toBe('/Users/someone2/Footage');
+    expect(displayPath('/Volumes/Card A/DCIM', '/Users/someone')).toBe('/Volumes/Card A/DCIM');
+    expect(displayPath('/Users/someone/x', undefined)).toBe('/Users/someone/x');
+    expect(displayPath('/x', '/')).toBe('/x');
   });
 });
 

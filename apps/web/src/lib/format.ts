@@ -34,6 +34,18 @@ export function normalizePastedPath(raw: string): string {
   return p;
 }
 
+/**
+ * A path under the user's home shown as ~/… : shorter, and a shared
+ * screenshot does not carry the account name. Anything else is unchanged.
+ */
+export function displayPath(path: string, home: string | null | undefined): string {
+  const h = (home ?? '').replace(/[\\/]+$/, '');
+  if (!h) return path;
+  if (path === h) return '~';
+  const sep = path.charAt(h.length);
+  return path.startsWith(h) && (sep === '/' || sep === '\\') ? `~${path.slice(h.length)}` : path;
+}
+
 export function isValidTimeZone(tz: string): boolean {
   if (tz.trim() === '') return false;
   try {

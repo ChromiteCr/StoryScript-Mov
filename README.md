@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0m2-blue)
+![version](https://img.shields.io/badge/version-S0m3-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -131,6 +131,7 @@ npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S0m3 | 2026-09-27 | 素材目录路径在界面里把用户主目录显示为 `~`（更短，截图分享时不带账户名；悬停仍可看完整路径） | fix |
 | S0m2 | 2026-09-27 | 发布包带上演示数据（示例剧本、回放记录、6 条演示素材与海报，约 1.7 MB），`npx storyscript-mov --demo` 装好即可打开演示项目；安装冒烟增加从 tgz 启动演示并核对镜头与素材数；发布包内容规则只放行演示所需的文件 | fix |
 | S0m1 | 2026-09-27 | 删除已无入口的"即将提供"占位页，六个工作流页面统一按需加载 | refactor |
 | S0m | 2026-09-27 | 四块闭环闸门（M7）：交付页（分镜/俯视 PDF、拍摄单、打板卡、场记模板、场记与素材、覆盖状态、漏拍报告、镜头表 CSV、项目 JSON 一页列全，逐项标可导出/草案/不可用）；项目 JSON 导出（不含原片、key、绝对路径）；`--demo` 演示项目（旧书，含已批准计划、条次、6 条带海报素材与四种覆盖状态）；无 key 全链路 E2E（剧本→分镜→计划→现场→素材→漏拍→交付）；AT-14 导出、AT-15 连点只写一次与结果未知不重发、AT-16 无 key 手工全流程与取消后晚到结果不写入；从交付页打开的打印预览返回交付页；源码运行时服务较新的前端构建（旧的打包副本不再遮住新构建） | feat |

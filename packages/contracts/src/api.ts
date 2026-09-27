@@ -42,6 +42,8 @@ export const HealthInfo = z.object({
   text_provider_configured: z.boolean(),
   image_provider_configured: z.boolean(),
   demo: z.boolean(),
+  /** the user's home directory, so the UI can show paths under it as ~/… */
+  home_dir: z.string(),
 });
 export type HealthInfo = z.infer<typeof HealthInfo>;
 

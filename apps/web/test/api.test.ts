@@ -14,6 +14,7 @@ const HEALTH: HealthInfo = {
   text_provider_configured: false,
   image_provider_configured: false,
   demo: false,
+  home_dir: '/home/someone',
 };
 
 interface Call {

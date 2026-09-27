@@ -271,6 +271,8 @@ export interface SolveCameraOptions {
   look?: LookPreset | null;
   /** INSERT: centre height (m) of the featured object */
   insert_center_y?: number | null;
+  /** INSERT: view pitch (deg) when the default per-angle pitch does not fit, e.g. an item hung on a wall */
+  insert_pitch_deg?: number | null;
   /** fixed rig height (e.g. vehicle hard-mount); a technique's camera_height_m still wins */
   camera_height_m?: number | null;
 }
@@ -399,7 +401,7 @@ export function solveCamera(
   // INSERT: frame the object perpendicular to the view axis (D = V·f/sensor_h along the axis).
   if (size === 'INSERT') {
     const yc = typeof opts.insert_center_y === 'number' ? opts.insert_center_y : 0.8;
-    const th = (techPitch ?? INSERT_PITCH[angle]) * DEG;
+    const th = (techPitch ?? opts.insert_pitch_deg ?? INSERT_PITCH[angle]) * DEG;
     const D = V / (2 * t);
     const horiz = D * Math.cos(th);
     const cy = yc - D * Math.sin(th);

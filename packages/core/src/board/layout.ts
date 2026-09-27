@@ -11,6 +11,7 @@ import {
   type BoardProp,
   type BoardSubject,
   type BoardTemplate,
+  type CameraAngle,
   type DepthPlane,
   type EnvKind,
   type Facing,
@@ -67,6 +68,13 @@ export const PROP_SIZE: Record<PropKind, { w: number; h: number; d: number }> = 
 };
 
 export const SCREEN_X: Record<ScreenPos, number> = { L: 1 / 3, C: 0.5, R: 2 / 3 };
+
+/** INSERT: the generic item when only a support is listed (on a tabletop / hung on a wall). */
+const INSERT_ITEM = { w: 0.24, h: 0.15, d: 0.18 };
+const INSERT_WALL_ITEM = { w: 0.42, h: 0.32, d: 0.03 };
+const INSERT_WALL_ITEM_BOTTOM = 1.34;
+/** INSERT on a wall: near-level view (the table-top pitches would frame the floor). */
+const WALL_INSERT_PITCH: Record<CameraAngle, number> = { eye: 0, low: 10, high: -20, overhead: -20, dutch: 0 };
 export const DEPTH_FACTOR: Record<DepthPlane, number> = { fg: 0.6, mg: 1.0, bg: 2.0 };
 export const FACING_REL: Record<Facing, number> = {
   camera: 0,
@@ -230,13 +238,17 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   }
 
   // ---- insert target --------------------------------------------------------
+  // The featured object is the first listed prop that is not a support. When
+  // only a table or a wall is listed, the insert is about a small item on it
+  // (a letter on the table, a photo on the wall): a generic item is placed on
+  // the tabletop, or hung at eye height on a wall that faces the lens.
   const isInsert = template === 'insert';
-  const featuredKind: PropKind | null = isInsert
-    ? (shot.props.find((k) => k !== 'table' && k !== 'wall' && k !== 'building' && k !== 'stairs') ?? (shot.props[0] ?? 'box'))
-    : null;
   const hasTable = shot.props.includes('table');
-  const featuredDims = featuredKind === 'box' ? { w: 0.24, h: 0.15, d: 0.18 } : featuredKind ? PROP_SIZE[featuredKind] : null;
-  const supportTop = isInsert && hasTable && featuredKind !== 'table' ? PROP_SIZE.table.h : 0;
+  const listed = shot.props.find((k) => k !== 'table' && k !== 'wall' && k !== 'building' && k !== 'stairs') ?? null;
+  const wallMount = isInsert && !listed && !hasTable && shot.props.includes('wall');
+  const featuredKind: PropKind | null = isInsert ? (listed ?? (hasTable || wallMount ? 'box' : (shot.props[0] ?? 'box'))) : null;
+  const featuredDims = featuredKind === 'box' ? (wallMount ? INSERT_WALL_ITEM : INSERT_ITEM) : featuredKind ? PROP_SIZE[featuredKind] : null;
+  const supportTop = isInsert && hasTable && featuredKind !== 'table' ? PROP_SIZE.table.h : wallMount ? INSERT_WALL_ITEM_BOTTOM : 0;
   const insertCenterY = featuredDims ? supportTop + Math.min(featuredDims.h, 0.6) / 2 : null;
 
   // ---- camera ---------------------------------------------------------------
@@ -248,6 +260,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
     technique: ctx.technique ?? null,
     look: ctx.look,
     insert_center_y: insertCenterY,
+    insert_pitch_deg: wallMount ? WALL_INSERT_PITCH[shot.angle] : null,
     camera_height_m: rigHeight,
   });
   const camera = sol.camera;
@@ -430,6 +443,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   }
 
   const want = shot.props.slice();
+  if (isInsert && featuredKind === 'box' && !want.includes('box')) want.push('box');
   if (template === 'scale' && !want.includes('building') && !want.includes('wall')) want.push('building');
   if (shot.movement === 'vehicle' && !want.includes('car')) want.push('car');
   const counts: Partial<Record<PropKind, number>> = {};
@@ -495,7 +509,10 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
         break;
       }
       case 'wall': {
-        if (template === 'scale') {
+        if (wallMount && featuredDims) {
+          // right behind the hung item, square to the lens
+          props.push(box(nextId(kind), kind, 0, focusZ + featuredDims.d / 2 + dims.d / 2, 0, { w: dims.w, h: wallH, d: dims.d }));
+        } else if (template === 'scale') {
           props.push(box(nextId(kind), kind, focusX - 6, focusZ + 12, 0, { w: 40, h: 22, d: 1.5 }));
         } else if (backZ !== null) {
           props.push(box(nextId(kind), kind, focusX + side * 2.4, focusZ + 1.2, 0, { w: 2.4, h: wallH, d: 0.2 }, 90));

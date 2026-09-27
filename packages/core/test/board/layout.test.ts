@@ -6,6 +6,7 @@ import {
   inferTemplate,
   isEnvProp,
   layoutBoard,
+  project,
   relativeYaw,
   shotFields,
   STANDARD_LOOK,
@@ -202,6 +203,38 @@ describe('templates', () => {
     expect(box.y).toBeCloseTo(table.h, 6);
     expect(box.w).toBeLessThan(0.35);
     expect(spec.camera.pitch_deg).toBeLessThan(0);
+  });
+
+  // An insert that lists only a support is about a small item on it; the
+  // camera must frame that item, not the support's front face or the floor.
+  const itemCentre = (spec: BoardSpec) => {
+    const item = spec.scene.props.find((p) => p.kind === 'box' && !isEnvProp(p))!;
+    return { item, at: project(spec.camera, spec.frame.aspect, [item.x, item.y + item.h / 2, item.z]) };
+  };
+
+  test.each(['eye', 'high', 'low'] as const)('insert with only a table (%s): a small item on the tabletop, centred', (angle) => {
+    const spec = layoutBoard(shotFields({ shot_size: 'INSERT', angle, props: ['table'], action: '桌上摊开的信' }), ctx());
+    const table = spec.scene.props.find((p) => p.kind === 'table')!;
+    const { item, at } = itemCentre(spec);
+    expect(item.y).toBeCloseTo(table.h, 6);
+    expect(item.w).toBeLessThan(0.35);
+    expect(at.visible).toBe(true);
+    expect(Math.abs(at.x - 0.5)).toBeLessThan(0.08);
+    expect(Math.abs(at.y - 0.5)).toBeLessThan(0.15);
+  });
+
+  test.each(['eye', 'high', 'low'] as const)('insert with only a wall (%s): an item hung at eye height, wall right behind it', (angle) => {
+    const spec = layoutBoard(shotFields({ shot_size: 'INSERT', angle, props: ['wall'], action: '墙上的旧照片' }), ctx());
+    const wall = spec.scene.props.find((p) => p.kind === 'wall' && !isEnvProp(p))!;
+    const { item, at } = itemCentre(spec);
+    expect(item.y).toBeGreaterThan(1.2);
+    expect(item.d).toBeLessThan(0.05);
+    expect(wall.yaw_deg).toBe(0);
+    expect(wall.z - wall.d / 2).toBeCloseTo(item.z + item.d / 2, 3);
+    expect(Math.abs(spec.camera.pitch_deg)).toBeLessThanOrEqual(20);
+    expect(at.visible).toBe(true);
+    expect(Math.abs(at.x - 0.5)).toBeLessThan(0.08);
+    expect(Math.abs(at.y - 0.5)).toBeLessThan(0.15);
   });
 
   test('lateral_move: side-on runners, motion arrow l2r, track marker', () => {

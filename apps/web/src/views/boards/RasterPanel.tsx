@@ -53,7 +53,7 @@ export function AiBar({ ai, actions }: { ai: RasterWorkbench; actions: RasterAct
       <div role="group" aria-label="AI 图层" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-panel border border-graphite-700 bg-graphite-800 px-2 py-1.5">
         <span className="flex items-center gap-1.5 text-xs text-graphite-100">
           <Layers aria-hidden className="size-3.5 text-graphite-300" />
-          {compared ? (compared.status === 'adopted' ? '已采用的 AI 图' : '对比候选') : '已采用的 AI 图'}
+          {!compared ? '已采用的 AI 图' : !compared.current ? `v${compared.board_version} 的 AI 图（对比）` : compared.status === 'adopted' ? '已采用的 AI 图' : '对比候选'}
           <span className="text-graphite-300 tabular-nums">{rasterTime(r.created_at)}</span>
         </span>
         <div role="radiogroup" aria-label="AI 图显示方式" className="flex items-center gap-0.5 rounded-control bg-graphite-900 p-0.5">

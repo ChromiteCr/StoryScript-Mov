@@ -18,7 +18,9 @@ export type ErrorContext =
   | 'apply-breakdown'
   | 'provider'
   | 'ai-request'
-  | 'script-import';
+  | 'script-import'
+  /** set log and media library (takes, roots, assets, links, coverage) */
+  | 'media';
 
 type Copy = { title: string; detail: string | null };
 
@@ -89,6 +91,15 @@ const CONTEXT_COPY: Partial<Record<ErrorContext, Partial<Record<ClientErrorCode,
   'script-import': {
     VALIDATION_ERROR: { title: '剧本内容无法导入', detail: null },
   },
+  media: {
+    UNSUPPORTED_MEDIA: {
+      title: '不支持的素材格式',
+      detail: '静态图片或无法读取时长的文件不能关联到镜头；非 H.264 视频需代理（v0.2）才能在浏览器播放。',
+    },
+    SOURCE_OFFLINE: { title: '原片不在线', detail: '存放素材的磁盘可能没有接上。接上后，在素材目录上点"检查"。' },
+    // the media mutations that carry a revision refresh their lists when they settle
+    REVISION_CONFLICT: { title: '内容已在别处被修改', detail: '列表已刷新，请在最新内容上再改一次。' },
+  },
 };
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -144,9 +155,11 @@ export function describeError(error: unknown, context: ErrorContext = 'general')
     error.code === 'VALIDATION_ERROR' ||
     error.code === 'PATH_NOT_ALLOWED' ||
     error.code === 'PROVIDER_ERROR' ||
-    error.code === 'PROVIDER_REFUSED'
+    error.code === 'PROVIDER_REFUSED' ||
+    error.code === 'UNSUPPORTED_MEDIA'
   ) {
-    // Server messages here are specific ("directory is not empty"…); show them.
+    // Server messages here are specific ("directory is not empty", why a clip
+    // cannot be linked or played…); show them.
     detail = error.message ? `${copy.detail ?? ''}${copy.detail ? ' ' : ''}原因：${error.message}` : copy.detail;
   }
   return { title: copy.title, detail, technical: technicalLine(error) };
@@ -173,11 +186,14 @@ const JOB_MESSAGE_CODES: ReadonlySet<string> = new Set([
   'INTERNAL',
 ]);
 
-/** Job.error ({ code, message }) in the same plain-language form. */
-export function describeJobError(error: { code: string; message: string } | null): HumanError | null {
+/**
+ * Job.error ({ code, message }) in the same plain-language form. Most jobs
+ * are model requests ('ai-request'); media scans pass 'media'.
+ */
+export function describeJobError(error: { code: string; message: string } | null, context: ErrorContext = 'ai-request'): HumanError | null {
   if (!error) return null;
   const technical = `${error.code}：${error.message}`;
-  const known = JOB_ONLY_COPY[error.code] ?? (isKnownCode(error.code) ? (CONTEXT_COPY['ai-request']?.[error.code] ?? COPY[error.code]) : null);
+  const known = JOB_ONLY_COPY[error.code] ?? (isKnownCode(error.code) ? (CONTEXT_COPY[context]?.[error.code] ?? COPY[error.code]) : null);
   if (known) {
     const showMessage = JOB_MESSAGE_CODES.has(error.code) && error.message;
     const detail = showMessage ? `${known.detail ?? ''}${known.detail ? ' ' : ''}原因：${error.message}` : known.detail;

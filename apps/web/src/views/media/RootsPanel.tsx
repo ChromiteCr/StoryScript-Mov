@@ -4,6 +4,7 @@ import { FolderPlus, HardDriveDownload, ScanSearch, Search } from 'lucide-react'
 import { FolderField } from '../../components/FolderField.tsx';
 import { Button, CopyCommand, Field, Notice, TextInput } from '../../components/ui.tsx';
 import { EmptyState } from '../../components/workspace.tsx';
+import { describeJobError } from '../../lib/errors.ts';
 import { formatProgress, JOB_STATUS_LABEL } from '../../lib/jobs.ts';
 import { FFMPEG_INSTALL_COMMAND } from '../../lib/labels-media.ts';
 import { useAddRoot, useCheckRoot, useJobProgress, useScanRoot, type AssetFilter } from '../../lib/queries-media.ts';
@@ -38,7 +39,10 @@ interface ScanSummary {
 }
 
 function summaryLine(job: Job): string {
-  if (job.status !== 'succeeded') return job.error?.message ?? JOB_STATUS_LABEL[job.status];
+  if (job.status !== 'succeeded') {
+    const human = job.status === 'cancelled' ? null : describeJobError(job.error, 'media');
+    return human ? [human.title, human.detail].filter(Boolean).join('：') : `扫描${JOB_STATUS_LABEL[job.status]}`;
+  }
   try {
     const s = JSON.parse(job.result_ref ?? '{}') as ScanSummary;
     const parts = [`${s.files ?? 0} 个文件`];

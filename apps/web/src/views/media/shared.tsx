@@ -12,8 +12,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
-import { isApiClientError } from '../../lib/api.ts';
-import { COVERAGE_STATUS_LABEL, MEDIA_ERROR_DETAIL, RATING_LABEL } from '../../lib/labels-media.ts';
+import { COVERAGE_STATUS_LABEL, RATING_LABEL } from '../../lib/labels-media.ts';
 
 /**
  * Small pieces shared by the set and media pages. Status is always icon +
@@ -72,24 +71,9 @@ export function MiniTag({ children, icon: Icon, tone = 'neutral', title }: { chi
 
 export const OfflineIcon = Ban;
 
-/** ErrorNotice plus the server's own message for codes whose shared copy is generic. */
+/** ErrorNotice in the set/media wording (lib/errors.ts, context 'media'). */
 export function MediaErrorNotice({ error, className = '' }: { error: unknown; className?: string }) {
-  const extra = isApiClientError(error) ? MEDIA_ERROR_DETAIL[error.code] : undefined;
-  const serverMessage =
-    isApiClientError(error) && ['UNSUPPORTED_MEDIA', 'SOURCE_OFFLINE', 'FFMPEG_MISSING', 'VALIDATION_ERROR'].includes(error.code) ? error.message : null;
-  return (
-    <div className={`flex flex-col gap-1 ${className}`}>
-      <ErrorNotice error={error} />
-      {extra || (serverMessage && !isValidationShown(error)) ? (
-        <p className="px-1 text-xs text-graphite-300">{[serverMessage && !isValidationShown(error) ? serverMessage : null, extra].filter(Boolean).join(' ')}</p>
-      ) : null}
-    </div>
-  );
-}
-
-/** describeError already prints the server message for these codes. */
-function isValidationShown(error: unknown): boolean {
-  return isApiClientError(error) && (error.code === 'VALIDATION_ERROR' || error.code === 'PATH_NOT_ALLOWED');
+  return <ErrorNotice error={error} context="media" className={className} />;
 }
 
 export function downloadText(name: string, text: string, type = 'text/csv;charset=utf-8'): void {

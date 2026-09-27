@@ -1,7 +1,7 @@
 import { describe, expect, expectTypeOf, it } from 'vitest';
 import type { HealthInfo, Project, RecentProject } from '@storyscript/contracts';
 import { ApiClientError, createApiClient, fillPath, type FetchLike } from '../src/lib/api.ts';
-import { describeError } from '../src/lib/errors.ts';
+import { describeError, describeJobError } from '../src/lib/errors.ts';
 
 const HEALTH: HealthInfo = {
   app_version: '0.0.0',
@@ -239,5 +239,41 @@ describe('describeError', () => {
   it('handles non-client errors', () => {
     const h = describeError(new Error('kaboom'));
     expect(h.technical).toBe('kaboom');
+  });
+});
+
+describe('describeError in the set/media wording', () => {
+  const err = (code: ApiClientError['code'], message = 'm', status = 409) => new ApiClientError({ code, message, status, retryable: false });
+  const han = /\p{Script=Han}/u;
+
+  // every code the old labels-media MEDIA_ERROR_DETAIL table covered
+  it.each(['UNSUPPORTED_MEDIA', 'SOURCE_OFFLINE', 'REVISION_CONFLICT'] as const)('%s has a Chinese title and a media-specific detail', (code) => {
+    const media = describeError(err(code), 'media');
+    expect(media.title).toMatch(han);
+    expect(media.detail).toMatch(han);
+    expect(media.detail).not.toBe(describeError(err(code)).detail);
+  });
+
+  it('keeps the media-specific wording', () => {
+    expect(describeError(err('SOURCE_OFFLINE'), 'media').detail).toContain('在素材目录上点"检查"');
+    expect(describeError(err('REVISION_CONFLICT'), 'media').detail).toBe('列表已刷新，请在最新内容上再改一次。');
+    const unsupported = describeError(err('UNSUPPORTED_MEDIA', '这条素材没有可用的时间范围，不能关联到镜头', 415), 'media');
+    expect(unsupported.title).toBe('不支持的素材格式');
+    expect(unsupported.detail).toContain('需代理（v0.2）');
+    expect(unsupported.detail).toContain('原因：这条素材没有可用的时间范围'); // the server names the specific reason
+  });
+
+  it('does not repeat a server message that only restates the copy', () => {
+    const offline = describeError(err('SOURCE_OFFLINE', '原片不在线：存放素材的磁盘可能没有接上'), 'media');
+    expect(`${offline.title}${offline.detail}`.match(/原片不在线/g)).toHaveLength(1);
+    const ffmpeg = describeError(err('FFMPEG_MISSING', '没有找到 ffmpeg / ffprobe：素材扫描需要它们'), 'media');
+    expect(ffmpeg.title).toBe('没有找到 ffmpeg');
+    expect(ffmpeg.detail).not.toContain('素材扫描需要它们');
+  });
+
+  it('words media job errors the same way; model jobs keep the ai-request wording', () => {
+    const scan = describeJobError({ code: 'SOURCE_OFFLINE', message: '素材目录不在线：磁盘可能没有接上' }, 'media');
+    expect(scan).toMatchObject({ title: '原片不在线', detail: expect.stringContaining('检查') });
+    expect(describeJobError({ code: 'PROVIDER_NOT_CONFIGURED', message: '' })?.title).toBe('还没有配置文本模型');
   });
 });

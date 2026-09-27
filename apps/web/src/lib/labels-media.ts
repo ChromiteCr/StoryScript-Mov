@@ -108,10 +108,3 @@ export const CANDIDATE_ERROR_LABEL: Record<string, string> = {
   INVALID_REGEX: '自定义规则无效',
   NO_SOURCE_RANGE: '素材没有可用的时间范围，未生成关联',
 };
-
-/** Error copy the shared error table does not cover yet (proposed to lead for lib/errors.ts). */
-export const MEDIA_ERROR_DETAIL: Record<string, string> = {
-  UNSUPPORTED_MEDIA: '静态图片或无法读取时长的文件不能关联到镜头；非 H.264 视频需代理（v0.2）才能在浏览器播放。',
-  SOURCE_OFFLINE: '把存放素材的磁盘接上后，在素材目录上点"检查"。',
-  REVISION_CONFLICT: '列表已刷新，请在最新内容上再改一次。',
-};

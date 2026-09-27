@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0m-blue)
+![version](https://img.shields.io/badge/version-S0m1-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -131,6 +131,7 @@ npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S0m1 | 2026-09-27 | 删除已无入口的"即将提供"占位页，六个工作流页面统一按需加载 | refactor |
 | S0m | 2026-09-27 | 四块闭环闸门（M7）：交付页（分镜/俯视 PDF、拍摄单、打板卡、场记模板、场记与素材、覆盖状态、漏拍报告、镜头表 CSV、项目 JSON 一页列全，逐项标可导出/草案/不可用）；项目 JSON 导出（不含原片、key、绝对路径）；`--demo` 演示项目（旧书，含已批准计划、条次、6 条带海报素材与四种覆盖状态）；无 key 全链路 E2E（剧本→分镜→计划→现场→素材→漏拍→交付）；AT-14 导出、AT-15 连点只写一次与结果未知不重发、AT-16 无 key 手工全流程与取消后晚到结果不写入；从交付页打开的打印预览返回交付页；源码运行时服务较新的前端构建（旧的打包副本不再遮住新构建） | feat |
 | S0l2 | 2026-09-27 | 分镜编辑器的箭头拖拽手柄改用核心渲染器同一套箭头定位（删除前端重复的投影与高度推算代码），手柄与画出的箭头不会再各算各的 | refactor |
 | S0l1 | 2026-09-27 | 发给图像服务的提示词不再带任何角色名或别名（画面内换成"人物1/2"，画外换成"画外人物"），重绘确认框里的预览按同一规则替换；站在三分线上的人物归为画面左/右，不再一律写成居中；README 补齐 GitHub 动态徽章与 CI 徽章 | fix |

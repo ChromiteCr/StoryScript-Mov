@@ -22,7 +22,6 @@ import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
-import { StageOutlineView } from './views/StageOutlineView.tsx';
 import { PlanView } from './views/plan/PlanView.tsx';
 
 // The script workspace is the heaviest page; it loads as its own chunk.
@@ -165,60 +164,34 @@ function Workbench() {
   );
 }
 
-/** One workflow stage. Stages after the script page keep their outline until they land. */
+/** One workflow stage; the heavier views load on first visit. */
 function StagePage({ stage, project }: { stage: StageId; project: Project }) {
-  if (stage === 'script') {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <Spinner label="正在加载…" />
-          </div>
-        }
-      >
-        <ScriptView project={project} />
-      </Suspense>
-    );
+  return (
+    <Suspense
+      fallback={
+        <div className="flex h-full items-center justify-center">
+          <Spinner label="正在加载…" />
+        </div>
+      }
+    >
+      <StageView stage={stage} project={project} />
+    </Suspense>
+  );
+}
+
+function StageView({ stage, project }: { stage: StageId; project: Project }) {
+  switch (stage) {
+    case 'script':
+      return <ScriptView project={project} />;
+    case 'boards':
+      return <BoardsView />;
+    case 'plan':
+      return <PlanView />;
+    case 'set':
+      return <SetView />;
+    case 'media':
+      return <MediaView />;
+    case 'deliver':
+      return <DeliverView />;
   }
-  if (stage === 'boards') {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <Spinner label="正在加载…" />
-          </div>
-        }
-      >
-        <BoardsView />
-      </Suspense>
-    );
-  }
-  if (stage === 'plan') return <PlanView />;
-  if (stage === 'set' || stage === 'media') {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <Spinner label="正在加载…" />
-          </div>
-        }
-      >
-        {stage === 'set' ? <SetView /> : <MediaView />}
-      </Suspense>
-    );
-  }
-  if (stage === 'deliver') {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex h-full items-center justify-center">
-            <Spinner label="正在加载…" />
-          </div>
-        }
-      >
-        <DeliverView />
-      </Suspense>
-    );
-  }
-  return <StageOutlineView stage={stage} />;
 }

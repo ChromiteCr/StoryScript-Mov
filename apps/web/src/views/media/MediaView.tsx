@@ -24,6 +24,7 @@ import { CoveragePanel } from './CoveragePanel.tsx';
 import { MissingReportPrint } from './MissingReportPrint.tsx';
 import { coverageCsv, exportName, missingReport, takeMediaCsv } from './model.ts';
 import { FfmpegMissing, LibraryFilters, RootsList } from './RootsPanel.tsx';
+import { ProjectFolderPanel } from './ProjectFolderPanel.tsx';
 import { downloadText } from './shared.tsx';
 
 /**
@@ -117,7 +118,9 @@ export function MediaView() {
         icon={Film}
         title="素材库是空的。"
         description={
-          !ffmpegOk
+          h?.hosted
+            ? '打开项目文件夹后，素材会出现在这里。视频不会上传到服务器。'
+            : !ffmpegOk
             ? (roots.data ?? []).length === 0
               ? '先添加存放素材的文件夹；装好 ffmpeg 并重启后就能扫描。原片只读，不会被复制或改动。'
               : '装好 ffmpeg 并重启后，在素材目录上点"扫描"。'
@@ -136,7 +139,7 @@ export function MediaView() {
         header={header}
         left={
           <div className="flex min-h-0 flex-1 flex-col gap-1">
-            <Panel title="素材目录" padded={false}>
+            <Panel title={h?.hosted ? '项目文件夹' : '素材目录'} padded={false}>
               {roots.isPending ? (
                 <div className="p-3">
                   <Spinner label="正在读取…" />
@@ -145,6 +148,8 @@ export function MediaView() {
                 <div className="p-3">
                   <ErrorNotice error={listError} />
                 </div>
+              ) : h?.hosted ? (
+                <ProjectFolderPanel roots={roots.data ?? []} assets={allAssets.data ?? []} onShowFolder={setQ} />
               ) : (
                 <RootsList roots={roots.data ?? []} assets={allAssets.data ?? []} ffmpegOk={ffmpegOk} />
               )}

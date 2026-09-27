@@ -124,3 +124,42 @@ export const LinkCandidate = z.object({
   conflict: z.boolean(),
 });
 export type LinkCandidate = z.infer<typeof LinkCandidate>;
+
+// ---- S1b/S1c: records a browser keeps inside an opened project folder ----
+// <project folder>/.storyscript-mov/ holds them; footage files are never touched.
+
+export const FOLDER_RECORDS_DIR = '.storyscript-mov';
+
+/** link.json — which site and project this folder's footage belongs to. */
+export const FolderLink = z.object({
+  format: z.literal('storyscript-mov-folder'),
+  version: z.literal(1),
+  /** origin of the hosted site, e.g. https://story.example.com */
+  site: z.string(),
+  project_id: Uuid,
+  /** the server's browser root for this folder */
+  root_id: Uuid,
+  label: z.string(),
+  created_at: IsoTime,
+});
+export type FolderLink = z.infer<typeof FolderLink>;
+
+/** What the browser already learned about one version (size + mtime) of a file. */
+export const MediaIndexEntry = z.object({
+  size: z.number().int().nonnegative(),
+  mtime_ms: z.number(),
+  /** null with probe_failed = the browser cannot read this container */
+  probe: ProbeNormalized.nullable(),
+  probe_failed: z.boolean(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/).nullable(),
+});
+export type MediaIndexEntry = z.infer<typeof MediaIndexEntry>;
+
+/** media-index.json — lets a reopen (or a teammate's copy) skip unchanged files. */
+export const MediaIndex = z.object({
+  format: z.literal('storyscript-mov-media-index'),
+  version: z.literal(1),
+  /** keyed by rel_path ("/"-separated, relative to the project folder) */
+  files: z.record(z.string(), MediaIndexEntry),
+});
+export type MediaIndex = z.infer<typeof MediaIndex>;

@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S1c-blue)
+![version](https://img.shields.io/badge/version-S1d-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -92,7 +92,7 @@ storyscript-mov server team add team-1 --name "一组" --data /srv/storyscript
 storyscript-mov server start --data /srv/storyscript
 ```
 
-需要 HTTPS 和反向代理（Nginx 或 Caddy）。完整步骤见 [docs/SERVER.md](docs/SERVER.md)。服务器版中，从本机添加素材文件夹的功能还在开发。单机版的用法不变。
+需要 HTTPS 和反向代理（Nginx 或 Caddy）。完整步骤见 [docs/SERVER.md](docs/SERVER.md)。队员在素材页「打开项目文件夹…」，浏览器在本机读取素材，只上传素材信息和海报小图。单机版的用法不变。
 
 ## 配置模型（BYOK）
 
@@ -121,7 +121,7 @@ API key 只保存在本机的 `~/.config/storyscript-mov/credentials.json`（权
 | 排期、独立校验、批准闸门、拍摄单、打板卡、场记模板 | | 转录、打板 OCR、剪辑软件交换（OTIO） |
 | 场记、素材只读导入、候选审核、覆盖状态与漏拍清单 | | 3D 取景助手、参考图库 |
 | 分镜 PDF、CSV（防公式注入、整数时间码列）、项目 JSON 导出 | | 桌面安装包、Windows/Linux 验证 |
-| 服务器版：多队伍口令登录、每队一个项目（[部署指南](docs/SERVER.md)） | | 服务器版从本机添加素材文件夹（开发中） |
+| 服务器版：多队伍口令登录、每队一个项目、在浏览器里打开本机项目文件夹（视频不上传）、每队用量上限（[部署指南](docs/SERVER.md)） | | 服务器版在浏览器里读取 MXF/MTS 等格式 |
 
 平台：只在 macOS Apple Silicon 加 Chrome 上验证过；Safari 尽力支持；Linux 预计可用但未验证；Windows 未验证。
 
@@ -162,6 +162,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S1d | 2026-09-28 | 服务器版在浏览器里打开本机项目文件夹：像 VS Code 打开文件夹一样选择放素材的文件夹（A-roll、B-roll 等子文件夹一起列出），浏览器在本机读取 MP4/MOV 信息、截海报、后台算校验值，只上传信息和海报小图；Chrome/Edge 记住最近打开的文件夹，并在文件夹里的 .storyscript-mov 保存记录（队友拿到拷贝可以直接用，不用重新计算）；Safari/Firefox 只读打开；检查器直接播放本机文件；素材页左栏按子文件夹筛选 | feat |
 | S1c | 2026-09-28 | 服务器版每队用量上限：每个队伍 24 小时内的文本模型和图像模型调用各有上限（默认 200 次和 20 次，写在 server.json 的 limits 里），超出后提示「已达到调用次数上限」并给出原因；单机版不限 | feat |
 | S1b | 2026-09-28 | 浏览器读取本机素材的基础：素材目录分为服务器目录、项目文件夹、浏览器目录三类（数据迁移 002，旧项目自动升级）；服务端接收浏览器上报的文件清单、素材信息和海报小图（标志位一律由服务器计算，服务器不读取、不播放浏览器目录里的视频）；核心库新增自己实现的 MP4/MOV 头部解析（与 ffprobe 在 6 条样本上逐字段一致）和流式 SHA-256 | feat |
 | S1a | 2026-09-27 | 服务器版第一期：`storyscript-mov server` 命令（init、team add/list/reset/remove、start），多个队伍共用一个网站；队伍口令或邀请链接登录（口令只存哈希，登录保持 30 天、服务重启不掉线、输错按地址限速），每队一个独立项目、互相看不到；服务器上禁用新建/打开项目、文件夹选择框、服务器目录素材和模型设置，健康检查不再暴露服务器路径；登录页、标题栏队伍名与退出登录；部署指南 docs/SERVER.md（systemd、Nginx/Caddy、备份与升级）。单机版用法不变 | feat |

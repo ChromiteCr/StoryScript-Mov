@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent } from 'react';
+import { useEffect, useId, useState, type FormEvent } from 'react';
 import type { MediaAssetView, ShotMediaLink, Take } from '@storyscript/contracts';
 import { Link2 } from 'lucide-react';
 import { Button, SelectInput } from '../../components/ui.tsx';
@@ -12,10 +12,37 @@ import {
   NEEDS_PROXY_LABEL,
 } from '../../lib/labels-media.ts';
 import { useCreateLink } from '../../lib/queries-media.ts';
+import { localFileFor, useLocalFolder } from '../../lib/local-media/store.ts';
 import type { ShotRef } from '../set/model.ts';
 import { clipSummary, fileName, formatBytes, formatClipDuration, isRangeExact, videoStream } from './model.ts';
 import { LinkActions } from './LinkActions.tsx';
 import { MediaErrorNotice, MiniTag } from './shared.tsx';
+
+/**
+ * A clip on a team member's computer (hosted server): when its project folder
+ * is open in this tab, play the local file (object URL); the server never has it.
+ */
+function useLocalClipUrl(asset: MediaAssetView | null): { url: string | null; here: boolean } {
+  const folder = useLocalFolder();
+  const [url, setUrl] = useState<string | null>(null);
+  const here = Boolean(asset && folder.link && asset.source_root_id === folder.link.root_id);
+  useEffect(() => {
+    setUrl(null);
+    if (!asset || asset.root_kind !== 'browser' || !here) return;
+    let live = true;
+    let made: string | null = null;
+    void localFileFor(asset).then((file) => {
+      if (!live || !file) return;
+      made = URL.createObjectURL(file);
+      setUrl(made);
+    });
+    return () => {
+      live = false;
+      if (made) URL.revokeObjectURL(made);
+    };
+  }, [asset, here]);
+  return { url, here };
+}
 
 /** Right column: facts of the selected clip, playback when direct-play, and its links to shots. */
 
@@ -30,7 +57,10 @@ export function AssetInspector({
   takes: readonly Take[];
   links: readonly ShotMediaLink[];
 }) {
+  const local = useLocalClipUrl(asset);
+  const [playFailed, setPlayFailed] = useState<string | null>(null);
   if (!asset) return <EmptyState title="在素材库里选一条素材。" description="这里显示它的编码、时间码、校验状态，以及关联到的镜头。" />;
+  const playUrl = asset.root_kind === 'browser' ? (asset.kind === 'video' && playFailed !== asset.id ? local.url : null) : asset.stream_url;
   const s = clipSummary(asset);
   const v = videoStream(asset);
   const mine = links.filter((l) => l.media_asset_id === asset.id);
@@ -39,10 +69,11 @@ export function AssetInspector({
   return (
     <Inspector>
       <div className="flex flex-col gap-2 px-3 pt-1 pb-3">
-        {asset.stream_url && asset.availability === 'online' ? (
+        {playUrl && asset.availability === 'online' ? (
           <video
             key={asset.id}
-            src={asset.stream_url}
+            src={playUrl}
+            onError={() => setPlayFailed(asset.id)}
             poster={asset.poster_url ?? undefined}
             controls
             preload="metadata"
@@ -50,6 +81,15 @@ export function AssetInspector({
           />
         ) : asset.poster_url ? (
           <img src={asset.poster_url} alt={`${fileName(asset.rel_path)} 海报帧`} className="aspect-video w-full rounded-control bg-graphite-950 object-contain" />
+        ) : null}
+        {asset.root_kind === 'browser' && !playUrl && asset.availability === 'online' ? (
+          <p className="text-xs leading-5 text-graphite-300">
+            {playFailed === asset.id
+              ? '这个浏览器不能播放这种编码，只能看海报和素材信息。'
+              : local.here
+                ? '本机的项目文件夹里找不到这个文件（可能已移动或改名），重新扫描一次。'
+                : `素材在队员的电脑上：打开项目文件夹「${asset.root_label}」后可以在这里播放。`}
+          </p>
         ) : null}
         <p className="text-sm font-medium break-all text-graphite-100">{fileName(asset.rel_path)}</p>
         <p className="text-xs break-all text-graphite-300">

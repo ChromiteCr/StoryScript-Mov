@@ -190,3 +190,65 @@ export async function importAndBreakdownBookshop(page: Page, base: string): Prom
   await draft.waitFor({ state: 'detached' });
   await scene1.locator('li[id^="shot-"]').first().waitFor();
 }
+
+// ---------------------------------------------------------------------------
+// hosted server (S1a+): a throwaway data dir, teams created through the CLI
+// ---------------------------------------------------------------------------
+
+export interface HostedApp {
+  base: string;
+  /** team slug → one-time team code printed by `server team add` */
+  codes: Record<string, string>;
+  tmp: string;
+  log(): string;
+  stop(): Promise<void>;
+}
+
+function cli(args: string[]): string {
+  const r = spawnSync('npx', ['tsx', 'apps/server/src/cli.ts', ...args], { cwd: ROOT, encoding: 'utf8' });
+  if (r.status !== 0) throw new Error(`storyscript-mov ${args.join(' ')} failed:\n${r.stdout}\n${r.stderr}`);
+  return r.stdout;
+}
+
+export async function startHostedApp(teams: { slug: string; name: string }[]): Promise<HostedApp> {
+  const tmp = await mkdtemp(join(tmpdir(), 'storyscript-hosted-'));
+  const data = join(tmp, 'data');
+  const port = await freePort();
+  const base = `http://127.0.0.1:${port}`;
+  cli(['server', 'init', '--data', data, '--origin', base, '--port', String(port), '--name', '测试短片节']);
+  const codes: Record<string, string> = {};
+  for (const t of teams) {
+    const out = cli(['server', 'team', 'add', t.slug, '--name', t.name, '--data', data]);
+    const code = /口令：(\S+)/.exec(out)?.[1];
+    if (!code) throw new Error(`no team code in:\n${out}`);
+    codes[t.slug] = code;
+  }
+  const server = spawn('npx', ['tsx', 'apps/server/src/cli.ts', 'server', 'start', '--data', data], {
+    cwd: ROOT,
+    env: withoutKeys(process.env),
+    stdio: ['ignore', 'pipe', 'pipe'],
+    detached: true,
+  });
+  let log = '';
+  server.stdout?.on('data', (d: Buffer) => (log += d.toString()));
+  server.stderr?.on('data', (d: Buffer) => (log += d.toString()));
+  const stop = async () => {
+    if (server.exitCode === null && server.signalCode === null) {
+      const exited = new Promise<void>((r) => server.once('exit', () => r()));
+      signalGroup(server, 'SIGINT');
+      if ((await Promise.race([exited, sleep(5000).then(() => 'timeout' as const)])) === 'timeout') {
+        signalGroup(server, 'SIGKILL');
+        await exited;
+      }
+    }
+    await rm(tmp, { recursive: true, force: true });
+  };
+  for (let i = 0; i < 300; i++) {
+    if (server.exitCode !== null) break;
+    const ok = await fetch(`${base}/api/v1/site`).then((r) => r.ok).catch(() => false);
+    if (ok) return { base, codes, tmp, log: () => log, stop };
+    await sleep(100);
+  }
+  await stop();
+  throw new Error(`hosted server did not start:\n${log}`);
+}

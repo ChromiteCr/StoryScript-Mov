@@ -39,6 +39,12 @@ export interface ImagePromptInput {
   style_anchor?: boolean;
   /** the control image carries plain paper margins around the frame */
   padded?: boolean;
+  /**
+   * Every character's name and aliases (entity_id links on-screen subjects).
+   * No character name may reach the image service: on-screen people become
+   * "Person k", anyone else "an off-screen person" — aliases included.
+   */
+  roster?: readonly { entity_id: string | null; name: string; aliases: readonly string[] }[];
 }
 
 export interface ImagePromptPerson {
@@ -199,6 +205,9 @@ function facingBucket(rel: number): ImagePromptPerson['facing'] {
   return right ? 'back_3q_right' : 'back_3q_left';
 }
 
+const SCREEN_LEFT_MAX = 0.42;
+const SCREEN_RIGHT_MIN = 0.58;
+
 /** People whose silhouette box intersects the frame, sorted left → right. */
 export function visiblePeople(spec: BoardSpec): ImagePromptPerson[] {
   const boxes = subjectFrameBoxes(spec);
@@ -213,7 +222,8 @@ export function visiblePeople(spec: BoardSpec): ImagePromptPerson[] {
       cx,
       p: {
         id: s.id,
-        screen: cx < 1 / 3 ? 'left' : cx > 2 / 3 ? 'right' : 'center',
+        // people staged on the thirds lines sit at ≈ 0.33 / 0.67: split at 0.42 / 0.58
+        screen: cx < SCREEN_LEFT_MAX ? 'left' : cx > SCREEN_RIGHT_MIN ? 'right' : 'center',
         depth: bands.get(s.id) ?? 'mg',
         facing: facingBucket(relativeYaw(s, spec.camera)),
         pose: s.pose,
@@ -257,17 +267,35 @@ function angleFromSpec(spec: BoardSpec): CameraAngle {
   return Math.abs(spec.camera.roll_deg) >= 8 ? 'dutch' : 'eye';
 }
 
-/** Replace each visible subject's label with its "Person k" tag, then filter trigger terms. */
-function cleanAction(text: string, spec: BoardSpec, people: ImagePromptPerson[], lang: ImagePromptLang): { text: string; removed: string[] } {
+/**
+ * Replace every character name and alias with a neutral tag — on-screen
+ * subjects become "Person k", everyone else "an off-screen person" — then
+ * filter trigger terms. Longest names first, so "周明远" wins over "周".
+ */
+function cleanAction(
+  text: string,
+  spec: BoardSpec,
+  people: ImagePromptPerson[],
+  lang: ImagePromptLang,
+  roster: ImagePromptInput['roster'] = [],
+): { text: string; removed: string[] } {
   let out = text.replace(/\s+/g, ' ').trim();
   if (!out) return { text: '', removed: [] };
+  const offscreen = lang === 'zh' ? '画外人物' : 'an off-screen person';
   const tags = new Map(people.map((p, i) => [p.id, lang === 'zh' ? `人物${i + 1}` : `Person ${i + 1}`]));
-  // longest label first so "Lin Xiao" is replaced before "Lin"
-  const labelled = spec.scene.subjects
-    .filter((s) => s.label.trim().length > 0)
-    .map((s) => ({ label: s.label.trim(), tag: tags.get(s.id) ?? (lang === 'zh' ? '画外人物' : 'an off-screen person') }))
-    .sort((a, b) => b.label.length - a.label.length || (a.label < b.label ? -1 : 1));
-  for (const { label, tag } of labelled) out = out.split(label).join(tag);
+  const subjectTag = new Map<string, string>(); // entity_id → tag
+  const names: { name: string; tag: string }[] = [];
+  for (const s of spec.scene.subjects) {
+    const tag = tags.get(s.id) ?? offscreen;
+    if (s.entity_id) subjectTag.set(s.entity_id, tag);
+    if (s.label.trim()) names.push({ name: s.label.trim(), tag });
+  }
+  for (const r of roster ?? []) {
+    const tag = (r.entity_id && subjectTag.get(r.entity_id)) || offscreen;
+    for (const n of [r.name, ...r.aliases]) if (n.trim()) names.push({ name: n.trim(), tag });
+  }
+  names.sort((a, b) => b.name.length - a.name.length || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+  for (const { name, tag } of names) out = out.split(name).join(tag);
   const stripped = stripTriggerTerms(out);
   return { text: stripped.text.slice(0, 400), removed: stripped.removed };
 }
@@ -280,7 +308,7 @@ export function buildImagePrompt(input: ImagePromptInput): ImagePrompt {
   const lang: ImagePromptLang = input.lang ?? 'en';
   const spec = input.spec;
   const people = visiblePeople(spec);
-  const action = cleanAction(input.shot?.action ?? '', spec, people, lang);
+  const action = cleanAction(input.shot?.action ?? '', spec, people, lang, input.roster);
   const size = input.shot?.shot_size ?? null;
   const angle = input.shot?.angle ?? angleFromSpec(spec);
   const move: Movement = input.shot?.movement ?? spec.overlay.camera_move ?? 'static';

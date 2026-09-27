@@ -81,6 +81,10 @@ export async function planRedraw(deps: AppDeps, db: DbPort, board: Board, reques
     lang: opts.prompt_lang,
     padded: plan.padded,
     style_anchor: false,
+    // names and aliases never leave the machine (INV: characters become "Person k")
+    roster: db
+      .all<{ id: string; name: string; aliases_json: string }>(`SELECT id, name, aliases_json FROM entity WHERE type = 'character'`)
+      .map((e) => ({ entity_id: e.id, name: e.name, aliases: JSON.parse(e.aliases_json) as string[] })),
   });
   const control = await renderControl(board.spec, opts.control_mode, plan);
   const quality = cfg.dialect === 'openai-edits' ? requested : null;

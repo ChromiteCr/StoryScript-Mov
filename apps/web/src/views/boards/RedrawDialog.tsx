@@ -15,6 +15,7 @@ import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, Notice, Tag } from '../../components/ui.tsx';
 import { boardUrl } from './images.ts';
+import { useEntities } from '../../lib/queries.ts';
 
 /**
  * Confirmation before an AI redraw (SPEC FR-11/FR-12): where the request
@@ -44,7 +45,8 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
 
 export function RedrawDialog({ board, fields, provider, busy, error, onClose, onConfirm }: RedrawDialogProps) {
   const [quality, setQuality] = useState<RedrawQuality>('low');
-  const preview = useMemo(() => redrawPreview(board.spec, fields, provider), [board.spec, fields, provider]);
+  const entities = useEntities().data;
+  const preview = useMemo(() => redrawPreview(board.spec, fields, provider, entities), [board.spec, fields, provider, entities]);
   const controlUrl = useMemo(() => boardUrl({ spec: board.spec, mode: 'pencil', overlay: false, code: null }), [board.spec]);
   const qualityId = useId();
 

@@ -1,4 +1,4 @@
-import type { Board, BoardSpec, BoardView, ImageDialect, ImageProviderView, Job, RasterView, ShotFields } from '@storyscript/contracts';
+import type { Board, BoardSpec, BoardView, Entity, ImageDialect, ImageProviderView, Job, RasterView, ShotFields } from '@storyscript/contracts';
 import { buildImagePrompt, structureHash, type ImagePrompt } from '@storyscript/core';
 import type { InputOf } from './api.ts';
 import { describeJobError } from './errors.ts';
@@ -160,8 +160,16 @@ const SUMMARY_LINE = /^(Camera|People|Setting|Action|镜头|人物|场景|动作
  * the server compiles it again from the saved board, so the dialog labels the
  * full text as a preview.
  */
-export function redrawPreview(spec: BoardSpec, fields: ShotFields | undefined, view: ImageProviderView): RedrawPreview {
-  const prompt = buildImagePrompt({ spec, shot: fields ?? null, lang: 'en', padded: false, style_anchor: false });
+export function redrawPreview(
+  spec: BoardSpec,
+  fields: ShotFields | undefined,
+  view: ImageProviderView,
+  entities: readonly Entity[] = [],
+): RedrawPreview {
+  // Same roster as the server (every character), so names and aliases are
+  // replaced in the preview exactly as in the request.
+  const roster = entities.filter((e) => e.type === 'character').map((e) => ({ entity_id: e.id, name: e.name, aliases: e.aliases }));
+  const prompt = buildImagePrompt({ spec, shot: fields ?? null, lang: 'en', padded: false, style_anchor: false, roster });
   return {
     host: hostOf(view.base_url) ?? view.base_url,
     dialect: view.dialect,

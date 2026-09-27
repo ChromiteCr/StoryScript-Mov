@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { BoardSpec, ImageProviderView, Job, RasterView } from '@storyscript/contracts';
+import type { BoardSpec, Entity, ImageProviderView, Job, RasterView } from '@storyscript/contracts';
 import { ImageDialect, RasterOutcome, RasterStatus } from '@storyscript/contracts';
 import { renderBoard, STANDARD_SHOTS, standardBoard, structureHash } from '@storyscript/core';
 import {
@@ -155,6 +155,23 @@ describe('confirmation preview', () => {
     expect(p.sendsQuality).toBe(false);
     expect(p.preset).toBe('OpenRouter');
     expect(p.warning).toContain('不接收参考图');
+  });
+
+  it('names and aliases in the preview are replaced exactly as the server replaces them', () => {
+    const named: BoardSpec = structuredClone(spec);
+    named.scene.subjects[0]!.entity_id = id(201);
+    named.scene.subjects[0]!.label = '周明远';
+    named.scene.subjects[1]!.entity_id = id(202);
+    named.scene.subjects[1]!.label = '林晓';
+    const entity = (n: number, name: string, aliases: string[]): Entity => ({
+      id: id(n), type: 'character', alias: `c${n - 200}`, name, aliases, origin: 'manual', confirmed: true,
+    });
+    const entities = [entity(201, '周明远', ['老周']), entity(202, '林晓', []), entity(203, '沈映秋', ['外婆'])];
+    const fields = { ...STANDARD_SHOTS.find((s) => s.key === '10-depth-two')!.fields, action: '老周把外婆的信递给林晓' };
+    const p = redrawPreview(named, fields, view, entities);
+    for (const n of ['周明远', '老周', '林晓', '沈映秋', '外婆']) expect(p.prompt.text).not.toContain(n);
+    expect(p.prompt.text).toContain('Person 1');
+    expect(p.prompt.text).toContain('an off-screen person');
   });
 
   it('why the entry is disabled', () => {

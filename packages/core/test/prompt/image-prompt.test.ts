@@ -55,8 +55,8 @@ describe('image prompt skeleton', () => {
     const two = buildImagePrompt({ spec: board('10-depth-two'), shot: shot('10-depth-two').fields });
     expect(two.text).toContain('People: exactly 2 people.');
     expect(two.text).toContain('Person 1: screen left, foreground, three-quarter view turned to screen right, standing');
-    expect(two.text).toContain('Person 2: screen center, background, facing the camera, standing');
-    expect(two.people.map((p) => p.screen)).toEqual(['left', 'center']);
+    expect(two.text).toContain('Person 2: screen right, background, facing the camera, standing');
+    expect(two.people.map((p) => p.screen)).toEqual(['left', 'right']);
 
     const one = buildImagePrompt({ spec: board('05-mcu'), shot: shot('05-mcu').fields });
     expect(one.text).toContain('People: exactly 1 person.');
@@ -195,5 +195,44 @@ describe('control and post-processing SVG', () => {
     expect(svg).toContain('<g transform="scale(10.952381 10.966809) translate(0 -0.9)">');
     expect(svg).not.toMatch(/style=|<style/);
     expect(() => rasterPostSvg({ href: 'https://example.invalid/x.png', width: 1, height: 1, crop: { x0: 0, y0: 0, x1: 1, y1: 1 }, out: { W: 10, H: 10 } })).toThrow();
+  });
+});
+
+describe('no character name or alias reaches the image service', () => {
+  const E1 = '11111111-1111-4111-8111-111111111111';
+  const E2 = '22222222-2222-4222-8222-222222222222';
+  const E3 = '33333333-3333-4333-8333-333333333333';
+  const spec = (): BoardSpec => {
+    const s = structuredClone(board('10-depth-two'));
+    s.scene.subjects[0]!.entity_id = E1;
+    s.scene.subjects[0]!.label = '周明远';
+    s.scene.subjects[1]!.entity_id = E2;
+    s.scene.subjects[1]!.label = '林晓';
+    return s;
+  };
+  const roster = [
+    { entity_id: E1, name: '周明远', aliases: ['老周'] },
+    { entity_id: E2, name: '林晓', aliases: [] },
+    { entity_id: E3, name: '沈映秋', aliases: ['外婆'] },
+  ];
+
+  test('on-screen names and aliases become Person k; off-screen characters become an off-screen person', () => {
+    for (const lang of ['en', 'zh'] as const) {
+      const p = buildImagePrompt({
+        spec: spec(),
+        shot: { shot_size: 'MS', angle: 'eye', movement: 'static', action: '老周把日记本推给林晓，想起了外婆沈映秋' },
+        lang,
+        roster,
+      });
+      for (const n of ['周明远', '老周', '林晓', '沈映秋', '外婆']) expect(p.text, `${lang}: ${n}`).not.toContain(n);
+      expect(p.text).toContain(lang === 'zh' ? '人物1' : 'Person 1');
+      expect(p.text).toContain(lang === 'zh' ? '画外人物' : 'an off-screen person');
+    }
+  });
+
+  test('people staged on the thirds lines are described as left / right, not center', () => {
+    const p = buildImagePrompt({ spec: spec(), shot: null, lang: 'en', roster });
+    expect(p.text).toMatch(/screen left/i);
+    expect(p.text).toMatch(/screen right/i);
   });
 });

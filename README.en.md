@@ -1,5 +1,12 @@
 # StoryScript-Mov
 
+![version](https://img.shields.io/badge/version-S0l1-blue)
+![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
+![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
+![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
+![license](https://img.shields.io/badge/license-MIT-green)
+![build](https://img.shields.io/github/actions/workflow/status/ChromiteCr/StoryScript-Mov/ci.yml?branch=main)
+
 An open-source, **local-first storyboard workbench for live-action shoots**. It breaks a script into a lockable, source-linked shot list, and automatically draws each shot as a widescreen pencil storyboard with real lens and camera-height semantics — no API key required. It also builds a validated shooting order, lets you log takes quickly on set, and links the footage back to the same shot IDs so you can see coverage gaps at a glance.
 
 > **v0.1 developer preview.** Not yet validated on a real shoot. Chinese is the primary UI and documentation language; see [README.md](README.md) for the full Chinese guide and version history.

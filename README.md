@@ -1,7 +1,11 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0k-blue)
+![version](https://img.shields.io/badge/version-S0l1-blue)
+![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
+![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
+![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
 ![license](https://img.shields.io/badge/license-MIT-green)
+![build](https://img.shields.io/github/actions/workflow/status/ChromiteCr/StoryScript-Mov/ci.yml?branch=main)
 
 开源、在本地运行的**实拍分镜工作台**。
 
@@ -127,6 +131,8 @@ npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S0l1 | 2026-09-27 | 发给图像服务的提示词不再带任何角色名或别名（画面内换成"人物1/2"，画外换成"画外人物"），重绘确认框里的预览按同一规则替换；站在三分线上的人物归为画面左/右，不再一律写成居中；README 补齐 GitHub 动态徽章与 CI 徽章 | fix |
+| S0l | 2026-09-27 | AI 铅笔重绘前端（实验）：设置页图像服务配置（自动识别写法、未验证提示、兼容地址警示）、重绘确认框（显示将发送的提示词与控制图）、候选列表与洋葱皮对照、采用/放弃、"AI 生成"角标，打印与单格 PNG 使用已采用的重绘图 | feat |
 | S0k | 2026-09-27 | 加固：任务队列分 LLM/图像/本地三条通道、付费请求结果未知直接记为 outcome_unknown、重启后本地任务（扫描/探测/哈希/海报）自动续跑、AT-17 全量安全回归（全部写接口的跨源与无 cookie、路径逃逸、SVG/提示注入、key 不泄露）、安装冒烟（npx 与源码两条路径，需 STORYSCRIPT_SMOKE=1）、发布包内容检查、SECURITY.md；性能预算测试默认留 3 倍余量（STORYSCRIPT_PERF_STRICT=1 严格） | feat |
 | S0j1 | 2026-09-26 | 分镜标注改为纸片底衬（深色剪影上不再发糊）；打印根容器白底；分镜查询随项目切换清空；截图脚本入口 | fix |
 | S0j | 2026-09-26 | AI 铅笔重绘（服务端，实验）：按主机自动识别写法（OpenAI 标准 edits、Seedream/OpenRouter 预设，Gemini/百炼兼容地址主动警示）、控制图与提示词骨架（触发词过滤）、只对 429 重试、超时不重发、取消后晚到只作候选、去色与纸纹后处理、人工采用不改结构层；全部预设标"未验证" | feat |

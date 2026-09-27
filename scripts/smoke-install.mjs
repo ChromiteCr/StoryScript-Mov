@@ -351,6 +351,12 @@ async function packPath({ tmp, cache, registry, skipBuild }) {
     bootMs: 5 * 60_000,
     demo: true,
   });
+  // the bundle inlines the version at build time: a stale dist/ would ship the old number
+  const want = JSON.parse(readFileSync(join(SERVER_DIR, 'package.json'), 'utf8')).version;
+  check(info.version === want, `包版本 ${info.version} 与 apps/server/package.json 的 ${want} 不一致`);
+  for (const [label, s] of [['npx <tgz> start', server], ['npx <tgz> --demo', demo]]) {
+    check(s.app_version === want, `${label}：服务报告版本 ${s.app_version}，包版本是 ${want}（dist/ 过期？先 npm run build）`);
+  }
   return { tarball: info.filename, size: info.size, unpacked_size: info.unpackedSize, files, doctor_exit: 0, doctor: doctor.trim().split('\n'), server, demo };
 }
 
@@ -376,6 +382,8 @@ async function sourcePath({ tmp, cache, registry }) {
     port,
     bootMs: 5 * 60_000,
   });
+  const want = JSON.parse(readFileSync(join(src, 'apps', 'server', 'package.json'), 'utf8')).version;
+  check(server.app_version === want, `npm start：服务报告版本 ${server.app_version}，源码 package.json 是 ${want}`);
   return { commit: head, dirty_worktree: Boolean(dirty), server };
 }
 

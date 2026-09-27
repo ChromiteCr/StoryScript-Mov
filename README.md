@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0n-blue)
+![version](https://img.shields.io/badge/version-S1-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -149,6 +149,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S1 | 2026-09-27 | v0.1 开发预览版（npm 0.1.0）可以发布：剧本拆镜、宽银幕铅笔分镜、拍摄计划、现场场记、素材回链与漏拍、交付导出六个页面全链路可用，无 key 可走完整流程；`--demo` 随包附带；两条安装路径（npx 发布包、源码 npm ci）与发布包内容规则都有自动化冒烟；README 截图与动图来自演示项目。待办：文本模型实测拆镜评测、铅笔画风变体定稿、真实小拍摄验证 | milestone |
 | S0n | 2026-09-27 | 发布准备（M10）：README 首屏动图、六格铅笔分镜样张和六个工作流页面截图，全部由 `npm run readme:media` 从演示项目生成；发布包补上仓库/主页/问题反馈地址，包内 README 的相对图片与链接改写为 GitHub 地址（npm 页面也能显示）；源码安装写明仓库地址 | feat |
 | S0m5 | 2026-09-27 | 演示项目的"AI 排序建议"可用：回放一份原创的排序录制，经独立校验后可采纳（录制按 setup 键与名称配对，改过顺序后不会错放旧答案）；素材页错误文案并入统一的错误说明表；计划页的 409 提示按被拒的操作命名（批准/重新计算/调整顺序/采纳建议），不再一律写"计划还不能批准" | fix |
 | S0m4 | 2026-09-27 | 修复只写了"桌子"或"墙"的插入镜头出图：以前把桌子/墙本身当主体、瞄向离地 0.3 米处，画面只剩桌子正面或地板排线；现在在桌面上放一件小物、或在正对镜头的墙上挂一件平面物（视线接近水平），物件落在画面中央 | fix |

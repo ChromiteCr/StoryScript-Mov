@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S1e-blue)
+![version](https://img.shields.io/badge/version-S2-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -163,6 +163,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S2 | 2026-09-28 | 服务器版与项目文件夹（npm 0.2.0）：一台服务器给多个队伍用，口令或邀请链接登录，每队一个项目、互相隔离、有调用上限；队员在浏览器里打开本机项目文件夹，视频不上传，只传素材信息和海报小图，本机直接播放；单机版和服务器版都以「打开项目文件夹」为中心，项目数据在 .storyscript-mov；部署指南见 docs/SERVER.md。单机版 npx 用法不变 | milestone |
 | S1e | 2026-09-28 | 单机版像 VS Code 一样打开项目文件夹：首页「打开文件夹…」，还不是项目的文件夹可以直接在那里新建项目；项目数据改存到文件夹里的 .storyscript-mov，素材放在 A-roll、B-roll 等子文件夹，项目文件夹本身就是素材目录，打开项目时自动增量扫描，整个文件夹移动后素材仍然在线；旧版本的项目目录照常打开；外部存储卡仍可登记为「外部素材目录」；视频只读规则改为「只写 .storyscript-mov」 | feat |
 | S1d | 2026-09-28 | 服务器版在浏览器里打开本机项目文件夹：像 VS Code 打开文件夹一样选择放素材的文件夹（A-roll、B-roll 等子文件夹一起列出），浏览器在本机读取 MP4/MOV 信息、截海报、后台算校验值，只上传信息和海报小图；Chrome/Edge 记住最近打开的文件夹，并在文件夹里的 .storyscript-mov 保存记录（队友拿到拷贝可以直接用，不用重新计算）；Safari/Firefox 只读打开；检查器直接播放本机文件；素材页左栏按子文件夹筛选 | feat |
 | S1c | 2026-09-28 | 服务器版每队用量上限：每个队伍 24 小时内的文本模型和图像模型调用各有上限（默认 200 次和 20 次，写在 server.json 的 limits 里），超出后提示「已达到调用次数上限」并给出原因；单机版不限 | feat |

@@ -32,7 +32,6 @@ import {
  */
 
 type V2 = readonly [number, number];
-type V3 = readonly [number, number, number];
 
 const round = (v: number, d = 4): number => {
   const k = 10 ** d;

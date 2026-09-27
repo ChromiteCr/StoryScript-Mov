@@ -69,7 +69,12 @@ export interface RunningApp {
   stop(): Promise<void>;
 }
 
-export async function startApp(opts: { demo?: boolean } = {}): Promise<RunningApp> {
+/** The server environment without any model credentials (the no-key flows). */
+function withoutKeys(env: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  return Object.fromEntries(Object.entries(env).filter(([k]) => !/^STORYSCRIPT_(LLM|IMAGE)_/.test(k)));
+}
+
+export async function startApp(opts: { demo?: boolean; noKey?: boolean } = {}): Promise<RunningApp> {
   const tmp = await mkdtemp(join(tmpdir(), 'storyscript-e2e-'));
   const home = join(tmp, 'home');
   const projectsDir = join(tmp, 'projects');
@@ -80,7 +85,7 @@ export async function startApp(opts: { demo?: boolean } = {}): Promise<RunningAp
   if (opts.demo) args.push('--demo');
   const server = spawn('npx', args, {
     cwd: ROOT,
-    env: { ...process.env, STORYSCRIPT_HOME: home },
+    env: { ...(opts.noKey ? withoutKeys(process.env) : process.env), STORYSCRIPT_HOME: home },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });

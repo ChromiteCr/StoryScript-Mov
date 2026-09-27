@@ -17,6 +17,9 @@ import { normalizeProbe } from './probe-normalize.ts';
  * while scanning the top level, then the whole `moov`; media payload is never
  * read except the 4-byte frame counter of a tmcd track and the first 26 bytes
  * of a 4444-class ProRes frame. Never throws.
+ *
+ * Not covered: fragmented MP4 (samples described only in `moof` boxes) comes
+ * back with null durations and frame rates; compressed `cmov` headers fail.
  */
 
 /** Reads `length` bytes at `offset`; may return fewer bytes at end of file. */

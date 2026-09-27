@@ -171,7 +171,7 @@ export function useCreatePlan() {
   });
 }
 
-type PlanWrite =
+export type PlanWrite =
   | { kind: 'recompute'; id: string; revision: number }
   | { kind: 'reorder'; id: string; revision: number; order: string[] }
   | { kind: 'approve'; id: string; revision: number }

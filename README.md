@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0m4-blue)
+![version](https://img.shields.io/badge/version-S0m5-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -131,6 +131,7 @@ npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S0m5 | 2026-09-27 | 演示项目的"AI 排序建议"可用：回放一份原创的排序录制，经独立校验后可采纳（录制按 setup 键与名称配对，改过顺序后不会错放旧答案）；素材页错误文案并入统一的错误说明表；计划页的 409 提示按被拒的操作命名（批准/重新计算/调整顺序/采纳建议），不再一律写"计划还不能批准" | fix |
 | S0m4 | 2026-09-27 | 修复只写了"桌子"或"墙"的插入镜头出图：以前把桌子/墙本身当主体、瞄向离地 0.3 米处，画面只剩桌子正面或地板排线；现在在桌面上放一件小物、或在正对镜头的墙上挂一件平面物（视线接近水平），物件落在画面中央 | fix |
 | S0m3 | 2026-09-27 | 素材目录路径在界面里把用户主目录显示为 `~`（更短，截图分享时不带账户名；悬停仍可看完整路径） | fix |
 | S0m2 | 2026-09-27 | 发布包带上演示数据（示例剧本、回放记录、6 条演示素材与海报，约 1.7 MB），`npx storyscript-mov --demo` 装好即可打开演示项目；安装冒烟增加从 tgz 启动演示并核对镜头与素材数；发布包内容规则只放行演示所需的文件 | fix |

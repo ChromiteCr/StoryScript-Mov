@@ -221,6 +221,9 @@ export function approvalState(status: 'draft' | 'approved', stale: boolean): { l
 /** Error copy this page needs beyond lib/errors (proposed for the shared table). */
 export const PLAN_ERROR_COPY = {
   approveBlocked: '计划还不能批准',
+  recomputeBlocked: '现在不能重新计算',
+  reorderBlocked: '这个顺序不能采用',
+  adoptBlocked: '这条排序建议不能采纳',
   resourceInUse: '这项资源还在被 setup 使用',
   aiNotConfigured: 'AI 排序建议需要文本模型，尚未配置：在“设置 → 模型”里填写后可用。手动上移/下移不受影响。',
 } as const;

@@ -8,7 +8,7 @@ import { isApiClientError } from '../../lib/api.ts';
 import { JOB_STATUS_LABEL } from '../../lib/jobs.ts';
 import { OUTCOME, PLAN_ERROR_COPY, UNPLACED_TEXT, approvalState, blockerLines, contradictionText } from '../../lib/labels-plan.ts';
 import { callSheetCsv, exportFileName, takeLogCsv, type PlanLookup } from '../../lib/print-plan.ts';
-import { useDraft, useJob, usePlanWrite, useProviders, useSuggestOrder } from '../../lib/queries-plan.ts';
+import { useDraft, useJob, usePlanWrite, useProviders, useSuggestOrder, type PlanWrite } from '../../lib/queries-plan.ts';
 import { CheckRow, MenuButton, MenuItem, Modal, StatusPill } from './controls.tsx';
 import type { PlanData } from './data.ts';
 import { CallSheetHeader, CallSheetTable, UnplacedList, type PrintMode } from './PrintViews.tsx';
@@ -188,7 +188,7 @@ function DayBody({
               )}
             </div>
             <p className="text-sm text-graphite-300">{outcome.explain}</p>
-            {write.isError ? <WriteError error={write.error} /> : null}
+            {write.isError ? <WriteError error={write.error} kind={write.variables?.kind} /> : null}
           </section>
 
           {stale ? (
@@ -262,9 +262,17 @@ function DayBody({
   );
 }
 
-function WriteError({ error }: { error: unknown }) {
-  if (isApiClientError(error) && error.status === 409 && error.code === 'VALIDATION_ERROR') {
-    return <Notice tone="danger" title={PLAN_ERROR_COPY.approveBlocked}>{error.message}</Notice>;
+const WRITE_BLOCKED_TITLE: Record<PlanWrite['kind'], string> = {
+  approve: PLAN_ERROR_COPY.approveBlocked,
+  recompute: PLAN_ERROR_COPY.recomputeBlocked,
+  reorder: PLAN_ERROR_COPY.reorderBlocked,
+  adopt: PLAN_ERROR_COPY.adoptBlocked,
+};
+
+/** A 409 state error names the action that was refused (approve, recompute, reorder, adopt). */
+function WriteError({ error, kind }: { error: unknown; kind: PlanWrite['kind'] | undefined }) {
+  if (isApiClientError(error) && error.status === 409 && error.code === 'VALIDATION_ERROR' && kind) {
+    return <Notice tone="danger" title={WRITE_BLOCKED_TITLE[kind]}>{error.message}</Notice>;
   }
   return <ErrorNotice error={error} />;
 }

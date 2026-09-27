@@ -30,6 +30,7 @@ export const SERVER_HELP = `storyscript-mov server — 服务器版（多个队�
   --data 也可以用环境变量 STORYSCRIPT_DATA 指定。
   公开地址只写协议和域名，例如 https://story.example.com（不支持子路径）。
   修改队伍前请先停止服务；模型 key 用环境变量 STORYSCRIPT_LLM_* / STORYSCRIPT_IMAGE_* 配置。
+  每队 24 小时内的模型调用上限在 server.json 的 limits 里（默认文本 200 次、图像 20 次）。
   代号：小写字母、数字和连字符，例如 team-1。`;
 
 function fail(message: string): number {
@@ -115,6 +116,7 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
       listen_host: values.listen ?? '127.0.0.1',
       port,
       timezone,
+      limits: { llm_jobs_per_day: 200, image_jobs_per_day: 20 },
       teams: [],
     };
     writeHostedConfig(dataDir, config);

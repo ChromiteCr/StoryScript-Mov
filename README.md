@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S1a-blue)
+![version](https://img.shields.io/badge/version-S1c-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -162,6 +162,8 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S1c | 2026-09-28 | 服务器版每队用量上限：每个队伍 24 小时内的文本模型和图像模型调用各有上限（默认 200 次和 20 次，写在 server.json 的 limits 里），超出后提示「已达到调用次数上限」并给出原因；单机版不限 | feat |
+| S1b | 2026-09-28 | 浏览器读取本机素材的基础：素材目录分为服务器目录、项目文件夹、浏览器目录三类（数据迁移 002，旧项目自动升级）；服务端接收浏览器上报的文件清单、素材信息和海报小图（标志位一律由服务器计算，服务器不读取、不播放浏览器目录里的视频）；核心库新增自己实现的 MP4/MOV 头部解析（与 ffprobe 在 6 条样本上逐字段一致）和流式 SHA-256 | feat |
 | S1a | 2026-09-27 | 服务器版第一期：`storyscript-mov server` 命令（init、team add/list/reset/remove、start），多个队伍共用一个网站；队伍口令或邀请链接登录（口令只存哈希，登录保持 30 天、服务重启不掉线、输错按地址限速），每队一个独立项目、互相看不到；服务器上禁用新建/打开项目、文件夹选择框、服务器目录素材和模型设置，健康检查不再暴露服务器路径；登录页、标题栏队伍名与退出登录；部署指南 docs/SERVER.md（systemd、Nginx/Caddy、备份与升级）。单机版用法不变 | feat |
 | S1 | 2026-09-27 | v0.1 开发预览版（npm 0.1.0）可以发布：剧本拆镜、宽银幕铅笔分镜、拍摄计划、现场场记、素材回链与漏拍、交付导出六个页面全链路可用，无 key 可走完整流程；`--demo` 随包附带；两条安装路径（npx 发布包、源码 npm ci）与发布包内容规则都有自动化冒烟；README 截图与动图来自演示项目。待办：文本模型实测拆镜评测、铅笔画风变体定稿、真实小拍摄验证 | milestone |
 | S0n | 2026-09-27 | 发布准备（M10）：README 首屏动图、六格铅笔分镜样张和六个工作流页面截图，全部由 `npm run readme:media` 从演示项目生成；发布包补上仓库/主页/问题反馈地址，包内 README 的相对图片与链接改写为 GitHub 地址（npm 页面也能显示）；源码安装写明仓库地址 | feat |

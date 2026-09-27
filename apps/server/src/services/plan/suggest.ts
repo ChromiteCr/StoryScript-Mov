@@ -1,3 +1,4 @@
+import { assertJobQuota } from '../quota.ts';
 import { randomUUID } from 'node:crypto';
 import { OrderSuggestionOutput, type DraftIssue, type Job, type Plan } from '@storyscript/contracts';
 import {
@@ -137,6 +138,7 @@ export function startOrderSuggestion(deps: AppDeps, planId: string): Job {
   }
   const inputHash = planInputHash(input);
   const keySet = new Set(ctx.keys.keys());
+  if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'suggest_order',
     idempotency_key: `suggest_order:${plan.id}:${inputHash}`,

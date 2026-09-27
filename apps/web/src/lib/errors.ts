@@ -50,7 +50,7 @@ const COPY: Record<ClientErrorCode, Copy> = {
     title: '这个项目正在别处打开',
     detail: '另一个 StoryScript-Mov 进程持有项目锁（project.lock）。先在那边关闭项目；如果那个进程已经退出，再打开一次即可接管。',
   },
-  QUOTA_EXCEEDED: { title: '已达到本项目的生成上限', detail: '这是防止意外花费的软上限，可以在设置里调高。' },
+  QUOTA_EXCEEDED: { title: '已达到调用次数上限', detail: '这是防止意外花费的上限。' },
   PROJECT_EXISTS: { title: '这个目录里已经有项目了', detail: '请用"打开已有项目"打开它，或者换一个空目录新建。' },
   NO_PROJECT_OPEN: { title: '当前没有打开的项目', detail: '回到首页打开或新建一个项目。' },
   SCHEMA_VERSION_UNSUPPORTED: {
@@ -163,7 +163,8 @@ export function describeError(error: unknown, context: ErrorContext = 'general')
     error.code === 'PATH_NOT_ALLOWED' ||
     error.code === 'PROVIDER_ERROR' ||
     error.code === 'PROVIDER_REFUSED' ||
-    error.code === 'UNSUPPORTED_MEDIA'
+    error.code === 'UNSUPPORTED_MEDIA' ||
+    error.code === 'QUOTA_EXCEEDED'
   ) {
     // Server messages here are specific ("directory is not empty", why a clip
     // cannot be linked or played…); show them.

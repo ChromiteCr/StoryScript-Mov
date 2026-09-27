@@ -76,7 +76,13 @@ STORYSCRIPT_LLM_MODEL=deepseek-chat
 # STORYSCRIPT_IMAGE_MODEL=
 ```
 
-所有队伍共用这组 key，目前**没有按队伍限制调用次数**。担心费用的话，请在模型服务商的后台给这个 key 设置额度或余额上限。不配置模型时，拆镜和实体抽取可以手工完成。
+所有队伍共用这组 key。每个队伍在 24 小时内的调用有上限，默认文本模型 200 次、图像模型 20 次，写在 `server.json` 的 `limits` 里，改完重启服务生效：
+
+```json
+"limits": { "llm_jobs_per_day": 200, "image_jobs_per_day": 20 }
+```
+
+超出后，队伍会看到「已达到调用次数上限」，24 小时后恢复。也建议在模型服务商的后台给这个 key 设置余额上限。不配置模型时，拆镜和实体抽取可以手工完成。
 
 ## 5. 用 systemd 常驻
 

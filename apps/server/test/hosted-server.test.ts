@@ -32,6 +32,7 @@ function config(): HostedConfig {
     listen_host: '127.0.0.1',
     port: 4700,
     timezone: 'Asia/Shanghai',
+    limits: { llm_jobs_per_day: 200, image_jobs_per_day: 20 },
     teams: [team('team-a', '一组'), team('team-b', '二组')],
   };
 }

@@ -1,3 +1,4 @@
+import { assertJobQuota } from '../quota.ts';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import type { Board, BoardRaster, Job } from '@storyscript/contracts';
@@ -169,6 +170,7 @@ export async function requestRedraw(deps: AppDeps, boardId: string, input: { con
     );
   }
 
+  assertJobQuota(deps, db, 'image');
   const endpoint: ImageEndpoint = { base_url: rp.cfg.base_url, api_key: rp.cfg.api_key, model: rp.cfg.model, dialect: rp.cfg.dialect, preset: rp.cfg.preset, host: rp.cfg.host };
   return jobs.enqueue({
     kind: 'image_redraw',

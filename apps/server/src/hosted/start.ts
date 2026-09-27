@@ -74,7 +74,7 @@ export async function startHostedServer(opts: {
         webDir,
         stateDir,
         projectSession,
-        hosted: { slug: t.slug, name: t.name },
+        hosted: { slug: t.slug, name: t.name, limits: loaded.limits },
       });
       teams.set(t.slug, { name: t.name, fetch: (req, env) => app.fetch(req, env) });
     }

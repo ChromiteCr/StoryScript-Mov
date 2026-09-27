@@ -36,6 +36,10 @@ export const HostedConfig = z.object({
   port: z.number().int().min(1).max(65535),
   /** IANA zone for new team projects */
   timezone: z.string().min(1),
+  /** per team, per rolling 24 h: paid model jobs (all teams share the admin's keys) */
+  limits: z
+    .object({ llm_jobs_per_day: z.number().int().min(0), image_jobs_per_day: z.number().int().min(0) })
+    .default({ llm_jobs_per_day: 200, image_jobs_per_day: 20 }),
   teams: z.array(HostedTeamConfig),
 });
 export type HostedConfig = z.infer<typeof HostedConfig>;

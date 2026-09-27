@@ -7,6 +7,13 @@ import type { SessionStore } from './security/sessions.ts';
 export interface HostedTeam {
   slug: string;
   name: string;
+  /** paid-job caps per rolling 24 h (null = none) */
+  limits: HostedLimits | null;
+}
+
+export interface HostedLimits {
+  llm_jobs_per_day: number;
+  image_jobs_per_day: number;
 }
 
 /** Everything route modules may depend on. Built once by createApp. */

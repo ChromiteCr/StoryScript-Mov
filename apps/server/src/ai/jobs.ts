@@ -1,3 +1,4 @@
+import { assertJobQuota } from '../services/quota.ts';
 import { randomUUID } from 'node:crypto';
 import {
   BreakdownOutput,
@@ -108,6 +109,7 @@ export function startEntityExtraction(deps: AppDeps): Job {
   if (!version) throw new AppError('VALIDATION_ERROR', '请先导入剧本', 409);
   const messages = buildEntitiesMessages(version.paragraphs);
   const scriptText = normalizeForMatch(version.paragraphs.map((p) => p.text).join('\n'));
+  if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'extract_entities',
     idempotency_key: `extract_entities:${version.id}`,
@@ -202,6 +204,7 @@ export function startBreakdown(deps: AppDeps, sceneId: string, request: Breakdow
     target_seconds: request.target_seconds,
   });
   const scope: BreakdownScope = { scene_id: scene.id, script_version_id: version.id, request };
+  if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'breakdown_scene',
     idempotency_key: `breakdown:${scene.id}:${contentHash(request)}`,

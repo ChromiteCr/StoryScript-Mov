@@ -4,7 +4,7 @@
  * (only the drawing style differs). Pure.
  */
 import type { BoardArrow, BoardSpec } from '@storyscript/contracts';
-import { cameraBasis, projectPoint, projectSegment } from './camera.ts';
+import { projectPoint, projectSegment, type CameraBasis } from './camera.ts';
 import { clamp, type V2, type V3 } from './math.ts';
 import { poseTopY } from './puppets.ts';
 import type { FrameScene } from './scene.ts';
@@ -39,7 +39,7 @@ export function arrowWorldHeights(spec: BoardSpec, a: BoardArrow & { mode: 'anch
  * Project an anchored arrow; when its tip leaves the frame, shorten it along the
  * world segment so the head stays visible (e.g. a subject running at the lens).
  */
-export function anchoredArrowPx(b: ReturnType<typeof cameraBasis>, from: V3, to: V3, W: number, H: number): V2[] | null {
+export function anchoredArrowPx(b: CameraBasis, from: V3, to: V3, W: number, H: number): V2[] | null {
   const m = 0.03;
   const at = (t: number): V2 | null => {
     const p: V3 = [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t, from[2] + (to[2] - from[2]) * t];
@@ -68,13 +68,24 @@ export function anchoredArrowPx(b: ReturnType<typeof cameraBasis>, from: V3, to:
   return [[start[0] * W, start[1] * H], [end[0] * W, end[1] * H]];
 }
 
-/** Frame-px polyline of one overlay arrow (null when it cannot be drawn). */
-export function arrowPx(spec: BoardSpec, scene: FrameScene, a: BoardArrow): V2[] | null {
-  const { W, H } = scene;
+/** Where one overlay arrow is drawn: frame-px end points and, when anchored, the world heights used. */
+export interface ArrowPlacement {
+  pts: V2[];
+  heights: [number, number] | null;
+}
+
+/**
+ * Place one overlay arrow (null when it cannot be drawn). The renderers and
+ * the web editor's drag handles both use this, so a handle sits exactly on
+ * the drawn arrow.
+ */
+export function placeArrow(spec: BoardSpec, basis: CameraBasis, W: number, H: number, a: BoardArrow): ArrowPlacement | null {
   let pts: V2[] | null = null;
+  let heights: [number, number] | null = null;
   if (a.mode === 'anchored') {
-    for (const [y0, y1] of arrowWorldHeights(spec, a)) {
-      pts = anchoredArrowPx(scene.basis, [a.world_from.x, y0, a.world_from.z], [a.world_to.x, y1, a.world_to.z], W, H);
+    for (const hh of arrowWorldHeights(spec, a)) {
+      pts = anchoredArrowPx(basis, [a.world_from.x, hh[0], a.world_from.z], [a.world_to.x, hh[1], a.world_to.z], W, H);
+      heights = hh;
       const s0 = pts?.[0];
       if (s0 && s0[0] >= 0 && s0[0] <= W && s0[1] >= 0 && s0[1] <= H) break;
     }
@@ -84,7 +95,12 @@ export function arrowPx(spec: BoardSpec, scene: FrameScene, a: BoardArrow): V2[]
   if (!pts) return null;
   const len = Math.hypot(pts[1]![0] - pts[0]![0], pts[1]![1] - pts[0]![1]);
   if (len < 8 || len > W * 3) return null;
-  return pts;
+  return { pts, heights };
+}
+
+/** Frame-px polyline of one overlay arrow (null when it cannot be drawn). */
+export function arrowPx(spec: BoardSpec, scene: FrameScene, a: BoardArrow): V2[] | null {
+  return placeArrow(spec, scene.basis, scene.W, scene.H, a)?.pts ?? null;
 }
 
 /** A/B badge centres above heads, kept inside the frame (null = not drawn). */

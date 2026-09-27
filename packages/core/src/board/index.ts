@@ -52,6 +52,7 @@ export {
   type PuppetView,
 } from './puppets.ts';
 export { buildFrameScene, frameSize, FRAME_W, type FrameScene } from './scene.ts';
+export { arrowWorldHeights, placeArrow, type ArrowPlacement } from './overlay-geom.ts';
 export { renderBoard, renderPuppetPreview, RENDERER_VERSION, subjectFrameBoxes, subjectFramePoints, type RenderOptions } from './render.ts';
 export { lintBoard, type BoardLintIssue, type LintOptions } from './lint.ts';
 export { PENCIL_VERSION, renderPencil, structureHash, type PencilRenderOptions } from './pencil.ts';

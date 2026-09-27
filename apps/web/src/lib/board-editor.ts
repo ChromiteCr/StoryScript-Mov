@@ -1,10 +1,12 @@
 import type { BoardArrow, BoardSpec, BoardSubject, FrameFormat, Pose, ShotFields, Silhouette } from '@storyscript/contracts';
 import {
+  arrowWorldHeights,
   cameraBasis,
   DEPTH_FACTOR,
   frameSize,
   LOOK_WIDE_PENCIL,
   NEAR_M,
+  placeArrow,
   poseTopY,
   relativeYaw,
   solveCamera,
@@ -131,10 +133,6 @@ function withArrow(spec: BoardSpec, id: string, fn: (a: BoardArrow) => BoardArro
   const next = clone(spec);
   next.overlay.arrows[i] = fn(next.overlay.arrows[i]!);
   return next;
-}
-
-function camToFrame(b: CameraBasis, c: V3): V2 {
-  return [0.5 + (b.f * c[0]) / c[2] / b.sw, 0.5 - (b.f * c[1]) / c[2] / b.sh];
 }
 
 /** Frame point → ground (or plane y = planeY) world point; null above the horizon or absurdly far. */
@@ -401,75 +399,6 @@ export function setOverlayOffset(spec: BoardSpec, x: number, y: number): BoardSp
   return next;
 }
 
-/** Candidate [from, to] world heights of an anchored arrow, best first (same rule as the renderer). */
-export function arrowWorldHeights(spec: BoardSpec, a: Extract<BoardArrow, { mode: 'anchored' }>): [number, number][] {
-  const subj = (id: string | null) => spec.scene.subjects.find((s) => s.id === id);
-  const nearest = (x: number, z: number) =>
-    spec.scene.subjects.reduce<{ s: BoardSubject | null; d: number }>(
-      (best, s) => {
-        const d = Math.hypot(s.x - x, s.z - z);
-        return d < best.d ? { s, d } : best;
-      },
-      { s: null, d: 0.6 },
-    ).s;
-  const from = subj(a.subject_id);
-  if (a.kind === 'eyeline') {
-    const to = nearest(a.world_to.x, a.world_to.z);
-    const eye = (s: BoardSubject | null | undefined) => (s ? (poseTopY(s.pose) - 0.075) * s.height_m : 1.55);
-    return [[eye(from), eye(to ?? from)]];
-  }
-  const lateral = Math.abs(a.world_to.x - a.world_from.x) > Math.abs(a.world_to.z - a.world_from.z);
-  const top = from ? poseTopY(from.pose) * from.height_m : 1.7;
-  const ks = lateral ? [0.5, 0.65, 0.35] : [0.42, 0.6, 0.75, 0.3];
-  return ks.map((k) => [k * top, k * top] as [number, number]);
-}
-
-function projectSeg(b: CameraBasis, a: V3, c: V3): [V2, V2] | null {
-  const ca = toCamera(b, a);
-  const cc = toCamera(b, c);
-  const fa = ca[2] - NEAR_M;
-  const fc = cc[2] - NEAR_M;
-  if (fa < 0 && fc < 0) return null;
-  const mix = (p: V3, q: V3, t: number): V3 => [p[0] + (q[0] - p[0]) * t, p[1] + (q[1] - p[1]) * t, p[2] + (q[2] - p[2]) * t];
-  let p = ca;
-  let q = cc;
-  if (fa < 0 || fc < 0) {
-    const m = mix(ca, cc, fa / (fa - fc));
-    if (fa >= 0) q = m;
-    else p = m;
-  }
-  return [camToFrame(b, p), camToFrame(b, q)];
-}
-
-function anchoredPx(b: CameraBasis, from: V3, to: V3, W: number, H: number): [V2, V2] | null {
-  const m = 0.03;
-  const at = (t: number): V2 | null => {
-    const p: V3 = [from[0] + (to[0] - from[0]) * t, from[1] + (to[1] - from[1]) * t, from[2] + (to[2] - from[2]) * t];
-    const c = toCamera(b, p);
-    return c[2] < NEAR_M ? null : camToFrame(b, c);
-  };
-  const inside = (q: V2 | null) => !!q && q[0] >= m && q[0] <= 1 - m && q[1] >= m && q[1] <= 1 - m;
-  const start = at(0);
-  if (!start) return null;
-  let end = at(1);
-  if (inside(start) && !inside(end)) {
-    let lo = 0;
-    let hi = 1;
-    for (let i = 0; i < 30; i++) {
-      const mid = (lo + hi) / 2;
-      if (inside(at(mid))) lo = mid;
-      else hi = mid;
-    }
-    end = at(lo);
-  }
-  if (!end) {
-    const seg = projectSeg(b, from, to);
-    if (!seg) return null;
-    return [[seg[0][0] * W, seg[0][1] * H], [seg[1][0] * W, seg[1][1] * H]];
-  }
-  return [[start[0] * W, start[1] * H], [end[0] * W, end[1] * H]];
-}
-
 export interface ArrowHandle {
   id: string;
   kind: BoardArrow['kind'];
@@ -489,22 +418,10 @@ export function arrowHandles(spec: BoardSpec): ArrowHandle[] {
   const oy = spec.overlay.offset.y * H;
   const out: ArrowHandle[] = [];
   for (const a of spec.overlay.arrows) {
-    let pts: [V2, V2] | null = null;
-    let used: [number, number] | null = null;
-    if (a.mode === 'anchored') {
-      for (const hh of arrowWorldHeights(spec, a)) {
-        pts = anchoredPx(b, [a.world_from.x, hh[0], a.world_from.z], [a.world_to.x, hh[1], a.world_to.z], W, H);
-        used = hh;
-        const s0 = pts?.[0];
-        if (s0 && s0[0] >= 0 && s0[0] <= W && s0[1] >= 0 && s0[1] <= H) break;
-      }
-    } else {
-      pts = [[a.from.x * W, a.from.y * H], [a.to.x * W, a.to.y * H]];
-    }
-    if (!pts) continue;
-    const len = Math.hypot(pts[1][0] - pts[0][0], pts[1][1] - pts[0][1]);
-    if (len < 8 || len > W * 3) continue;
-    out.push({ id: a.id, kind: a.kind, mode: a.mode, from: [pts[0][0] + ox, pts[0][1] + oy], to: [pts[1][0] + ox, pts[1][1] + oy], heights: used });
+    const placed = placeArrow(spec, b, W, H, a);
+    if (!placed) continue;
+    const [f, t] = placed.pts as [V2, V2];
+    out.push({ id: a.id, kind: a.kind, mode: a.mode, from: [f[0] + ox, f[1] + oy], to: [t[0] + ox, t[1] + oy], heights: placed.heights });
   }
   return out;
 }

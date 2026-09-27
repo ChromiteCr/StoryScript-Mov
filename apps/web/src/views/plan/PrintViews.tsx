@@ -167,6 +167,7 @@ export function PrintPreview({
   lookup,
   crew,
   onBack,
+  backLabel = '返回计划',
 }: {
   mode: PrintMode;
   data: PlanData;
@@ -174,6 +175,8 @@ export function PrintPreview({
   lookup: PlanLookup;
   crew: string;
   onBack: () => void;
+  /** where the back button goes (the deliver page opens the same preview) */
+  backLabel?: string;
 }) {
   const title = mode === 'callsheet' ? '拍摄单' : '打板卡';
   return (
@@ -181,7 +184,7 @@ export function PrintPreview({
       <div className="flex flex-wrap items-center gap-2 rounded-panel bg-graphite-900 px-2 py-1.5 print:hidden">
         <Button size="sm" variant="ghost" onClick={onBack}>
           <ArrowLeft aria-hidden className="size-3.5" />
-          返回计划
+          {backLabel}
         </Button>
         <h1 className="text-sm font-medium text-graphite-100">
           {title}打印预览 · {detail.plan.date}

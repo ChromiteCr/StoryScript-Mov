@@ -1,0 +1,1 @@
+测试素材说明：本目录由 scripts/gen-media.ts 用 lavfi 生成（testsrc2 + sine），不含任何真实拍摄内容。

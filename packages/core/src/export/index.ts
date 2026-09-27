@@ -8,3 +8,5 @@ export {
   type CsvColumn,
   type CsvOptions,
 } from './csv.ts';
+export * from './labels.ts';
+export * from './tables.ts';

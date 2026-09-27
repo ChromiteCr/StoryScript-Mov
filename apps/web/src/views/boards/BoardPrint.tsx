@@ -34,6 +34,8 @@ export interface BoardPrintProps {
   sceneId: string | null;
   onScene: (id: string | null) => void;
   onBack: () => void;
+  /** where the back button goes (the deliver page opens the same preview) */
+  backLabel?: string;
 }
 
 function DraftMark({ draft }: { draft: boolean }) {
@@ -130,7 +132,7 @@ function Caption({ cell }: { cell: PrintCell }) {
   );
 }
 
-export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion, sceneId, onScene, onBack }: BoardPrintProps) {
+export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion, sceneId, onScene, onBack, backLabel = '返回分镜' }: BoardPrintProps) {
   const pages = useMemo(
     () => (kind === 'boards' ? paginateBoards(boards, shots, scenes, sceneId) : paginateTopviews(boards, shots, scenes, sceneId)),
     [kind, boards, shots, scenes, sceneId],
@@ -153,7 +155,7 @@ export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion
       <div className="flex flex-wrap items-center gap-2 rounded-panel bg-graphite-900 px-2 py-1.5 print:hidden">
         <Button size="sm" variant="ghost" onClick={onBack}>
           <ArrowLeft aria-hidden className="size-3.5" />
-          返回分镜
+          {backLabel}
         </Button>
         <h1 className="text-sm font-medium text-graphite-100">{title}打印预览</h1>
         <SelectInput aria-label="打印范围" className="h-6 w-auto max-w-[240px] text-xs" value={sceneId ?? ''} onChange={(e) => onScene(e.target.value || null)}>

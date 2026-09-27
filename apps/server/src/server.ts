@@ -1,4 +1,5 @@
-import { existsSync } from 'node:fs';
+import { existsSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { getRequestListener } from '@hono/node-server';
@@ -35,13 +36,20 @@ export interface RunningServer {
   close(): Promise<void>;
 }
 
-/** Built frontend: <pkg>/web when installed from npm, <repo>/apps/web/dist in a checkout. */
-export function resolveWebDir(): string {
-  const candidates = [
-    fileURLToPath(new URL('../web', import.meta.url)),
-    fileURLToPath(new URL('../../web/dist', import.meta.url)),
-  ];
-  return candidates.find((d) => existsSync(`${d}/index.html`)) ?? candidates[0]!;
+/**
+ * Built frontend: <pkg>/web when installed from npm, <repo>/apps/web/dist in a
+ * checkout. A checkout can hold both (apps/server/web is the packaging copy
+ * `npm run build` makes); the newer build wins, so rebuilding only the web app
+ * is never shadowed by an old packaging copy.
+ */
+export function resolveWebDir(
+  candidates = [fileURLToPath(new URL('../web', import.meta.url)), fileURLToPath(new URL('../../web/dist', import.meta.url))],
+): string {
+  const built = candidates
+    .filter((d) => existsSync(join(d, 'index.html')))
+    .map((d) => ({ d, t: statSync(join(d, 'index.html')).mtimeMs }));
+  built.sort((a, b) => b.t - a.t);
+  return built[0]?.d ?? candidates[0]!;
 }
 
 function listen(server: Server, port: number): Promise<number> {
@@ -102,7 +110,7 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
 
   let url: string;
   try {
-    const { app } = createApp({
+    const { app, deps } = createApp({
       mode: opts.mode,
       port,
       token,
@@ -111,6 +119,11 @@ export async function startServer(opts: StartServerOptions): Promise<RunningServ
       demo: opts.demo ?? false,
       projectSession,
     });
+    // --demo: (re)build the demo project under the state dir and open it before the link is printed
+    if (opts.demo) {
+      const { openDemoProject } = await import('./demo/seed.ts');
+      await openDemoProject(deps, { log });
+    }
     const hono = getRequestListener(app.fetch);
 
     if (opts.mode === 'development') {

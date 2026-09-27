@@ -12,7 +12,8 @@
   },
   "files": [
     "dist",
-    "web"
+    "web",
+    "demo-data"
   ],
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/cli.ts start --dev --port 4700",

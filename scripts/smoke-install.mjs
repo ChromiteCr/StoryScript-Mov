@@ -53,11 +53,18 @@ const check = (ok, msg) => {
 
 const TOP_LEVEL = new Set(['package.json', 'README.md', 'LICENSE', 'THIRD_PARTY_NOTICES.md']);
 
+/** `--demo` inputs (scripts/demo-data.mjs): the sample script, its replay recordings, the demo footage. */
+const DEMO_FILE = /^demo-data\/(fixtures\/scripts\/[^/]+\.txt|fixtures\/replay\/[^/]+\.json|samples\/demo-media\/(media\.json|posters\/[^/]+\.jpg|clips\/[^/]+\.(mov|mp4|txt)))$/;
+
 /** Problems with an `npm pack` file list (paths relative to the package root). */
 export function packProblems(files) {
   const problems = [];
   for (const f of files) {
     const top = f.split('/')[0];
+    if (top === 'demo-data') {
+      if (!DEMO_FILE.test(f)) problems.push(`demo-data 里不应有：${f}`);
+      continue;
+    }
     if (!TOP_LEVEL.has(f) && top !== 'dist' && top !== 'web') problems.push(`不应打包：${f}`);
     if (/\.map$/i.test(f)) problems.push(`不应打包 source map：${f}`);
     if (/(^|\/)\.env(\.|$)/i.test(f)) problems.push(`不应打包 .env：${f}`);
@@ -66,7 +73,7 @@ export function packProblems(files) {
     if (/\.[cm]?tsx?$/i.test(f) && !/\.d\.[cm]?ts$/i.test(f)) problems.push(`不应打包 TypeScript 源码：${f}`);
     if (/(^|\/)(\.DS_Store|Thumbs\.db)$/i.test(f) || /\.(tgz|log|sqlite)$/i.test(f)) problems.push(`不应打包杂项文件：${f}`);
   }
-  for (const need of ['package.json', 'README.md', 'LICENSE', 'dist/cli.mjs', 'web/index.html']) {
+  for (const need of ['package.json', 'README.md', 'LICENSE', 'dist/cli.mjs', 'web/index.html', 'demo-data/fixtures/scripts/01-bookshop.txt', 'demo-data/samples/demo-media/media.json']) {
     if (!files.includes(need)) problems.push(`缺少 ${need}`);
   }
   if (!files.includes('THIRD_PARTY_NOTICES.md') && !files.includes('dist/THIRD_PARTY_NOTICES.md')) problems.push('缺少 THIRD_PARTY_NOTICES.md');
@@ -187,7 +194,7 @@ function http(port, path, { method = 'GET', headers = {}, body } = {}) {
 // ---------------------------------------------------------------------------
 
 /** Start a server command, verify it end to end, stop it with SIGINT, verify cleanup. */
-async function exerciseServer(label, cmd, args, { cwd, env, home, port, bootMs }) {
+async function exerciseServer(label, cmd, args, { cwd, env, home, port, bootMs, demo = false }) {
   const stateDir = join(home, ...STATE_REL);
   const rtFile = join(stateDir, 'runtime.json');
   log(`${label}：${cmd} ${args.join(' ')}`);
@@ -246,6 +253,18 @@ async function exerciseServer(label, cmd, args, { cwd, env, home, port, bootMs }
     check(health.status === 200, `${label}：带 cookie 的 /api/v1/health 返回 ${health.status} ${health.body}`);
     const data = JSON.parse(health.body).data;
     check(typeof data?.app_version === 'string' && typeof data?.sqlite === 'string', `${label}：health 内容不对：${health.body}`);
+    if (demo) {
+      // the packaged demo-data is found and seeded: shots, and the six demo clips with posters
+      check(data.demo === true, `${label}：health 没有标出演示模式：${health.body}`);
+      const list = async (path) => {
+        const r = await http(port, path, { headers: { host, cookie } });
+        return r.status === 200 ? JSON.parse(r.body).data.length : `HTTP ${r.status} ${r.body.slice(0, 200)}`;
+      };
+      const shots = await list('/api/v1/shots');
+      check(typeof shots === 'number' && shots >= 10, `${label}：演示项目的镜头数不对：${shots}`);
+      const clips = await list('/api/v1/media/assets');
+      check(clips === 6, `${label}：演示素材应为 6 条，实际 ${clips}`);
+    }
 
     signalTree(child, 'SIGINT');
     const stopped = await Promise.race([exit, deadline(30_000).then(() => null)]);
@@ -323,7 +342,16 @@ async function packPath({ tmp, cache, registry, skipBuild }) {
     port,
     bootMs: 5 * 60_000,
   });
-  return { tarball: info.filename, size: info.size, unpacked_size: info.unpackedSize, files, doctor_exit: 0, doctor: doctor.trim().split('\n'), server };
+  const demoPort = await freePort();
+  const demo = await exerciseServer('npx <tgz> --demo', 'npx', ['--yes', tarball, '--demo', '--no-open', '--port', String(demoPort)], {
+    cwd: work,
+    env,
+    home,
+    port: demoPort,
+    bootMs: 5 * 60_000,
+    demo: true,
+  });
+  return { tarball: info.filename, size: info.size, unpacked_size: info.unpackedSize, files, doctor_exit: 0, doctor: doctor.trim().split('\n'), server, demo };
 }
 
 async function sourcePath({ tmp, cache, registry }) {

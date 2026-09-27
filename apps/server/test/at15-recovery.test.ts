@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, test } from 'vitest';
-import type { ApplyBreakdownResult, BreakdownOutput, BuildCandidatesOutput, Job, PlanDetail, Plan, Setup, ShotDraft, ShotMediaLink } from '@storyscript/contracts';
+import type { ApplyBreakdownResult, BreakdownOutput, Job, PlanDetail, Plan, Setup, ShotDraft, ShotMediaLink } from '@storyscript/contracts';
 import { projectContext } from '../src/ai/runtime.ts';
 import { openDemoProject } from '../src/demo/seed.ts';
 import { startFakeOpenAI, reply, type FakeOpenAI } from './helpers/fake-openai.ts';
@@ -26,6 +26,11 @@ afterEach(async () => {
 const count = (a: M3App, table: string) => a.handle.projectSession.require().db.get<{ n: number }>(`SELECT COUNT(*) AS n FROM ${table}`)!.n;
 const idle = (a: M3App) => projectContext(a.handle.deps).jobs.idle();
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+/** the part of BuildCandidatesOutput these checks read */
+interface Candidates {
+  created: ShotMediaLink[];
+}
 
 describe('AT-15 double clicks do not duplicate records', () => {
   test('demo project: breakdown + apply, rule candidates, link review, setups, plan approval', async () => {
@@ -60,9 +65,9 @@ describe('AT-15 double clicks do not duplicate records', () => {
 
     // --- rule candidates built twice: the second run adds nothing
     const links0 = count(a, 'shot_media_link');
-    const first = await a.post<BuildCandidatesOutput>('/api/v1/media/candidates', { user_regex: null });
+    const first = await a.post<Candidates>('/api/v1/media/candidates', { user_regex: null });
     expect(first.status, first.text).toBe(200);
-    const second = await a.post<BuildCandidatesOutput>('/api/v1/media/candidates', { user_regex: null });
+    const second = await a.post<Candidates>('/api/v1/media/candidates', { user_regex: null });
     expect(second.data.created).toEqual([]);
     expect(count(a, 'shot_media_link')).toBe(links0 + first.data.created.length);
 

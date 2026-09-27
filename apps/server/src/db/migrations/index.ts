@@ -2,6 +2,7 @@ import { join } from 'node:path';
 import { AppError } from '../../http/errors.ts';
 import type { DbPort } from '../port.ts';
 import { INIT_SQL } from './001_init.ts';
+import { ROOT_KIND_SQL } from './002_root_kind.ts';
 
 /**
  * Hand-written SQL migrations, embedded as TS strings so the bundle carries them.
@@ -15,7 +16,10 @@ export interface Migration {
   sql: string;
 }
 
-export const MIGRATIONS: readonly Migration[] = [{ version: 1, name: '001_init', sql: INIT_SQL }];
+export const MIGRATIONS: readonly Migration[] = [
+  { version: 1, name: '001_init', sql: INIT_SQL },
+  { version: 2, name: '002_root_kind', sql: ROOT_KIND_SQL },
+];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;
 

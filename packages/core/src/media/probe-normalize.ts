@@ -122,6 +122,16 @@ export function normalizeProbe(ffprobeJson: unknown): ProbeNormalized {
   };
 }
 
+/** File extensions a folder scan picks up (the server scan and the browser folder walk). */
+export const MEDIA_EXTS: ReadonlySet<string> = new Set(['mp4', 'mov', 'm4v', 'mxf', 'mts', 'avi', 'wav', 'mp3', 'aac', 'jpg', 'jpeg', 'png']);
+
+/** Where a poster frame is taken: half the clip, at most 1 s in (stills: 0). */
+export function posterSeconds(a: { kind: MediaKind; probe: ProbeNormalized | null }): number {
+  if (a.kind !== 'video') return 0;
+  const d = a.probe?.duration_s ?? 0;
+  return Math.max(0, Math.min(1, d / 2));
+}
+
 const IMAGE_EXTS = new Set(['jpg', 'jpeg', 'png', 'tif', 'tiff', 'heic', 'heif', 'webp', 'bmp', 'dng']);
 const AUDIO_EXTS = new Set(['wav', 'bwf', 'aif', 'aiff', 'mp3', 'm4a', 'aac', 'flac']);
 const VIDEO_EXTS = new Set(['mp4', 'mov', 'm4v', 'mxf', 'mkv', 'avi', 'mts', 'm2ts', 'webm']);

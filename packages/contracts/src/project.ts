@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { IsoTime, Uuid } from './common.ts';
 import { FrameFormat } from './shot.ts';
 
-export const PROJECT_SCHEMA_VERSION = 1;
+export const PROJECT_SCHEMA_VERSION = 2;
 
 /** Contents of `<project>/project.json` (identity only, no secrets). */
 export const ProjectManifest = z.object({

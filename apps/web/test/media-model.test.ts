@@ -78,6 +78,7 @@ function asset(n: number, name: string, extra: Partial<MediaAssetView> = {}): Me
     availability: 'online',
     created_at: '2026-09-26T00:00:00.000Z',
     root_label: '卡 A',
+    root_kind: 'fs',
     poster_url: null,
     stream_url: null,
     link_count: 0,

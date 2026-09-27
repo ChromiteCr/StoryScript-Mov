@@ -6,8 +6,12 @@ import { z } from 'zod';
 import {
   AddRootInput,
   Api,
+  AssetFactsInput,
+  BrowserFilesInput,
+  BrowserFilesOutput,
   BuildCandidatesInput,
   BuildCandidatesOutput,
+  CreateBrowserRootInput,
   JobAccepted,
   MediaAssetView,
   MediaSearchInput,
@@ -23,9 +27,10 @@ import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
 import { runScanJob } from '../jobs/media-scan.ts';
 import { listAssetViews, posterFile, searchAssetViews, streamFile } from '../services/media/assets.ts';
+import { createBrowserRoot, POSTER_MAX_BYTES, reportAssetFacts, reportBrowserFiles, saveBrowserPoster } from '../services/media/browser-ingest.ts';
 import { buildLinkCandidates } from '../services/media/links.ts';
 import { extOf } from '../services/media/paths.ts';
-import { addRoot, checkRoot, requireRoot } from '../services/media/roots.ts';
+import { addRoot, checkRoot, requireRoot, requireServerReadable } from '../services/media/roots.ts';
 
 /**
  * Media library (FR-08/09): source roots, read-only scan job, availability
@@ -50,6 +55,7 @@ export function registerMediaRoutes(app: Hono, deps: AppDeps): void {
     const id = idParam(c);
     const { project: p, jobs } = projectContext(deps);
     const root = requireRoot(p.db, id);
+    requireServerReadable(root);
     const tools = await deps.tools();
     const ffprobe = tools.ffprobe.path;
     const ffmpeg = tools.ffmpeg.path;
@@ -84,6 +90,37 @@ export function registerMediaRoutes(app: Hono, deps: AppDeps): void {
   app.post(Api.buildCandidates.path, async (c) => {
     const input = await parseBody(c, BuildCandidatesInput);
     return respond(c, BuildCandidatesOutput, buildLinkCandidates(db(), input));
+  });
+
+  // ---- footage read by a browser on a team member's computer (S1b) ----
+  app.post(Api.createBrowserRoot.path, async (c) => {
+    const input = await parseBody(c, CreateBrowserRootInput);
+    return respond(c, SourceRoot, createBrowserRoot(db(), input), 201);
+  });
+
+  app.post(Api.reportBrowserFiles.path, async (c) => {
+    const input = await parseBody(c, BrowserFilesInput);
+    return respond(c, BrowserFilesOutput, reportBrowserFiles(db(), idParam(c), input));
+  });
+
+  app.put(Api.reportAssetFacts.path, async (c) => {
+    const input = await parseBody(c, AssetFactsInput);
+    return respond(c, MediaAssetView, reportAssetFacts(db(), idParam(c), input));
+  });
+
+  /** Binary body (image/jpeg): the poster frame the browser grabbed. */
+  app.put('/api/v1/media/assets/:id/poster', async (c) => {
+    const id = idParam(c);
+    const declared = Number(c.req.header('content-length') ?? NaN);
+    if (Number.isFinite(declared) && declared > POSTER_MAX_BYTES) {
+      throw new AppError('VALIDATION_ERROR', `海报图不能超过 ${POSTER_MAX_BYTES / 1024} KB`, 413);
+    }
+    if (!(c.req.header('content-type') ?? '').toLowerCase().startsWith('image/jpeg')) {
+      throw new AppError('UNSUPPORTED_MEDIA', '海报图需要以 image/jpeg 上传', 415);
+    }
+    const p = project();
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    return respond(c, MediaAssetView, await saveBrowserPoster(p.db, p.dir, id, bytes));
   });
 
   app.get('/api/v1/media/assets/:id/poster', async (c) => {

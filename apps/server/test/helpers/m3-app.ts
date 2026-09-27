@@ -35,6 +35,8 @@ export interface M3App {
   post<T = unknown>(path: string, body?: unknown): Promise<ApiResult<T>>;
   put<T = unknown>(path: string, body?: unknown): Promise<ApiResult<T>>;
   patch<T = unknown>(path: string, body?: unknown): Promise<ApiResult<T>>;
+  /** any body and headers, with this app's Host, Origin and session cookie */
+  raw(method: string, path: string, body?: RequestInit['body'], headers?: Record<string, string>): Promise<Response>;
   close(): void;
 }
 
@@ -85,6 +87,7 @@ export async function makeM3App(opts: { env?: NodeJS.ProcessEnv; demo?: boolean;
     post: (p, b) => call('POST', p, b ?? {}),
     put: (p, b) => call('PUT', p, b ?? {}),
     patch: (p, b) => call('PATCH', p, b ?? {}),
+    raw: async (method, p, body, headers = {}) => handle.app.request(p, { method, body, headers: { host: HOST, origin: ORIGIN, cookie, ...headers } }),
     close: () => {
       handle.projectSession.closeNow();
       rmSync(root, { recursive: true, force: true });

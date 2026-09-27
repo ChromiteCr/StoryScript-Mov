@@ -12,7 +12,7 @@ import { AppError } from '../../http/errors.ts';
  */
 
 /** Extension whitelist of the scanner (lower case, no dot). */
-export const MEDIA_EXTS: ReadonlySet<string> = new Set(['mp4', 'mov', 'm4v', 'mxf', 'mts', 'avi', 'wav', 'mp3', 'aac', 'jpg', 'jpeg', 'png']);
+export { MEDIA_EXTS } from '@storyscript/core';
 
 export function extOf(name: string): string {
   const dot = name.lastIndexOf('.');

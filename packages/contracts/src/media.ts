@@ -49,9 +49,18 @@ export const ProbeNormalized = z.object({
 });
 export type ProbeNormalized = z.infer<typeof ProbeNormalized>;
 
+/**
+ * fs: an absolute folder the local server reads; project: the project folder
+ * itself (paths relative to it); browser: a folder only a team member's
+ * browser reads (hosted server) — the server never sees its files.
+ */
+export const SourceRootKind = z.enum(['fs', 'project', 'browser']);
+export type SourceRootKind = z.infer<typeof SourceRootKind>;
+
 export const SourceRoot = z.object({
   id: Uuid,
-  /** realpath of the user-granted directory */
+  kind: SourceRootKind,
+  /** fs: realpath of the user-granted directory; project/browser: an opaque key, not a path */
   abs_path: z.string(),
   label: z.string(),
   created_at: IsoTime,

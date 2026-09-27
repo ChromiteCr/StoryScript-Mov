@@ -1,4 +1,4 @@
-import { MediaAsset, ProbeNormalized, type Availability, type HashStatus, type MediaKind } from '@storyscript/contracts';
+import { MediaAsset, ProbeNormalized, type Availability, type HashStatus, type MediaKind, type SourceRootKind } from '@storyscript/contracts';
 import type { DbPort } from '../port.ts';
 
 /**
@@ -49,14 +49,15 @@ export function assetFromRow(r: AssetRow): MediaAsset {
 export interface AssetRecord {
   asset: MediaAsset;
   root_label: string;
+  root_kind: SourceRootKind;
   /** confirmed links */
   link_count: number;
   candidate_count: number;
 }
 
-type RecordRow = AssetRow & { root_label: string; link_count: number; candidate_count: number };
+type RecordRow = AssetRow & { root_label: string; root_kind: SourceRootKind; link_count: number; candidate_count: number };
 
-const RECORD_SELECT = `SELECT ${A_COLS}, r.label AS root_label,
+const RECORD_SELECT = `SELECT ${A_COLS}, r.label AS root_label, r.kind AS root_kind,
     (SELECT COUNT(*) FROM shot_media_link l WHERE l.media_asset_id = a.id AND l.status = 'confirmed') AS link_count,
     (SELECT COUNT(*) FROM shot_media_link l WHERE l.media_asset_id = a.id AND l.status = 'candidate') AS candidate_count
   FROM media_asset a JOIN source_root r ON r.id = a.source_root_id`;
@@ -67,6 +68,7 @@ function recordFromRow(r: RecordRow): AssetRecord {
   return {
     asset: assetFromRow(r),
     root_label: r.root_label,
+    root_kind: r.root_kind,
     link_count: Number(r.link_count),
     candidate_count: Number(r.candidate_count),
   };

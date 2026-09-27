@@ -18,8 +18,10 @@ export function toView(r: AssetRecord): MediaAssetView {
   return {
     ...a,
     root_label: r.root_label,
+    root_kind: r.root_kind,
     poster_url: a.poster_path ? posterUrl(a.id) : null,
-    stream_url: a.playable_direct ? streamUrl(a.id) : null,
+    // the server only ever streams files it can read itself
+    stream_url: a.playable_direct && r.root_kind !== 'browser' ? streamUrl(a.id) : null,
     link_count: r.link_count,
     candidate_count: r.candidate_count,
   };
@@ -63,6 +65,7 @@ export async function streamFile(db: DbPort, id: string): Promise<{ path: string
   }
   const root = getRoot(db, a.source_root_id);
   if (!root) throw new AppError('NOT_FOUND', '素材所在目录已不存在', 404);
+  if (root.kind === 'browser') throw new AppError('SOURCE_OFFLINE', '这条素材在队员的电脑上，服务器不读取视频：在浏览器里打开对应的项目文件夹即可播放', 409, { asset_id: id });
   const file = await resolveSourceFile(root.abs_path, a.rel_path);
   if (!file.ok) {
     if (file.reason === 'not_allowed') {

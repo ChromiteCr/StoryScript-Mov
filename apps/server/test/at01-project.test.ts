@@ -3,7 +3,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, realpathSync, rmSync,
 import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeAll, describe, expect, test } from 'vitest';
-import { ApiError, HealthInfo, Project, ProjectManifest, RecentProject } from '@storyscript/contracts';
+import { ApiError, HealthInfo, Project, PROJECT_SCHEMA_VERSION, ProjectManifest, RecentProject } from '@storyscript/contracts';
 import { createApp } from '../src/app.ts';
 import { openDb } from '../src/db/port.ts';
 import { isAppError } from '../src/http/errors.ts';
@@ -93,11 +93,11 @@ describe('AT-01 project lifecycle (API)', () => {
     const created = await call('/api/v1/projects', { dir, ...input });
     expect(created.status).toBe(201);
     const project = Project.parse(await dataOf(created));
-    expect(project).toMatchObject({ ...input, schema_version: 1, code_format: 'S{scene:02}-{shot:03}-T{take:02}' });
+    expect(project).toMatchObject({ ...input, schema_version: PROJECT_SCHEMA_VERSION, code_format: 'S{scene:02}-{shot:03}-T{take:02}' });
 
     // on-disk layout
     const manifest = ProjectManifest.parse(JSON.parse(readFileSync(join(dir, 'project.json'), 'utf8')));
-    expect(manifest).toMatchObject({ format: 'storyscript-mov-project', id: project.id, schema_version: 1 });
+    expect(manifest).toMatchObject({ format: 'storyscript-mov-project', id: project.id, schema_version: PROJECT_SCHEMA_VERSION });
     for (const sub of ['scripts', 'boards', 'derivatives/posters', 'exports', 'recovery']) {
       expect(statSync(join(dir, sub)).isDirectory(), sub).toBe(true);
     }

@@ -21,6 +21,13 @@ export function requireRoot(db: DbPort, id: string): SourceRoot {
   return r;
 }
 
+/** Browser roots live on a team member's computer: the server cannot scan or check them. */
+export function requireServerReadable(root: SourceRoot): void {
+  if (root.kind === 'browser') {
+    throw new AppError('VALIDATION_ERROR', '这个素材目录在队员的电脑上，只能在浏览器里打开项目文件夹来扫描', 409, { root_id: root.id });
+  }
+}
+
 export interface AddRootResult {
   root: SourceRoot;
   created: boolean;
@@ -46,14 +53,14 @@ export async function addRoot(db: DbPort, projectDir: string, input: z.infer<typ
   return db.tx(() => {
     const existing = getRootByPath(db, real);
     if (existing) return { root: existing, created: false };
-    const overlap = listRoots(db).find((r) => isSameOrInside(r.abs_path, real) || isSameOrInside(real, r.abs_path));
+    const overlap = listRoots(db).find((r) => r.kind === 'fs' && (isSameOrInside(r.abs_path, real) || isSameOrInside(real, r.abs_path)));
     if (overlap) {
       throw new AppError('VALIDATION_ERROR', `与已登记的素材目录「${overlap.label}」重叠：同一个文件只能属于一个素材目录`, 400, {
         abs_path: real,
         overlaps: overlap.abs_path,
       });
     }
-    const root: SourceRoot = { id: randomUUID(), abs_path: real, label, created_at: now };
+    const root: SourceRoot = { id: randomUUID(), kind: 'fs', abs_path: real, label, created_at: now };
     insertRoot(db, root);
     return { root, created: true };
   });
@@ -68,6 +75,7 @@ type CheckOutcome = { id: string; state: 'online' | 'offline' | 'changed' };
  * were so the change stays visible until the next scan re-indexes the file.
  */
 export async function checkRoot(db: DbPort, root: SourceRoot): Promise<z.infer<typeof RootCheckResult>> {
+  requireServerReadable(root);
   const assets = listRootAssets(db, root.id);
   const rootReal = safeRealpathSync(root.abs_path);
   const outcomes: CheckOutcome[] = [];

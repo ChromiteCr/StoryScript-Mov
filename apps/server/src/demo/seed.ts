@@ -296,7 +296,7 @@ export async function openDemoProject(deps: AppDeps, opts: OpenDemoOptions = {})
       rootId = (await addRoot(db, opened.dir, { abs_path: realpathSync(clipsDir), label }, iso())).root.id;
     } else {
       rootId = randomUUID();
-      insertRoot(db, { id: rootId, abs_path: clipsDir, label, created_at: iso() });
+      insertRoot(db, { id: rootId, kind: 'fs', abs_path: clipsDir, label, created_at: iso() });
       warn('演示素材的原片不在（samples/demo-media/clips），素材显示为离线，海报帧和元数据照常');
     }
     const posterDir = join(opened.dir, 'derivatives', 'posters');

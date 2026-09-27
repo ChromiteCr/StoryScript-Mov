@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { lstat, readdir, realpath } from 'node:fs/promises';
 import { join } from 'node:path';
 import type { MediaAsset } from '@storyscript/contracts';
-import { deriveMediaFlags } from '@storyscript/core';
+import { deriveMediaFlags, posterSeconds } from '@storyscript/core';
 import { hashFile } from '../adapters/media/hash.ts';
 import { extractPoster } from '../adapters/media/poster.ts';
 import { probeFile } from '../adapters/media/probe.ts';
@@ -104,11 +104,6 @@ async function walk(rootReal: string, skipDir: string | null, signal: AbortSigna
   return out.sort((a, b) => (a.rel < b.rel ? -1 : a.rel > b.rel ? 1 : 0));
 }
 
-function posterSeconds(a: Pick<MediaAsset, 'kind' | 'probe'>): number {
-  if (a.kind !== 'video') return 0;
-  const d = a.probe?.duration_s ?? 0;
-  return Math.max(0, Math.min(1, d / 2));
-}
 
 export async function runScanJob(ctx: JobRunContext, deps: ScanJobDeps): Promise<JobRunResult> {
   const { db, projectDir, rootId, ffprobe, ffmpeg } = deps;

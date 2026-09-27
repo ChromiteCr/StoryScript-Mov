@@ -99,11 +99,11 @@ describe('migrations', () => {
     expect(MIGRATIONS.map((m) => m.version)).toEqual(MIGRATIONS.map((_, i) => i + 1));
   });
 
-  test('fresh database → user_version = 1, every v0.1 table exists, no backup', async () => {
+  test('fresh database → user_version = latest, every v0.1 table exists, no backup', async () => {
     const db = fresh('init');
     const r = await migrate(db, { backupDir: join(root, 'recovery-init') });
-    expect(r).toMatchObject({ from: 0, to: 1, applied: ['001_init'], backup_path: null });
-    expect(userVersion(db)).toBe(1);
+    expect(r).toMatchObject({ from: 0, to: LATEST_VERSION, applied: MIGRATIONS.map((m) => m.name), backup_path: null });
+    expect(userVersion(db)).toBe(LATEST_VERSION);
     expect(new Set(tables(db))).toEqual(new Set(EXPECTED_TABLES));
     expect(existsSync(join(root, 'recovery-init'))).toBe(false);
     // idempotent
@@ -198,7 +198,19 @@ describe('migrations', () => {
     const copy = openDb(dest, { readOnly: true });
     opened.push(copy);
     expect(copy.get<{ value_json: string }>("SELECT value_json FROM kv WHERE key = 'greeting'")?.value_json).toBe('"你好"');
-    expect(userVersion(copy)).toBe(1);
+    expect(userVersion(copy)).toBe(LATEST_VERSION);
+  });
+
+  test('002: roots registered under v1 become kind fs; browser/project kinds are accepted, others rejected', async () => {
+    const db = fresh('m002');
+    await migrate(db, { backupDir: join(root, 'm002-bak'), migrations: MIGRATIONS.slice(0, 1) });
+    db.run("INSERT INTO source_root (id, abs_path, label, created_at) VALUES ('r1', '/footage', 'A', '2026-09-27T00:00:00.000Z')");
+    const r = await migrate(db, { backupDir: join(root, 'm002-bak') });
+    expect(r).toMatchObject({ from: 1, to: LATEST_VERSION });
+    expect(r.backup_path).not.toBeNull();
+    expect(db.get<{ kind: string }>("SELECT kind FROM source_root WHERE id = 'r1'")?.kind).toBe('fs');
+    db.run("INSERT INTO source_root (id, kind, abs_path, label, created_at) VALUES ('r2', 'browser', 'browser:r2', 'B', 'x')");
+    expect(() => db.run("INSERT INTO source_root (id, kind, abs_path, label, created_at) VALUES ('r3', 'cloud', 'c:r3', 'C', 'x')")).toThrow();
   });
 });
 

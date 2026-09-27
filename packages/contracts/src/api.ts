@@ -8,7 +8,7 @@ import { RequiredStatus, Shot, ShotDraft, ShotFields, ShotRevision } from './sho
 import { CoverageDecision, CoverageDecisionKind, CoverageResult } from './coverage.ts';
 import { Board, BoardRaster, BoardSpec } from './board.ts';
 import { ImageDialect } from './provider.ts';
-import { LinkCandidate, MediaAsset, ShotMediaLink, SourceRoot } from './media.ts';
+import { LinkCandidate, MediaAsset, ProbeNormalized, ShotMediaLink, SourceRoot, SourceRootKind } from './media.ts';
 import { Constraint, Plan, Resource, ResourceType, Setup, SetupDurations, TimeWindow, Violation } from './plan.ts';
 import { Take, TakeRating } from './take.ts';
 
@@ -339,9 +339,62 @@ export const UpdateTakeInput = CreateTakeInput.partial().extend({
 
 export const AddRootInput = z.object({ abs_path: z.string().min(1), label: z.string().optional() });
 
+// ---- S1b: footage a browser reads on a team member's computer (hosted server) ----
+
+export const CreateBrowserRootInput = z.object({ label: z.string().trim().min(1).max(80) });
+
+export const BrowserFile = z.object({
+  /** "/"-separated, relative to the opened project folder */
+  rel_path: z.string().min(1).max(1024),
+  size: z.number().int().nonnegative(),
+  mtime_ms: z.number().nonnegative(),
+});
+export type BrowserFile = z.infer<typeof BrowserFile>;
+
+/** The complete list of media files in the folder: anything not listed goes offline. */
+export const BrowserFilesInput = z.object({ files: z.array(BrowserFile).max(20_000) });
+
+export const BrowserAssetNeeds = z.object({
+  asset_id: Uuid,
+  rel_path: z.string(),
+  size: z.number().int().nonnegative(),
+  mtime_ms: z.number(),
+  /** the server has no probe for this version of the file */
+  probe: z.boolean(),
+  poster: z.boolean(),
+  hash: z.boolean(),
+});
+export type BrowserAssetNeeds = z.infer<typeof BrowserAssetNeeds>;
+
+export const BrowserFilesOutput = z.object({
+  added: z.number().int().nonnegative(),
+  changed: z.number().int().nonnegative(),
+  offline: z.number().int().nonnegative(),
+  /** every listed file, with what the server still lacks */
+  assets: z.array(BrowserAssetNeeds),
+});
+export type BrowserFilesOutput = z.infer<typeof BrowserFilesOutput>;
+
+/**
+ * Facts the browser read from one version of a file (size + mtime must still
+ * match the server's row). The server derives kind/playable flags itself.
+ */
+export const AssetFactsInput = z.object({
+  size: z.number().int().nonnegative(),
+  mtime_ms: z.number(),
+  /** null = the browser could not read this container (e.g. MXF) */
+  probe: ProbeNormalized.nullable().optional(),
+  sha256: z.string().regex(/^[0-9a-f]{64}$/).optional(),
+  /** the file changed while it was hashed, or hashing failed */
+  hash_problem: z.enum(['source_changed', 'failed']).optional(),
+});
+export type AssetFactsInput = z.infer<typeof AssetFactsInput>;
+
 /** Asset row for the library: asset + where it lives + review hints. */
 export const MediaAssetView = MediaAsset.extend({
   root_label: z.string(),
+  /** browser: the file is on a team member's computer; the web plays it from there (stream_url is null) */
+  root_kind: SourceRootKind,
   /** same-origin URL of the poster JPEG, null when none */
   poster_url: z.string().nullable(),
   /** same-origin Range-capable URL, null unless playable_direct */
@@ -516,6 +569,9 @@ export const Api = {
   addRoot: { method: 'POST', path: '/api/v1/media/roots', input: AddRootInput, output: SourceRoot },
   scanRoot: { method: 'POST', path: '/api/v1/media/roots/:id/scan', output: JobAccepted },
   checkRoot: { method: 'POST', path: '/api/v1/media/roots/:id/check', output: RootCheckResult },
+  createBrowserRoot: { method: 'POST', path: '/api/v1/media/browser-roots', input: CreateBrowserRootInput, output: SourceRoot },
+  reportBrowserFiles: { method: 'POST', path: '/api/v1/media/browser-roots/:id/files', input: BrowserFilesInput, output: BrowserFilesOutput },
+  reportAssetFacts: { method: 'PUT', path: '/api/v1/media/assets/:id/facts', input: AssetFactsInput, output: MediaAssetView },
   listAssets: { method: 'GET', path: '/api/v1/media/assets', output: z.array(MediaAssetView) },
   searchAssets: { method: 'POST', path: '/api/v1/media/search', input: MediaSearchInput, output: z.array(MediaAssetView) },
   buildCandidates: { method: 'POST', path: '/api/v1/media/candidates', input: BuildCandidatesInput, output: BuildCandidatesOutput },

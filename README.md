@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0m5-blue)
+![version](https://img.shields.io/badge/version-S0n-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -12,6 +12,8 @@
 它把剧本拆成有出处、可以锁定的镜头表，并为每个镜头自动画出带真实焦段和机位的宽银幕铅笔分镜，不需要任何 API key。它还能排出经过校验的拍摄顺序，让你在现场快速记录条次。拍完之后，实拍素材挂回同一个镜头 ID，漏拍了什么一眼就能看到。
 
 > **v0.1 开发预览版**：还没有经过真实剧组试拍。功能边界见下方"功能现状"。规格见 [docs/SPEC-v0.1.md](docs/SPEC-v0.1.md)，计划见 [docs/PLAN.md](docs/PLAN.md)。
+
+![在演示项目里走一遍：分镜 → 计划 → 现场 → 素材 → 交付](docs/media/hero.gif)
 
 ## 它能做什么
 
@@ -25,6 +27,9 @@
   - 取景框和俯视站位图出自同一份数据。
   - 画风是确定性的铅笔稿：先铺明暗再描线，排线统一方向，轮廓收尖。同一个镜头每次画出来都一样，不调用任何图像模型。
   - 画布上可以直接拖动人物站位和运动箭头，支持撤销和版本历史；导出为分镜 PDF 或单格 PNG。
+
+  ![演示项目第 1 场的六格铅笔分镜：远景、全景、过肩中景、近景、插入镜头和特写](docs/media/pencil-boards.png)
+
 - **改的是镜头语法，不是滤镜**
   - 手法模板（对话覆盖、双线交叉、悬疑揭示）和外观预设"宽银幕铅笔分镜"，直接改变机位与构图的默认值：尺度大全景、视点纪律、面孔特写、多画幅中心保护线。
 - **拍摄顺序有独立校验**
@@ -42,6 +47,18 @@
   - 结果只作候选：用洋葱皮对比后手动采用，导出时带"AI 生成"角标。
   - 构图可能漂移；结构层永远不会被改写。
 
+## 截图
+
+以下截图和动图都来自 `npx storyscript-mov --demo` 的演示项目，由 `npm run readme:media` 生成，没有另外摆拍。
+
+| 剧本与镜头表 | 分镜 |
+|---|---|
+| ![剧本页：场景列表、剧本原文和带出处的镜头表](docs/media/script.png) | ![分镜页：铅笔缩略图、大图、俯视站位和相机参数](docs/media/boards.png) |
+| **拍摄计划** | **现场场记** |
+| ![计划页：资源、setup 顺序和已批准的拍摄单](docs/media/plan.png) | ![现场页：按拍摄顺序的大字号镜号和条次录入](docs/media/set.png) |
+| **素材与漏拍** | **交付** |
+| ![素材页：素材库、覆盖状态和漏拍清单](docs/media/media.png) | ![交付页：分镜 PDF、拍摄单、场记 CSV 和项目 JSON](docs/media/deliver.png) |
+
 ## 快速开始
 
 需要 **Node.js ≥ 24.15**（推荐 `brew install node`，24 LTS 或 26 都可以）。素材导入另需 **ffmpeg / ffprobe**（`brew install ffmpeg`）；没装时应用照常运行，只是素材导入不可用。
@@ -55,7 +72,7 @@ npx storyscript-mov
 从源码运行：
 
 ```bash
-git clone <仓库地址> storyscript-mov
+git clone https://github.com/ChromiteCr/StoryScript-Mov.git storyscript-mov
 cd storyscript-mov
 npm ci
 npm start
@@ -123,6 +140,7 @@ npm run typecheck   # 依次检查 core（不带 Node 类型）、server 与测�
 npm run dev         # 开发服务器（Vite middleware，端口 4700）
 npm run look        # 渲染 12 个标准镜头并输出画风指标
 npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
+npm run readme:media  # 从演示项目重新生成 README 的截图和动图（需要本机 Chrome 和 ffmpeg）
 ```
 
 参与贡献前请先读 [AGENTS.md](AGENTS.md)（目录归属与硬规则）和 [docs/CLEANROOM.md](docs/CLEANROOM.md)（洁净室规则：不复制任何受限许可项目的代码、提示词或素材）。
@@ -131,6 +149,7 @@ npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S0n | 2026-09-27 | 发布准备（M10）：README 首屏动图、六格铅笔分镜样张和六个工作流页面截图，全部由 `npm run readme:media` 从演示项目生成；发布包补上仓库/主页/问题反馈地址，包内 README 的相对图片与链接改写为 GitHub 地址（npm 页面也能显示）；源码安装写明仓库地址 | feat |
 | S0m5 | 2026-09-27 | 演示项目的"AI 排序建议"可用：回放一份原创的排序录制，经独立校验后可采纳（录制按 setup 键与名称配对，改过顺序后不会错放旧答案）；素材页错误文案并入统一的错误说明表；计划页的 409 提示按被拒的操作命名（批准/重新计算/调整顺序/采纳建议），不再一律写"计划还不能批准" | fix |
 | S0m4 | 2026-09-27 | 修复只写了"桌子"或"墙"的插入镜头出图：以前把桌子/墙本身当主体、瞄向离地 0.3 米处，画面只剩桌子正面或地板排线；现在在桌面上放一件小物、或在正对镜头的墙上挂一件平面物（视线接近水平），物件落在画面中央 | fix |
 | S0m3 | 2026-09-27 | 素材目录路径在界面里把用户主目录显示为 `~`（更短，截图分享时不带账户名；悬停仍可看完整路径） | fix |

@@ -1,13 +1,15 @@
 // Assembles the published server package (apps/server) before `tsdown` builds dist/:
 //   - the built frontend apps/web/dist → apps/server/web
 //   - the `--demo` inputs (sample script, replay recordings, demo footage) → apps/server/demo-data
-//   - README.md, LICENSE and THIRD_PARTY_NOTICES.md from the repo root → apps/server/
+//   - README.md (relative links made absolute), LICENSE and THIRD_PARTY_NOTICES.md
+//     from the repo root → apps/server/
 //     (npm always packs README* and LICENSE*; THIRD_PARTY_NOTICES.md is also copied
 //     into dist/ by apps/server/tsdown.config.ts so it ships with the current `files`).
 // The copies are build outputs and must not be committed (see .gitignore).
-import { copyFileSync, cpSync, existsSync, rmSync } from 'node:fs';
+import { copyFileSync, cpSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { assembleDemoData } from './demo-data.mjs';
+import { packageReadme } from './package-readme.mjs';
 
 const root = (p) => fileURLToPath(new URL(`../${p}`, import.meta.url));
 
@@ -31,6 +33,12 @@ for (const name of PACKAGE_DOCS) {
     console.error(`仓库根目录缺少 ${name}，发布包必须包含它`);
     process.exit(1);
   }
-  copyFileSync(from, root(`apps/server/${name}`));
+  if (name === 'README.md') {
+    // relative images and links → GitHub URLs, so they also work on the npm page
+    const { repository } = JSON.parse(readFileSync(root('apps/server/package.json'), 'utf8'));
+    writeFileSync(root(`apps/server/${name}`), packageReadme(readFileSync(from, 'utf8'), repository.url));
+  } else {
+    copyFileSync(from, root(`apps/server/${name}`));
+  }
   console.log(`copied ${name} -> apps/server/${name}`);
 }

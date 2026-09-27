@@ -22,6 +22,7 @@
     "look": "tsx scripts/look.ts",
     "e2e": "playwright test",
     "licenses": "node scripts/check-licenses.mjs",
+    "readme:media": "tsx scripts/readme-media.ts",
     "ui:shots": "tsx scripts/ui-shots.ts",
     "eval:breakdown": "tsx scripts/eval-breakdown.ts",
     "gen:media": "tsx scripts/gen-media.ts",

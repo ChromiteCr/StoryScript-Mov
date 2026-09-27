@@ -3,6 +3,14 @@
   "version": "0.0.0",
   "description": "开源、本地运行的实拍分镜工作台：剧本拆镜、宽银幕铅笔分镜、拍摄顺序、场记与素材回链。",
   "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ChromiteCr/StoryScript-Mov.git"
+  },
+  "homepage": "https://github.com/ChromiteCr/StoryScript-Mov#readme",
+  "bugs": {
+    "url": "https://github.com/ChromiteCr/StoryScript-Mov/issues"
+  },
   "type": "module",
   "engines": {
     "node": ">=24.15"

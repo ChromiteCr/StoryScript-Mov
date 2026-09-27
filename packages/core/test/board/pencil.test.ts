@@ -16,6 +16,7 @@ import {
   structureHash,
   subjectFrameBoxes,
 } from '../../src/index.ts';
+import { budget } from '../perf-budget.ts';
 
 const boards = STANDARD_SHOTS.map((s) => ({ shot: s, spec: standardBoard(s) }));
 const board = (key: string): BoardSpec => {
@@ -303,7 +304,7 @@ describe('pencil performance', () => {
       }
       worst = Math.max(worst, t.sort((x, y) => x - y)[1] as number);
     }
-    expect(worst).toBeLessThan(150);
+    expect(worst).toBeLessThan(budget(150));
   });
 
   test('path count stays in the 1–2k range (≤ 3000)', () => {

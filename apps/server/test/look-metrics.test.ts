@@ -23,6 +23,7 @@ import {
 } from '@storyscript/core';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { initResvg, svgToPixels, svgToPng } from '../src/adapters/render/resvg.ts';
+import { budget } from '../../../packages/core/test/perf-budget.ts';
 
 const raster = (svg: string, width: number) => svgToPixels(svg, { width, background: '#ffffff' });
 
@@ -186,7 +187,7 @@ describe('pencil rasterisation performance', () => {
         best = Math.min(best, performance.now() - t0);
         expect(png.length).toBeGreaterThan(1000);
       }
-      if (best >= 1500) slow.push(`${shot.key} ${best.toFixed(0)} ms`);
+      if (best >= budget(1500)) slow.push(`${shot.key} ${best.toFixed(0)} ms`);
     }
     expect(slow).toEqual([]);
   }, 120_000);

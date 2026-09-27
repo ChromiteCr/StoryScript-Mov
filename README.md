@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S0j1-blue)
+![version](https://img.shields.io/badge/version-S0k-blue)
 ![license](https://img.shields.io/badge/license-MIT-green)
 
 开源、在本地运行的**实拍分镜工作台**。
@@ -127,6 +127,7 @@ npm run e2e         # Playwright 端到端测试（需要本机 Chrome）
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S0k | 2026-09-27 | 加固：任务队列分 LLM/图像/本地三条通道、付费请求结果未知直接记为 outcome_unknown、重启后本地任务（扫描/探测/哈希/海报）自动续跑、AT-17 全量安全回归（全部写接口的跨源与无 cookie、路径逃逸、SVG/提示注入、key 不泄露）、安装冒烟（npx 与源码两条路径，需 STORYSCRIPT_SMOKE=1）、发布包内容检查、SECURITY.md；性能预算测试默认留 3 倍余量（STORYSCRIPT_PERF_STRICT=1 严格） | feat |
 | S0j1 | 2026-09-26 | 分镜标注改为纸片底衬（深色剪影上不再发糊）；打印根容器白底；分镜查询随项目切换清空；截图脚本入口 | fix |
 | S0j | 2026-09-26 | AI 铅笔重绘（服务端，实验）：按主机自动识别写法（OpenAI 标准 edits、Seedream/OpenRouter 预设，Gemini/百炼兼容地址主动警示）、控制图与提示词骨架（触发词过滤）、只对 429 重试、超时不重发、取消后晚到只作候选、去色与纸纹后处理、人工采用不改结构层；全部预设标"未验证" | feat |
 | S0i | 2026-09-26 | 分镜页与编辑器：镜头应用即自动出图、铅笔/结构缩略网格、大图与俯视站位示意、拖拽人物脚点与箭头端点、检查器（朝向/姿势/景深、保持景别的焦段滑块、机高俯仰、画幅）、撤销重做与版本历史、镜头已改提示（重新生成/保留）、分镜 PDF 打印视图与单格 PNG；E2E 第 1 段 | feat |

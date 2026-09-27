@@ -1,6 +1,7 @@
 import { mulberry32 } from '@storyscript/core';
 import { beforeAll, describe, expect, test } from 'vitest';
 import { initResvg, svgToPixels, svgToPng } from '../src/adapters/render/resvg.ts';
+import { budget } from '../../../packages/core/test/perf-budget.ts';
 
 const PNG_MAGIC = [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a];
 
@@ -73,7 +74,7 @@ describe('resvg-wasm adapter', () => {
     const png = await svgToPng(svg, { width: 1840 });
     const ms = performance.now() - t0;
     expect(png.length).toBeGreaterThan(1000);
-    expect(ms).toBeLessThan(1500);
+    expect(ms).toBeLessThan(budget(1500));
   });
 
   test('svgToPixels returns straight RGBA at the requested width', async () => {

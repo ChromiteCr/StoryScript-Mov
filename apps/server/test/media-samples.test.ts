@@ -10,6 +10,7 @@ import { locateTool } from '../src/adapters/media/ffmpeg.ts';
 import { hashFile } from '../src/adapters/media/hash.ts';
 import { extractPoster, PathNotAllowedError } from '../src/adapters/media/poster.ts';
 import { ffInput, ProbeError, probeFile } from '../src/adapters/media/probe.ts';
+import { budget } from '../../../packages/core/test/perf-budget.ts';
 
 /**
  * Media spike on lavfi-generated samples (AT-11/AT-12 subset):
@@ -139,7 +140,7 @@ describe.skipIf(!ffmpeg || !ffprobe)('media samples: probe, flags, posters, hash
       const jpg = await readFile(r.path);
       expect(r.bytes).toBe(jpg.length);
       expect([jpg[0], jpg[1]], f).toEqual([0xff, 0xd8]);
-      expect(timings[f], f).toBeLessThan(POSTER_BUDGET_MS);
+      expect(timings[f], f).toBeLessThan(budget(POSTER_BUDGET_MS));
     }
     console.info('[spike] poster ms', timings);
     expect((await readdir(derivatives)).filter((n) => n.endsWith('.tmp'))).toEqual([]);

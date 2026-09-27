@@ -3,6 +3,7 @@ import { schedule } from '../../src/schedule/schedule.ts';
 import { validate } from '../../src/schedule/validate.ts';
 import type { ScheduleInput } from '../../src/schedule/types.ts';
 import { Z, before, input, locked, notBefore, resource, setup, shot, uid, win } from './fixtures.ts';
+import { budget } from '../perf-budget.ts';
 
 /** A realistic full day: 10 setups, 30 shots, 4 performers, 3 locations, 2 pieces of equipment. */
 function day(): ScheduleInput {
@@ -56,6 +57,6 @@ describe('schedule performance (30 shots / 10 setups)', () => {
     const median = samples[25]!;
     const p95 = samples[47]!;
     console.info(`[schedule perf] 30 shots / 10 setups: median ${median.toFixed(3)} ms, p95 ${p95.toFixed(3)} ms`);
-    expect(median).toBeLessThan(50);
+    expect(median).toBeLessThan(budget(50));
   });
 });

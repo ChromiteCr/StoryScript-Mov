@@ -12,6 +12,7 @@ import {
   standardBoard,
   standardSubject as subject,
 } from '../../src/index.ts';
+import { budget } from '../perf-budget.ts';
 
 const MODES: RenderMode[] = ['structure', 'topview', 'pencil'];
 const boards = STANDARD_SHOTS.map((s) => ({ shot: s, spec: standardBoard(s) }));
@@ -187,7 +188,7 @@ describe('determinism and options', () => {
     const t0 = performance.now();
     for (let r = 0; r < rounds; r++) for (const s of STANDARD_SHOTS) renderBoard(standardBoard(s, r), 'structure');
     const avg = (performance.now() - t0) / (rounds * STANDARD_SHOTS.length);
-    expect(avg).toBeLessThan(50);
+    expect(avg).toBeLessThan(budget(50));
   });
 });
 

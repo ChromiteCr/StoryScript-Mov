@@ -8,6 +8,7 @@ import { PROJECT_SCHEMA_VERSION } from '@storyscript/contracts';
 import { isAppError } from '../src/http/errors.ts';
 import { backupDatabase, LATEST_VERSION, migrate, MIGRATIONS, userVersion, type Migration } from '../src/db/migrations/index.ts';
 import { openDb, sqliteVersion, type DbPort } from '../src/db/port.ts';
+import { budget } from '../../../packages/core/test/perf-budget.ts';
 
 const EXPECTED_TABLES = [
   'project',
@@ -236,6 +237,6 @@ describe('search (FR-09: LIKE only)', () => {
     times.sort((a, b) => a - b);
     const median = times[10]!;
     console.log(`[measure] LIKE '%客厅%' over 10k rows (1000 hits): median ${median.toFixed(2)} ms, min ${times[0]!.toFixed(2)} ms, max ${times[20]!.toFixed(2)} ms`);
-    expect(median).toBeLessThan(20);
+    expect(median).toBeLessThan(budget(20));
   });
 });

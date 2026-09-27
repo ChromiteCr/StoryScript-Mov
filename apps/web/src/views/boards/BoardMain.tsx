@@ -1,27 +1,37 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import type { Board, BoardView, Project, Shot } from '@storyscript/contracts';
-import { Download, History, Redo2, RefreshCw, Save, Undo2 } from 'lucide-react';
+import { Download, History, Redo2, RefreshCw, Save, Sparkles, Undo2 } from 'lucide-react';
 import { boardCaption, pngFileName } from '../../lib/print-boards.ts';
 import { RENDER_MODE_LABEL, versionLabel, type BoardViewMode } from '../../lib/labels-boards.ts';
+import { isTerminalJob, untrackJob } from '../../lib/jobs.ts';
+import { rasterStaleFor, redrawBlockedReason, STALE_TITLE, type ShotRaster } from '../../lib/labels-raster.ts';
+import { useCancelJob, useHealth, useProviders } from '../../lib/queries.ts';
 import { isRevisionConflict } from '../../lib/queries-boards.ts';
+import { readAiLabelPref, redrawSlot, useAdoptRaster, useRejectRaster, useRequestRedraw } from '../../lib/queries-raster.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, IconButton, Notice, SelectInput, Tag } from '../../components/ui.tsx';
 import { PaperCanvas, Panel, PanelToolbar } from '../../components/workspace.tsx';
 import { BoardCanvas } from './BoardCanvas.tsx';
 import { composeBoardPng, downloadBlob } from './exportPng.ts';
 import { useBoardUrl } from './images.ts';
+import { AiBar, RasterList, RedrawJobNotice, type RasterActions } from './RasterPanel.tsx';
+import { RedrawDialog } from './RedrawDialog.tsx';
 import type { EditorApi } from './useEditor.ts';
+import { useRasterWorkbench } from './useRasters.ts';
 
 /**
  * Main panel of the board page: toolbar (render mode, undo/redo, save as new
- * version, version history, PNG), the stale banner, the frame on paper with
- * its editing handles, the shot's caption and the read-only topview.
+ * version, AI pencil redraw, version history, PNG), the stale banner, the
+ * frame on paper with its editing handles (and, FR-12, an adopted or compared
+ * AI raster), the shot's AI candidates, caption and the read-only topview.
  */
 
 const MODES: BoardViewMode[] = ['pencil', 'structure'];
 
 export interface BoardMainProps {
   project: Project;
+  /** the shot's newest board as listed (carries adopted_raster_id) */
+  board: BoardView;
   editor: EditorApi;
   shot: Shot | undefined;
   mode: BoardViewMode;
@@ -86,11 +96,45 @@ export function BoardMain(p: BoardMainProps) {
   const [pngBusy, setPngBusy] = useState(false);
   const [pngError, setPngError] = useState<unknown>(null);
 
+  // ---- AI pencil redraw (FR-12, experimental)
+  const health = useHealth();
+  const providers = useProviders();
+  const ai = useRasterWorkbench(p.board, p.versions, editor.present);
+  const redraw = useRequestRedraw();
+  const adopt = useAdoptRaster();
+  const reject = useRejectRaster();
+  const cancel = useCancelJob();
+  const [confirming, setConfirming] = useState(false);
+  const imageView = providers.data?.image ?? null;
+  const demo = health.data?.demo ?? false;
+  const configured = (health.data?.image_provider_configured ?? false) && imageView !== null;
+  const setupBlocked = redrawBlockedReason({ demo, configured, dirty: false, viewingOld: false });
+  const blocked = redrawBlockedReason({ demo, configured, dirty: editor.dirty, viewingOld: readOnly });
+  const jobBusy = ai.job !== null && !isTerminalJob(ai.job);
+  const recommended = shot?.fields.set_piece ?? false;
+  const rasterActions: RasterActions = {
+    onAdopt: (r: ShotRaster) => adopt.mutate(r.id, { onSuccess: () => ai.adoptedShown() }),
+    onReject: (r: ShotRaster) =>
+      reject.mutate(r.id, {
+        onSuccess: () => {
+          if (ai.compared?.id === r.id) ai.compare(null);
+        },
+      }),
+    adopting: adopt.isPending ? (adopt.variables ?? null) : null,
+    rejecting: reject.isPending ? (reject.variables ?? null) : null,
+    error: adopt.error ?? reject.error,
+  };
+  const aiLayer =
+    !readOnly && ai.shown?.image_url && ai.mode !== 'lines'
+      ? { url: ai.shown.image_url, mode: ai.mode, opacity: ai.opacity / 100, badge: true, stale: ai.stale }
+      : null;
+  const pngRaster = !readOnly && ai.adopted?.image_url && !rasterStaleFor(ai.adopted, spec) ? ai.adopted.image_url : null;
+
   const exportPng = async () => {
     setPngBusy(true);
     setPngError(null);
     try {
-      const blob = await composeBoardPng(spec, boardCaption(shown, shot));
+      const blob = await composeBoardPng(spec, boardCaption(shown, shot), pngRaster ? { rasterUrl: pngRaster, label: readAiLabelPref(p.project.id) } : null);
       downloadBlob(blob, pngFileName(p.project.name, latest.shot_code, shown.version));
     } catch (e) {
       setPngError(e);
@@ -141,6 +185,23 @@ export function BoardMain(p: BoardMainProps) {
           <span className="sm:hidden">保存</span>
           <span className="hidden sm:inline">保存为新版本</span>
         </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={blocked !== null || jobBusy}
+          title={blocked ?? (jobBusy ? '上一张还在生成' : '把这一格交给图像模型重画成铅笔稿（实验，可能计费；先确认再发送）')}
+          onClick={() => setConfirming(true)}
+          aria-label="AI 铅笔重绘（实验）"
+        >
+          <Sparkles aria-hidden className="size-3.5" />
+          <span className="sm:hidden">AI</span>
+          <span className="hidden sm:inline">AI 铅笔重绘（实验）</span>
+        </Button>
+        {recommended ? (
+          <Tag title="大场面镜头：AI 重绘最能补足质感（仍需确认后才会发送）" className="hidden sm:inline-flex">
+            推荐
+          </Tag>
+        ) : null}
         <span className="ml-auto flex min-w-0 items-center gap-1">
           <History aria-hidden className="hidden size-3.5 shrink-0 text-graphite-300 sm:block" />
           <SelectInput
@@ -226,6 +287,18 @@ export function BoardMain(p: BoardMainProps) {
           </Notice>
         ) : null}
 
+        {ai.job && ai.job.status !== 'succeeded' ? (
+          <div className="flex flex-col gap-1">
+            <RedrawJobNotice job={ai.job} onCancel={() => ai.job && cancel.mutate(ai.job.id)} cancelling={cancel.isPending} />
+            {isTerminalJob(ai.job) ? (
+              <Button size="sm" variant="ghost" className="self-start" onClick={() => untrackJob(redrawSlot(latest.shot_id))}>
+                知道了
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        {!readOnly ? <AiBar ai={ai} actions={rasterActions} /> : null}
+
         <PaperCanvas variant="fill" label={`镜 ${latest.shot_code} 分镜稿`}>
           <BoardCanvas
             spec={spec}
@@ -233,8 +306,25 @@ export function BoardMain(p: BoardMainProps) {
             code={latest.shot_code}
             alt={`镜 ${latest.shot_code} 的${RENDER_MODE_LABEL[editor.dragging ? 'structure' : mode]}`}
             editor={readOnly ? null : editor}
+            ai={aiLayer}
           />
         </PaperCanvas>
+
+        {!readOnly ? (
+          <RasterList ai={ai} actions={rasterActions} spec={editor.present} blocked={setupBlocked}>
+            {ai.leftBehind ? (
+              ai.leftBehindStale ? (
+                <Notice tone="warn" title={STALE_TITLE} role="status">
+                  v{ai.leftBehind.board_version} 采用的 AI 图对应旧构图；当前版本 v{latest.version} 的大图和导出改用铅笔稿。不会自动重绘，需要时再点"AI 铅笔重绘"。
+                </Notice>
+              ) : (
+                <Notice tone="info" title={`采用记录属于 v${ai.leftBehind.board_version}`}>
+                  构图没有变化，但采用只对那个版本生效；当前版本的大图和导出使用铅笔稿。
+                </Notice>
+              )
+            ) : null}
+          </RasterList>
+        ) : null}
 
         <div className="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,0.8fr)]">
           <Paper label="镜头说明">
@@ -250,6 +340,30 @@ export function BoardMain(p: BoardMainProps) {
         </div>
         {!readOnly ? <p className="text-xs text-graphite-300">撤销 ⌘Z / Ctrl+Z · 重做 ⇧⌘Z / Ctrl+Shift+Z。修改只有在"保存为新版本"后才写入项目。</p> : null}
       </div>
+      {confirming && imageView ? (
+        <RedrawDialog
+          board={p.board}
+          fields={shot?.fields}
+          provider={imageView}
+          busy={redraw.isPending}
+          error={redraw.error}
+          onClose={() => {
+            setConfirming(false);
+            redraw.reset();
+          }}
+          onConfirm={(quality) =>
+            redraw.mutate(
+              { boardId: p.board.id, shotId: p.board.shot_id, quality },
+              {
+                onSuccess: () => {
+                  setConfirming(false);
+                  redraw.reset();
+                },
+              },
+            )
+          }
+        />
+      ) : null}
     </Panel>
   );
 }

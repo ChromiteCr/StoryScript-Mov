@@ -9,7 +9,8 @@ import { useInView, useLazyBoardUrl } from './images.ts';
  * Left column: every shot's board as a thumbnail, grouped by scene in
  * narrative order. Thumbnails render lazily (only once scrolled near) and are
  * cached by structure hash. A stale board carries the corner mark "镜头已改";
- * a hand-edited one a small pencil. The selected card has the accent ring.
+ * a hand-edited one a small pencil; one whose version has an adopted AI
+ * raster an "AI" mark. The selected card has the accent ring.
  */
 
 export interface SceneGroup {
@@ -30,6 +31,11 @@ const Thumb = memo(function Thumb({ board, mode }: { board: BoardView; mode: Boa
       ) : (
         <span className="block aspect-[2.39/1] w-full animate-pulse bg-paper motion-reduce:animate-none" />
       )}
+      {board.adopted_raster_id ? (
+        <span title="已采用 AI 图" className="absolute bottom-1 left-1 inline-flex h-5 items-center rounded-control bg-graphite-950/90 px-1.5 text-xs font-medium text-graphite-100">
+          AI
+        </span>
+      ) : null}
       {board.stale ? (
         <span className="absolute top-1 right-1 inline-flex h-5 items-center gap-1 rounded-control border border-warn/70 bg-graphite-950/90 px-1.5 text-xs text-graphite-100">
           <span aria-hidden className="size-1.5 rounded-full bg-warn" />
@@ -90,7 +96,7 @@ export function ShotStrip({
                     type="button"
                     data-shot={b.shot_id}
                     aria-pressed={selected}
-                    aria-label={`镜 ${b.shot_code}${shot ? ` ${SHOT_SIZE_LABEL[shot.fields.shot_size]}` : ''}${b.stale ? '，镜头已改' : ''}`}
+                    aria-label={`镜 ${b.shot_code}${shot ? ` ${SHOT_SIZE_LABEL[shot.fields.shot_size]}` : ''}${b.stale ? '，镜头已改' : ''}${b.adopted_raster_id ? '，已采用 AI 图' : ''}`}
                     onClick={() => onSelect(b.shot_id)}
                     className={
                       'flex w-full min-w-0 flex-col gap-1 rounded-panel border p-1 text-left ' +

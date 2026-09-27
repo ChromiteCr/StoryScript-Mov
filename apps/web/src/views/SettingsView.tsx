@@ -9,6 +9,7 @@ import { ErrorNotice } from '../components/ErrorNotice.tsx';
 import { Button, CopyCommand, Notice, Spinner } from '../components/ui.tsx';
 import { Inspector, InspectorGroup, InspectorRow, PageHeader, Panel, Workspace } from '../components/workspace.tsx';
 import { TextProviderPanel } from './TextProviderPanel.tsx';
+import { ImageProviderPanel } from './settings/ImageProviderPanel.tsx';
 
 /**
  * Settings: category list on the left, an inspector on the right. Not a
@@ -168,25 +169,11 @@ function Environment({ health }: { health: HealthInfo }) {
   );
 }
 
-function Models({ health }: { health: HealthInfo }) {
+function Models() {
   return (
     <Inspector>
       <TextProviderPanel />
-      <InspectorGroup
-        title="图像模型（实验）"
-        note={
-          health.image_provider_configured ? null : (
-            <p className="text-graphite-300">
-              只有 AI 铅笔重绘用到图像模型；铅笔分镜本身由本机渲染，不需要它。配置项同样是地址、密钥、模型三项，环境变量前缀为{' '}
-              <Mono>STORYSCRIPT_IMAGE_</Mono>。
-            </p>
-          )
-        }
-      >
-        <InspectorRow label="状态">
-          <State ok={health.image_provider_configured}>{health.image_provider_configured ? '已配置' : '未配置'}</State>
-        </InspectorRow>
-      </InspectorGroup>
+      <ImageProviderPanel />
     </Inspector>
   );
 }
@@ -279,7 +266,7 @@ export function SettingsView() {
   } else if (category === 'environment') {
     content = <Environment health={health.data} />;
   } else {
-    content = <Models health={health.data} />;
+    content = <Models />;
   }
 
   const recheck = (

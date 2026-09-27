@@ -1,13 +1,25 @@
 import type { BoardSpec } from '@storyscript/contracts';
 import { frameSize, renderBoard } from '@storyscript/core';
 import type { BoardCaption } from '../../lib/print-boards.ts';
+import { AI_BADGE_TEXT, aiBadgeBox, renderOverlayOnly } from './raster-layers.ts';
 
 /**
  * Single-frame PNG, composed in the browser: the pencil SVG is loaded from a
  * Blob URL into an <img>, drawn onto a canvas with the caption strip under
  * it, and downloaded via canvas.toBlob. Waits for document.fonts so the
  * caption and the SVG's labels use the final Chinese font. Greyscale only.
+ *
+ * With an adopted AI raster (FR-12) the frame is the raster (same-origin, so
+ * the canvas stays exportable) plus the vector annotation layer, and — unless
+ * the export preference turned it off — the "AI 生成" corner mark.
  */
+
+export interface PngAiLayer {
+  /** same-origin URL of the adopted raster PNG */
+  rasterUrl: string;
+  /** draw the "AI 生成" corner mark */
+  label: boolean;
+}
 
 const FONT = '"PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Noto Sans CJK SC", "Source Han Sans SC", sans-serif';
 const PAD = 48;
@@ -47,12 +59,26 @@ function loadImage(url: string): Promise<HTMLImageElement> {
   });
 }
 
-export async function composeBoardPng(spec: BoardSpec, caption: BoardCaption): Promise<Blob> {
+function drawBadge(ctx: CanvasRenderingContext2D, spec: BoardSpec, code: string, ox: number, oy: number): void {
+  const b = aiBadgeBox(spec, code);
+  ctx.save();
+  ctx.fillStyle = 'rgba(37, 38, 42, 0.92)';
+  ctx.beginPath();
+  ctx.roundRect(ox + b.x, oy + b.y, b.w, b.h, 4);
+  ctx.fill();
+  ctx.fillStyle = '#efebe2';
+  ctx.font = `700 ${b.font}px ${FONT}`;
+  ctx.fillText(AI_BADGE_TEXT, ox + b.tx, oy + b.baseline);
+  ctx.restore();
+}
+
+export async function composeBoardPng(spec: BoardSpec, caption: BoardCaption, ai: PngAiLayer | null = null): Promise<Blob> {
   if (document.fonts?.ready) await document.fonts.ready;
   const { W, H } = frameSize(spec.frame.aspect);
-  const svg = renderBoard(spec, 'pencil', { overlay: true, code: caption.code });
+  const svg = ai ? renderOverlayOnly(spec, caption.code) : renderBoard(spec, 'pencil', { overlay: true, code: caption.code });
   const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
   try {
+    const raster = ai ? await loadImage(ai.rasterUrl) : null;
     const img = await loadImage(url);
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -66,7 +92,9 @@ export async function composeBoardPng(spec: BoardSpec, caption: BoardCaption): P
     canvas.height = Math.round(H + PAD * 2 + captionH);
     ctx.fillStyle = PAPER;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
+    if (raster) ctx.drawImage(raster, PAD, PAD, W, H);
     ctx.drawImage(img, PAD, PAD, W, H);
+    if (ai?.label) drawBadge(ctx, spec, caption.code, PAD, PAD);
     ctx.strokeStyle = INK;
     ctx.lineWidth = 2;
     ctx.strokeRect(PAD, PAD, W, H);

@@ -54,6 +54,19 @@ test('--demo opens the demo project; every page has content; deliver exports', a
   await expect(status).toContainText('已批准');
   await expect(status.getByRole('button', { name: '批准计划' })).toHaveCount(0);
 
+  // AI 排序建议: answered by the replay recording, shown as a draft; ignoring it leaves the approved plan alone
+  await page.getByRole('button', { name: 'AI 排序建议', exact: true }).click();
+  const send = page.getByRole('dialog', { name: '发送排序请求' });
+  await expect(send).toContainText('演示模式：使用本地录制的回放，不会外发请求');
+  await send.getByRole('button', { name: '发送', exact: true }).click();
+  const suggestion = page.getByRole('region', { name: 'AI 排序建议' });
+  await expect(suggestion.locator('ol > li')).toHaveCount(10);
+  await expect(suggestion).toContainText('全天只转一次场地');
+  await expect(suggestion).not.toContainText('已删除的 setup');
+  await suggestion.getByRole('button', { name: '忽略', exact: true }).click();
+  await expect(suggestion).toHaveCount(0);
+  await expect(status).toContainText('已批准');
+
   // set: shooting order from the approved plan, takes logged
   await go(page, 'set', '现场');
   await expect(page.getByText(/按已批准计划/).first()).toBeVisible();

@@ -16,4 +16,7 @@ test-results/
 .look/
 apps/server/web/
 apps/server/demo-data/
+/apps/server/README.md
+/apps/server/LICENSE
+/apps/server/THIRD_PARTY_NOTICES.md
 *.tgz

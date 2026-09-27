@@ -41,12 +41,14 @@ import {
  *   hash(dialect, host, model, prompt, control sha256, reference, size,
  *   quality). A stored candidate/adopted raster with that key is returned
  *   without sending anything. Otherwise the project soft cap is checked and a
- *   remote image_redraw job is queued (lane 'llm': one paid request at a time).
+ *   remote image_redraw job is queued (lane 'image': one paid image request at
+ *   a time, independent of the text-model lane).
  *
  *   The job stores one candidate: raster-<id>.png (post-processed),
  *   raw-<id>.<ext>, control-<id>.png and the raster-<id>.json sidecar, then a
  *   board_raster row (status candidate; outcome ok / refused /
- *   outcome_unknown). A result that arrives after the job was cancelled is kept
+ *   outcome_unknown — the job itself then ends as outcome_unknown, never
+ *   re-sent). A result that arrives after the job was cancelled is kept
  *   as outcome late_after_cancel and never adopted automatically. Board spec
  *   and shot fields are never written (INV-09).
  */
@@ -169,7 +171,7 @@ export async function requestRedraw(deps: AppDeps, boardId: string, input: { con
     idempotency_key: key,
     input_hash: rp.cache_key,
     remote: true,
-    lane: 'llm',
+    lane: 'image',
     run: (ctx) => runRedraw(deps, db, project.dir, endpoint, rp, ctx),
   });
 }
@@ -339,5 +341,6 @@ async function runRedraw(deps: AppDeps, db: DbPort, projectDir: string, endpoint
     }
     return { status: 'succeeded', attempts: res.attempts, usage: res.usage, error: null, commit };
   }
-  return { status: 'failed', attempts: res.attempts, usage: null, error: res.error, commit };
+  // timeout / 5xx / dropped connection after sending: the paid call may have gone through
+  return { status: res.outcome === 'outcome_unknown' ? 'outcome_unknown' : 'failed', attempts: res.attempts, usage: null, error: res.error, commit };
 }

@@ -21,8 +21,9 @@ import {
 } from '../db/repos/media.ts';
 import { getRoot } from '../db/repos/root.ts';
 import { redactSecrets } from '../adapters/llm/redact.ts';
+import { detectTools, type ToolsInfo } from '../diagnostics.ts';
 import { extOf, isInside, MEDIA_EXTS, resolveSourceFile, safeRealpathSync } from '../services/media/paths.ts';
-import type { JobRunContext, JobRunResult } from './queue.ts';
+import { registerRerun, type JobRunContext, type JobRunResult, type JobSpec, type RerunFactory } from './queue.ts';
 
 /**
  * scan_root job (SPEC FR-08), strictly read-only on the source folder (INV-04):
@@ -35,6 +36,10 @@ import type { JobRunContext, JobRunResult } from './queue.ts';
  *      size/mtime compared before and after → source_changed on any change
  * Each asset update is its own small transaction, so the library fills in
  * while the job runs; the job's own status is committed by the queue.
+ *
+ * FR-11: the scan is local and idempotent (assets are upserted by root +
+ * rel_path), so a scan interrupted by a restart is re-run automatically under
+ * the same job id and key (`scan_root:<root id>`, see registerRerun below).
  */
 
 export interface ScanJobDeps {
@@ -277,3 +282,43 @@ export async function runScanJob(ctx: JobRunContext, deps: ScanJobDeps): Promise
     };
   }
 }
+
+// ---------------------------------------------------------------------------
+// job spec + FR-11 restart re-run
+// ---------------------------------------------------------------------------
+
+export const scanRootKey = (rootId: string) => `scan_root:${rootId}`;
+
+/** Root id of a scan job row: from its idempotency key, else its input_hash (= root id). */
+export function scanRootIdOf(job: { idempotency_key: string; input_hash: string }): string {
+  const m = /^scan_root:([^~]+)(~.*)?$/.exec(job.idempotency_key);
+  return m ? m[1]! : job.input_hash;
+}
+
+export function scanJobSpec(deps: ScanJobDeps): JobSpec {
+  return {
+    kind: 'scan_root',
+    idempotency_key: scanRootKey(deps.rootId),
+    input_hash: deps.rootId,
+    remote: false,
+    lane: 'local',
+    run: (ctx) => runScanJob(ctx, deps),
+  };
+}
+
+/**
+ * Re-run factory for scan_root: needs the project folder, a root that still
+ * exists and ffmpeg/ffprobe; otherwise the job stays interrupted.
+ */
+export function scanRerunFactory(resolveTools: () => Promise<ToolsInfo> = () => detectTools()): RerunFactory {
+  return async ({ job, db, projectDir }) => {
+    if (!projectDir) return null;
+    const rootId = scanRootIdOf(job);
+    if (!getRoot(db, rootId)) return null;
+    const tools = await resolveTools();
+    if (!tools.ffprobe.path || !tools.ffmpeg.path) return null;
+    return scanJobSpec({ db, projectDir, rootId, ffprobe: tools.ffprobe.path, ffmpeg: tools.ffmpeg.path });
+  };
+}
+
+registerRerun('scan_root', scanRerunFactory());

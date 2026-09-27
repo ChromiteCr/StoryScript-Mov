@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises';
 import { expect, test, type Page } from '@playwright/test';
 import { ProjectExport } from '@storyscript/contracts';
-import { signInAnywhere, startApp, type RunningApp } from './support.ts';
+import { ROOT, signInAnywhere, startApp, type RunningApp } from './support.ts';
 
 /**
  * E2E (M7): `storyscript-mov --demo` creates the demo project under the
@@ -98,7 +98,8 @@ test('--demo opens the demo project; every page has content; deliver exports', a
   expect(data.plans).toHaveLength(1);
   expect(data.takes.length).toBeGreaterThan(0);
   expect(data.media_assets).toHaveLength(6);
-  expect(json.text).not.toContain(app.tmp);
+  expect(json.text).not.toContain(app.tmp); // demo project folder
+  expect(json.text).not.toContain(ROOT); // demo footage folder (samples/demo-media/clips)
   expect(json.text).not.toMatch(/"abs_path"|api_key|credentials/);
   await expect(page.getByRole('status').filter({ hasText: '已下载' })).toBeVisible();
 

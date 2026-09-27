@@ -58,7 +58,7 @@ export async function posterFile(db: DbPort, projectDir: string, id: string): Pr
  * Original clip for direct playback. Only playable_direct assets; the path is
  * realpath(root + rel_path) and must still be a file inside the root.
  */
-export async function streamFile(db: DbPort, id: string): Promise<{ path: string; size: number; asset: MediaAsset }> {
+export async function streamFile(db: DbPort, id: string, projectFolder: string): Promise<{ path: string; size: number; asset: MediaAsset }> {
   const a = requireAsset(db, id);
   if (!a.playable_direct) {
     throw new AppError('UNSUPPORTED_MEDIA', '这条素材不能在浏览器里直接播放：需代理（v0.2）', 415, { asset_id: id });
@@ -66,7 +66,7 @@ export async function streamFile(db: DbPort, id: string): Promise<{ path: string
   const root = getRoot(db, a.source_root_id);
   if (!root) throw new AppError('NOT_FOUND', '素材所在目录已不存在', 404);
   if (root.kind === 'browser') throw new AppError('SOURCE_OFFLINE', '这条素材在队员的电脑上，服务器不读取视频：在浏览器里打开对应的项目文件夹即可播放', 409, { asset_id: id });
-  const file = await resolveSourceFile(root.abs_path, a.rel_path);
+  const file = await resolveSourceFile(root.kind === 'project' ? projectFolder : root.abs_path, a.rel_path);
   if (!file.ok) {
     if (file.reason === 'not_allowed') {
       throw new AppError('PATH_NOT_ALLOWED', '素材路径指向素材目录之外，已拒绝访问', 403, { asset_id: id });

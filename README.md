@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S1d-blue)
+![version](https://img.shields.io/badge/version-S1e-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -39,6 +39,7 @@
   - 可导出拍摄单、打板卡和预填镜号的场记模板。
 - **拍完找得到**
   - 现场用大字号镜号快速录入条次，一条可以覆盖多个镜头。
+  - 像在编辑器里打开文件夹一样打开项目：素材放在项目文件夹的子文件夹里（例如 A-roll、B-roll），打开项目时自动扫描，整个文件夹搬到别的盘也能继续用；项目以外的存储卡、硬盘可以登记为外部素材目录。
   - 素材只读导入：ffprobe 读元数据、抽海报帧、算 SHA-256，并检测文件是否被改动过。
   - 按打板码、机内文件名或自定义正则生成关联候选，全部由你审核确认。
   - 覆盖状态与漏拍清单（无场记、无关联、无已确认可用片段、文件离线）适用于所有镜头，包括无对白镜头、插入镜头和空镜。
@@ -128,7 +129,7 @@ API key 只保存在本机的 `~/.config/storyscript-mov/credentials.json`（权
 ## 隐私与安全
 
 - 服务只监听 `127.0.0.1`。令牌换成 HttpOnly cookie，并校验 Host 与 Origin，防止其他网页读取你的本地数据。
-- 原片只读：派生文件（海报帧等）只写进项目目录，源目录不会多出任何文件。
+- 视频只读：项目的数据和派生文件（海报帧等）只写进项目文件夹里的 `.storyscript-mov`，视频文件本身和外部素材目录不会多出或改动任何文件。服务器版在队员电脑上只读取视频，记录同样只写 `.storyscript-mov`。
 - 发给模型的内容只有你点击时选中的剧本段落，或分镜的控制图与镜头描述，不会发送原片。
 
 威胁模型与漏洞报告方式见 [SECURITY.md](SECURITY.md)。
@@ -162,6 +163,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S1e | 2026-09-28 | 单机版像 VS Code 一样打开项目文件夹：首页「打开文件夹…」，还不是项目的文件夹可以直接在那里新建项目；项目数据改存到文件夹里的 .storyscript-mov，素材放在 A-roll、B-roll 等子文件夹，项目文件夹本身就是素材目录，打开项目时自动增量扫描，整个文件夹移动后素材仍然在线；旧版本的项目目录照常打开；外部存储卡仍可登记为「外部素材目录」；视频只读规则改为「只写 .storyscript-mov」 | feat |
 | S1d | 2026-09-28 | 服务器版在浏览器里打开本机项目文件夹：像 VS Code 打开文件夹一样选择放素材的文件夹（A-roll、B-roll 等子文件夹一起列出），浏览器在本机读取 MP4/MOV 信息、截海报、后台算校验值，只上传信息和海报小图；Chrome/Edge 记住最近打开的文件夹，并在文件夹里的 .storyscript-mov 保存记录（队友拿到拷贝可以直接用，不用重新计算）；Safari/Firefox 只读打开；检查器直接播放本机文件；素材页左栏按子文件夹筛选 | feat |
 | S1c | 2026-09-28 | 服务器版每队用量上限：每个队伍 24 小时内的文本模型和图像模型调用各有上限（默认 200 次和 20 次，写在 server.json 的 limits 里），超出后提示「已达到调用次数上限」并给出原因；单机版不限 | feat |
 | S1b | 2026-09-28 | 浏览器读取本机素材的基础：素材目录分为服务器目录、项目文件夹、浏览器目录三类（数据迁移 002，旧项目自动升级）；服务端接收浏览器上报的文件清单、素材信息和海报小图（标志位一律由服务器计算，服务器不读取、不播放浏览器目录里的视频）；核心库新增自己实现的 MP4/MOV 头部解析（与 ffprobe 在 6 条样本上逐字段一致）和流式 SHA-256 | feat |

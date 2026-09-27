@@ -30,7 +30,10 @@ export interface M3App {
   handle: AppHandle;
   root: string;
   stateDir: string;
+  /** the folder the project was created in */
   projectDir: string;
+  /** its data folder (project.json, database, derivatives, boards …) */
+  dataDir: string;
   get<T = unknown>(path: string): Promise<ApiResult<T>>;
   post<T = unknown>(path: string, body?: unknown): Promise<ApiResult<T>>;
   put<T = unknown>(path: string, body?: unknown): Promise<ApiResult<T>>;
@@ -83,6 +86,7 @@ export async function makeM3App(opts: { env?: NodeJS.ProcessEnv; demo?: boolean;
     root,
     stateDir,
     projectDir,
+    dataDir: join(projectDir, '.storyscript-mov'),
     get: (p) => call('GET', p),
     post: (p, b) => call('POST', p, b ?? {}),
     put: (p, b) => call('PUT', p, b ?? {}),

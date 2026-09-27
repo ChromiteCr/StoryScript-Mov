@@ -53,7 +53,7 @@ describe.skipIf(!HAS_FFMPEG)('scan: folders, kinds, project folder inside a root
     expect(names.some((n) => n.includes('.Trashes'))).toBe(false);
     expect(names.some((n) => n.startsWith('project/'))).toBe(false);
     // posters were written into the project, yet not picked up as media
-    expect((await readdir(join(ws.projectDir, 'derivatives', 'posters'))).length).toBeGreaterThan(0);
+    expect((await readdir(join(ws.dataDir, 'derivatives', 'posters'))).length).toBeGreaterThan(0);
     expect(await snapshotDir(join(ws.root, 'shoot'))).toEqual(beforeShoot);
   });
 

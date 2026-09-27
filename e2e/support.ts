@@ -151,7 +151,7 @@ export async function signIn(page: Page, app: RunningApp): Promise<void> {
 export async function createProject(page: Page, dir: string, name: string): Promise<void> {
   await page.getByRole('button', { name: /新建项目/ }).first().click();
   const dialog = page.getByRole('dialog', { name: '新建项目' });
-  await dialog.getByLabel('项目目录').fill(dir);
+  await dialog.getByLabel('项目文件夹').fill(dir);
   // Focusing the name field pre-fills the folder name; let that land before typing over it.
   const nameField = dialog.getByLabel('项目名');
   await nameField.focus();

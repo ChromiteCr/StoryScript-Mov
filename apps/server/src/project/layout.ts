@@ -1,11 +1,41 @@
 import { existsSync, readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { isAbsolute, join, resolve } from 'node:path';
-import { ProjectManifest } from '@storyscript/contracts';
+import { basename, dirname, isAbsolute, join, resolve } from 'node:path';
+import { FOLDER_RECORDS_DIR, ProjectManifest } from '@storyscript/contracts';
 import { writeJsonFile } from '../config/paths.ts';
 import { AppError } from '../http/errors.ts';
 
-/** On-disk layout of a project directory (SPEC §3). */
+/**
+ * On-disk layout of a project (SPEC §3). A project is a folder the user opens
+ * (like a folder in VS Code): footage sits in it (A-roll/, B-roll/ …) and the
+ * project's own data lives in its hidden .storyscript-mov/ folder. Projects
+ * made before that layout keep project.json in the folder itself ("legacy").
+ * Everything below `data` (manifest, database, derivatives, boards, exports,
+ * recovery) is the same in both layouts.
+ */
+
+export interface ProjectDirs {
+  /** the folder the user opened */
+  folder: string;
+  /** where project.json, the database and derivatives live */
+  data: string;
+  legacy: boolean;
+}
+
+/** Resolve an opened folder (a real path). The records folder itself is accepted too. */
+export function projectDirs(real: string): ProjectDirs {
+  if (basename(real) === FOLDER_RECORDS_DIR && existsSync(join(real, MANIFEST_FILE))) {
+    return { folder: dirname(real), data: real, legacy: false };
+  }
+  if (existsSync(join(real, MANIFEST_FILE))) return { folder: real, data: real, legacy: true };
+  return { folder: real, data: join(real, FOLDER_RECORDS_DIR), legacy: false };
+}
+
+/** The opened folder for a data directory (inverse of projectDirs). */
+export function folderOfDataDir(data: string): string {
+  return basename(data) === FOLDER_RECORDS_DIR ? dirname(data) : data;
+}
+
 
 export const MANIFEST_FILE = 'project.json';
 export const DB_FILE = 'project.sqlite';
@@ -25,7 +55,7 @@ export function normalizeProjectDir(input: string): string {
 
 export function readManifest(dir: string): ProjectManifest {
   const path = manifestPath(dir);
-  if (!existsSync(path)) throw new AppError('NOT_FOUND', '该目录下没有 StoryScript-Mov 项目（缺少 project.json）', 404, { dir });
+  if (!existsSync(path)) throw new AppError('NOT_FOUND', '这个文件夹还不是 StoryScript-Mov 项目', 404, { dir });
   let raw: unknown;
   try {
     raw = JSON.parse(readFileSync(path, 'utf8'));

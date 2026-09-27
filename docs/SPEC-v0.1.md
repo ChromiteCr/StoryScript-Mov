@@ -19,7 +19,7 @@
 | INV-01 | 叙事顺序（`shot.narrative_pos`）与拍摄顺序（`plan.order/blocks`）分开存储；排期操作绝不修改叙事顺序。 |
 | INV-02 | 主键一律用 UUID；显示编号（`shot.code`、`scene.display_no`）可改，但不承担身份。 |
 | INV-03 | AI 输出只写入 `shot_draft`；只有 apply 才能进入正式表。apply 跳过 `locked` 镜头，并检查 `expected_revision`，冲突返回 409。 |
-| INV-04 | 原片只读。派生文件（海报帧等）只写进项目目录，源目录不产生任何新文件。 |
+| INV-04 | 原片只读。项目数据和派生文件（海报帧等）只写进项目文件夹的 `.storyscript-mov/`（S1e 起项目是一个可打开的文件夹，素材放在其子文件夹）；视频文件和外部素材目录不产生任何新文件。 |
 | INV-05 | 计划只有同时满足以下条件才能批准：`feasible`、校验器无违规、所有工时已确认、不 stale。启发式排不全时返回 `partial`，不等于"无解"。 |
 | INV-06 | take↔shot、shot↔media 都是多对多；删除关联不删除文件，也不影响其他关联。 |
 | INV-07 | 用 `origin`、`match`、`evidence`、`status` 区分 AI、人工和推断；不显示模型自报的置信度。 |

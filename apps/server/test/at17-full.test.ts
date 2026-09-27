@@ -242,7 +242,8 @@ describe('AT-17 path escapes → PATH_NOT_ALLOWED', () => {
       expect(res.status, abs_path).toBe(status);
       expect(res.body.error?.code, abs_path).toBe(code);
     }
-    expect((await app.get<unknown[]>('/api/v1/media/roots')).data).toEqual([]);
+    // only the project folder's own root: nothing was registered
+    expect((await app.get<{ kind: string }[]>('/api/v1/media/roots')).data.filter((r) => r.kind !== 'project')).toEqual([]);
   });
 
   test('tampered asset rows (`..`, absolute, symlinked file or folder) never stream the outside file', async () => {
@@ -273,14 +274,14 @@ describe('AT-17 path escapes → PATH_NOT_ALLOWED', () => {
   });
 
   test('tampered poster paths stay inside <project>/derivatives', async () => {
-    const roots = (await app.get<{ id: string }[]>('/api/v1/media/roots')).data;
+    const roots = (await app.get<{ id: string; kind: string }[]>('/api/v1/media/roots')).data.filter((r) => r.kind === 'fs');
     const db = app.handle.projectSession.require().db;
     const assets = (await app.get<MediaAssetView[]>('/api/v1/media/assets')).data;
     const target = assets.find((a) => a.rel_path === 'ok.mp4')!;
     expect(roots).toHaveLength(1);
-    symlinkSync(join(outside, 'secret.mp4'), join(ws.projectDir, 'derivatives', 'posters', 'link.jpg'));
-    writeFileSync(join(ws.projectDir, 'project-level.jpg'), SECRET);
-    for (const poster of ['../private/secret.mp4', 'derivatives/../../private/secret.mp4', 'derivatives/posters/link.jpg', 'project-level.jpg', 'derivatives/../project-level.jpg']) {
+    symlinkSync(join(outside, 'secret.mp4'), join(ws.dataDir, 'derivatives', 'posters', 'link.jpg'));
+    writeFileSync(join(ws.dataDir, 'project-level.jpg'), SECRET);
+    for (const poster of ['../../private/secret.mp4', 'derivatives/../../../private/secret.mp4', 'derivatives/posters/link.jpg', 'project-level.jpg', 'derivatives/../project-level.jpg']) {
       db.run('UPDATE media_asset SET poster_path = ? WHERE id = ?', poster, target.id);
       const r = await app.raw(`/api/v1/media/assets/${target.id}/poster`);
       const body = await r.text();
@@ -322,9 +323,9 @@ describe('AT-17 path escapes → PATH_NOT_ALLOWED', () => {
       source_type: 'model_generated',
       created_at: new Date().toISOString(),
     });
-    mkdirSync(join(ws.projectDir, 'boards', board.id), { recursive: true });
-    symlinkSync(join(outside, 'secret.mp4'), join(ws.projectDir, 'boards', board.id, 'link.png'));
-    for (const file of ['../private/secret.mp4', 'boards/../project-level.jpg', `boards/${board.id}/link.png`, 'boards/../../private/secret.mp4']) {
+    mkdirSync(join(ws.dataDir, 'boards', board.id), { recursive: true });
+    symlinkSync(join(outside, 'secret.mp4'), join(ws.dataDir, 'boards', board.id, 'link.png'));
+    for (const file of ['../../private/secret.mp4', 'boards/../project-level.jpg', `boards/${board.id}/link.png`, 'boards/../../../private/secret.mp4']) {
       db.run('UPDATE board_raster SET file = ? WHERE id = ?', file, id);
       const r = await app.raw(`/api/v1/rasters/${id}/image`);
       const body = await r.text();

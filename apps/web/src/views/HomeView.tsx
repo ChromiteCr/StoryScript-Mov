@@ -1,6 +1,7 @@
 import { useEffect, useId, useMemo, useRef, useState, type FormEvent, type ReactNode } from 'react';
 import { FrameFormat, type RecentProject } from '@storyscript/contracts';
 import { FolderOpen, FolderPlus, Plus, X } from 'lucide-react';
+import { isApiClientError } from '../lib/api.ts';
 import { useCreateProject, useOpenProject, useRecentProjects } from '../lib/queries.ts';
 import {
   basename,
@@ -135,10 +136,10 @@ interface CreateErrors {
   duration?: string;
 }
 
-function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
+function CreateProjectForm({ onCancel, initialDir = '' }: { onCancel: () => void; initialDir?: string }) {
   const create = useCreateProject();
-  const [dir, setDir] = useState('');
-  const [name, setName] = useState('');
+  const [dir, setDir] = useState(initialDir);
+  const [name, setName] = useState(() => (initialDir ? basename(initialDir) : ''));
   const [timezone, setTimezone] = useState(systemTimeZone);
   const [aspect, setAspect] = useState<Aspect>('2.39');
   const [duration, setDuration] = useState('');
@@ -162,7 +163,7 @@ function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
     e.preventDefault();
     const d = normalizePastedPath(dir);
     const next: CreateErrors = {};
-    if (d === '') next.dir = '请选择或粘贴项目目录';
+    if (d === '') next.dir = '请选择或粘贴项目文件夹';
     if (name.trim() === '') next.name = '请填写项目名';
     if (!isValidTimeZone(timezone.trim())) next.timezone = '无法识别这个时区，请用 IANA 名称，例如 Asia/Shanghai';
     if (parsedDuration === 'invalid') next.duration = '目标时长需要是正整数（秒），或者留空';
@@ -180,8 +181,8 @@ function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
       <Field
-        label="项目目录"
-        hint="project.json、数据库和分镜图会写进这个目录，建议用空文件夹。原片不会被复制进来。"
+        label="项目文件夹"
+        hint="选择放素材的文件夹（素材可以放在里面的 A-roll、B-roll 等子文件夹），也可以是新的空文件夹。项目数据保存在其中新建的 .storyscript-mov，视频不会被改动。"
         error={errors.dir}
       >
         {(ids) => (
@@ -296,8 +297,9 @@ function CreateProjectForm({ onCancel }: { onCancel: () => void }) {
   );
 }
 
-function OpenProjectForm({ onCancel }: { onCancel: () => void }) {
+function OpenProjectForm({ onCancel, onCreateHere }: { onCancel: () => void; onCreateHere: (dir: string) => void }) {
   const open = useOpenProject();
+  const notProject = isApiClientError(open.error) && open.error.code === 'NOT_FOUND' && open.error.status === 404;
   const [dir, setDir] = useState('');
   const [error, setError] = useState<string | null>(null);
 
@@ -305,7 +307,7 @@ function OpenProjectForm({ onCancel }: { onCancel: () => void }) {
     e.preventDefault();
     const d = normalizePastedPath(dir);
     if (d === '') {
-      setError('请选择或粘贴项目目录');
+      setError('请选择或粘贴项目文件夹');
       return;
     }
     setError(null);
@@ -314,8 +316,8 @@ function OpenProjectForm({ onCancel }: { onCancel: () => void }) {
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-4">
-      <p className="text-sm text-graphite-300">列表里没有的项目，从这里打开。</p>
-      <Field label="项目目录" hint="包含 project.json 的那个目录。" error={error}>
+      <p className="text-sm text-graphite-300">像在编辑器里打开文件夹一样：选择项目文件夹；还不是项目的文件夹，可以直接在那里新建项目。</p>
+      <Field label="项目文件夹" hint="旧版本创建的项目目录也可以直接打开。" error={error}>
         {(ids) => (
           <FolderField
             {...ids}
@@ -328,13 +330,19 @@ function OpenProjectForm({ onCancel }: { onCancel: () => void }) {
         )}
       </Field>
       {open.isError ? <ErrorNotice error={open.error} context="open" /> : null}
+      {notProject ? (
+        <Button className="self-start" onClick={() => onCreateHere(normalizePastedPath(dir))}>
+          <FolderPlus aria-hidden className="size-3.5" />
+          在这里新建项目
+        </Button>
+      ) : null}
       <div className="flex justify-end gap-2 border-t border-graphite-800 pt-4">
         <Button variant="ghost" onClick={onCancel}>
           取消
         </Button>
         <Button type="submit" variant="primary" busy={open.isPending}>
           {open.isPending ? null : <FolderOpen aria-hidden className="size-3.5" />}
-          打开项目
+          打开
         </Button>
       </div>
     </form>
@@ -348,7 +356,11 @@ export function HomeView() {
   const open = useOpenProject();
   const [target, setTarget] = useState<string | null>(null);
   const [drawer, setDrawer] = useState<'create' | 'open' | null>(null);
-  const close = () => setDrawer(null);
+  const [createDir, setCreateDir] = useState('');
+  const close = () => {
+    setDrawer(null);
+    setCreateDir('');
+  };
 
   const empty = recent.data !== undefined && recent.data.length === 0;
 
@@ -358,12 +370,12 @@ export function HomeView() {
         <div className="min-w-0">
           <h1 className="text-xl font-medium">项目</h1>
           <p className="mt-0.5 text-sm text-graphite-300">
-            {empty ? '还没有打开过项目。新建一个，或打开已有的项目目录。' : '最近打开的项目，新的在前。'}
+            {empty ? '还没有打开过项目。打开放素材的文件夹，或新建一个项目。' : '最近打开的项目，新的在前。'}
           </p>
         </div>
         <Button onClick={() => setDrawer('open')} aria-haspopup="dialog">
           <FolderOpen aria-hidden className="size-3.5" />
-          打开已有项目
+          打开文件夹…
         </Button>
       </div>
 
@@ -393,17 +405,23 @@ export function HomeView() {
       </div>
 
       <p className="mt-10 max-w-[64ch] border-t border-graphite-800 pt-4 text-xs text-graphite-300">
-        项目就是这台电脑上的一个文件夹，原片只读取、不改动。只有在你配置了模型并使用 AI 功能时，才会把相关内容发给你指定的模型服务。
+        项目就是这台电脑上的一个文件夹：素材放在里面的子文件夹（例如 A-roll、B-roll），项目数据保存在其中的 .storyscript-mov，视频只读取、不改动。只有在你配置了模型并使用 AI 功能时，才会把相关内容发给你指定的模型服务。
       </p>
 
       {drawer === 'create' ? (
         <Drawer title="新建项目" onClose={close}>
-          <CreateProjectForm onCancel={close} />
+          <CreateProjectForm onCancel={close} initialDir={createDir} />
         </Drawer>
       ) : null}
       {drawer === 'open' ? (
-        <Drawer title="打开已有项目" onClose={close}>
-          <OpenProjectForm onCancel={close} />
+        <Drawer title="打开文件夹" onClose={close}>
+          <OpenProjectForm
+            onCancel={close}
+            onCreateHere={(d) => {
+              setCreateDir(d);
+              setDrawer('create');
+            }}
+          />
         </Drawer>
       ) : null}
     </div>

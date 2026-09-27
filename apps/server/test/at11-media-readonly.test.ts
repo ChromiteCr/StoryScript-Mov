@@ -60,7 +60,7 @@ describe.skipIf(!HAS_FFMPEG)('AT-11 read-only scan, hashes, proxy flag', () => {
   });
 
   test('posters are written to the project derivatives folder only', async () => {
-    const posters = await readdir(join(ws.projectDir, 'derivatives', 'posters'));
+    const posters = await readdir(join(ws.dataDir, 'derivatives', 'posters'));
     const videos = assets.filter((a) => a.kind === 'video');
     expect(videos.length).toBeGreaterThan(0);
     for (const v of videos) {

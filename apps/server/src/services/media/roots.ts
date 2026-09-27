@@ -21,6 +21,17 @@ export function requireRoot(db: DbPort, id: string): SourceRoot {
   return r;
 }
 
+/**
+ * The directory a root's rel_paths are relative to: an fs root's own folder,
+ * the project folder for the project root, null for a browser root (the
+ * server never reads those).
+ */
+export function rootDirOf(root: Pick<SourceRoot, 'kind' | 'abs_path'>, projectFolder: string): string | null {
+  if (root.kind === 'project') return projectFolder;
+  if (root.kind === 'browser') return null;
+  return root.abs_path;
+}
+
 /** Browser roots live on a team member's computer: the server cannot scan or check them. */
 export function requireServerReadable(root: SourceRoot): void {
   if (root.kind === 'browser') {
@@ -46,7 +57,7 @@ export async function addRoot(db: DbPort, projectDir: string, input: z.infer<typ
   if (real === '/') throw new AppError('PATH_NOT_ALLOWED', '不能把整个磁盘根目录登记为素材目录', 403, { abs_path: real });
   const projectReal = safeRealpathSync(projectDir) ?? projectDir;
   if (isSameOrInside(projectReal, real)) {
-    throw new AppError('PATH_NOT_ALLOWED', '素材目录不能是项目目录或它里面的文件夹', 403, { abs_path: real });
+    throw new AppError('PATH_NOT_ALLOWED', '项目文件夹里的素材已经自动包含，不用再登记；这里只登记项目文件夹以外的素材目录', 403, { abs_path: real });
   }
 
   const label = input.label?.trim() || basename(real) || real;
@@ -74,10 +85,11 @@ type CheckOutcome = { id: string; state: 'online' | 'offline' | 'changed' };
  * file) → hash_status source_changed; the recorded facts are kept as they
  * were so the change stays visible until the next scan re-indexes the file.
  */
-export async function checkRoot(db: DbPort, root: SourceRoot): Promise<z.infer<typeof RootCheckResult>> {
+export async function checkRoot(db: DbPort, root: SourceRoot, projectFolder: string): Promise<z.infer<typeof RootCheckResult>> {
   requireServerReadable(root);
   const assets = listRootAssets(db, root.id);
-  const rootReal = safeRealpathSync(root.abs_path);
+  const rootAbs = rootDirOf(root, projectFolder);
+  const rootReal = rootAbs === null ? null : safeRealpathSync(rootAbs);
   const outcomes: CheckOutcome[] = [];
   for (const a of assets) {
     if (rootReal === null || !isSafeRelPath(a.rel_path)) {

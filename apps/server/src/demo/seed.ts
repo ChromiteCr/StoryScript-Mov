@@ -164,7 +164,7 @@ export async function openDemoProject(deps: AppDeps, opts: OpenDemoOptions = {})
     timezone: DEMO_TIMEZONE,
     default_aspect: '2.39',
     target_duration_s: 300,
-  });
+  }, { projectRoot: false });
   writeFileSync(
     join(dir, DEMO_MARKER_FILE),
     `${JSON.stringify({ format: 'storyscript-mov-demo', note: '由 storyscript-mov --demo 生成，每次以演示模式启动时重置', created_at: iso() }, null, 2)}\n`,
@@ -293,7 +293,7 @@ export async function openDemoProject(deps: AppDeps, opts: OpenDemoOptions = {})
     let rootId: string;
     const label = 'A 机 · 演示素材';
     if (clipsOnline) {
-      rootId = (await addRoot(db, opened.dir, { abs_path: realpathSync(clipsDir), label }, iso())).root.id;
+      rootId = (await addRoot(db, opened.folder, { abs_path: realpathSync(clipsDir), label }, iso())).root.id;
     } else {
       rootId = randomUUID();
       insertRoot(db, { id: rootId, kind: 'fs', abs_path: clipsDir, label, created_at: iso() });
@@ -357,7 +357,7 @@ export async function openDemoProject(deps: AppDeps, opts: OpenDemoOptions = {})
   if (t.s005) addCoverageDecision(db, t.s005.id, { decision: 'needs_pickup', selected_link_ids: [], reason: '老周停手的动作穿帮，需要补拍近景' }, iso());
 
   const summary: DemoSummary = {
-    dir: opened.dir,
+    dir: opened.folder,
     project,
     scenes: scenes.length,
     shots: listActiveShots(db).length,
@@ -368,6 +368,6 @@ export async function openDemoProject(deps: AppDeps, opts: OpenDemoOptions = {})
     clips_online: clipsOnline,
     warnings,
   };
-  opts.log?.(`演示项目已就绪：${summary.shots} 个镜头、${summary.takes} 条场记、${summary.assets} 条素材（${opened.dir}）`);
+  opts.log?.(`演示项目已就绪：${summary.shots} 个镜头、${summary.takes} 条场记、${summary.assets} 条素材（${opened.folder}）`);
   return summary;
 }

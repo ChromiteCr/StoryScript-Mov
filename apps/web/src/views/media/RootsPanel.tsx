@@ -76,9 +76,13 @@ function RootRow({ root, assets, scanDisabled }: { root: SourceRoot; assets: rea
         <span className="min-w-0 truncate text-sm font-medium text-graphite-100">{root.label}</span>
         <span className="shrink-0 text-xs text-graphite-300 tabular-nums">{mine.length} 个</span>
       </div>
-      <p className="truncate font-mono text-xs text-graphite-300" title={root.abs_path}>
-        {displayPath(root.abs_path, home)}
-      </p>
+      {root.kind === 'project' ? (
+        <p className="text-xs text-graphite-300">项目文件夹里的素材（A-roll、B-roll 等子文件夹），打开项目时自动扫描</p>
+      ) : (
+        <p className="truncate font-mono text-xs text-graphite-300" title={root.abs_path}>
+          {displayPath(root.abs_path, home)}
+        </p>
+      )}
       {offline > 0 || changed > 0 ? (
         <p className="text-xs text-graphite-100">
           {offline > 0 ? `${offline} 个离线` : ''}
@@ -167,13 +171,13 @@ function AddRootForm({ onAdded, initiallyOpen }: { onAdded: () => void; initiall
       <div className="px-3 py-2">
         <Button size="sm" variant="ghost" onClick={() => setOpen(true)}>
           <FolderPlus aria-hidden className="size-3.5" />
-          添加素材目录
+          添加外部素材目录
         </Button>
       </div>
     );
   }
   return (
-    <form onSubmit={submit} noValidate className="flex flex-col gap-2.5 border-t border-graphite-800 px-3 py-3" aria-label="添加素材目录">
+    <form onSubmit={submit} noValidate className="flex flex-col gap-2.5 border-t border-graphite-800 px-3 py-3" aria-label="添加外部素材目录">
       <Field label="素材文件夹" hint="只读登记：不会复制、移动或改动原片。" error={error}>
         {(ids) => <FolderField {...ids} value={path} onChange={setPath} placeholder="/Volumes/CARD_A" />}
       </Field>

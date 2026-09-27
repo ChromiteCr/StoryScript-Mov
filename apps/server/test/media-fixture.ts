@@ -54,7 +54,10 @@ export interface Workspace {
   /** temp root holding home/, project/, sources */
   root: string;
   stateDir: string;
+  /** the project folder */
   projectDir: string;
+  /** its data folder (.storyscript-mov: database, derivatives, boards …) */
+  dataDir: string;
   cleanup(): void;
 }
 
@@ -64,6 +67,7 @@ export function makeWorkspace(prefix = 'ssm-m6-'): Workspace {
     root,
     stateDir: join(root, 'home'),
     projectDir: join(root, 'project'),
+    dataDir: join(root, 'project', '.storyscript-mov'),
     cleanup: () => rmSync(root, { recursive: true, force: true }),
   };
 }

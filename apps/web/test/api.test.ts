@@ -219,7 +219,7 @@ describe('describeError', () => {
   });
 
   it('words NOT_FOUND by context', () => {
-    expect(describeError(err('NOT_FOUND', { status: 404 }), 'open').title).toBe('这个目录里没有 StoryScript-Mov 项目');
+    expect(describeError(err('NOT_FOUND', { status: 404 }), 'open').title).toBe('这个文件夹还不是 StoryScript-Mov 项目');
     expect(describeError(err('NOT_FOUND', { status: 404 })).title).toBe('要找的内容不存在');
   });
 

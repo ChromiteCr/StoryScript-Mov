@@ -18,19 +18,18 @@ import {
   RootCheckResult,
   SourceRoot,
 } from '@storyscript/contracts';
-import { projectContext } from '../ai/runtime.ts';
 import type { AppDeps } from '../deps.ts';
 import { listRoots } from '../db/repos/root.ts';
 import { AppError } from '../http/errors.ts';
 import { contentTypeFor, parseRange, rangeHeaders } from '../http/range.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
-import { runScanJob } from '../jobs/media-scan.ts';
 import { listAssetViews, posterFile, searchAssetViews, streamFile } from '../services/media/assets.ts';
 import { createBrowserRoot, POSTER_MAX_BYTES, reportAssetFacts, reportBrowserFiles, saveBrowserPoster } from '../services/media/browser-ingest.ts';
 import { buildLinkCandidates } from '../services/media/links.ts';
+import { enqueueRootScan } from '../services/media/scan.ts';
 import { extOf } from '../services/media/paths.ts';
-import { addRoot, checkRoot, requireRoot, requireServerReadable } from '../services/media/roots.ts';
+import { addRoot, checkRoot, requireRoot } from '../services/media/roots.ts';
 
 /**
  * Media library (FR-08/09): source roots, read-only scan job, availability
@@ -47,37 +46,20 @@ export function registerMediaRoutes(app: Hono, deps: AppDeps): void {
   app.post(Api.addRoot.path, async (c) => {
     const input = await parseBody(c, AddRootInput);
     const p = project();
-    const r = await addRoot(p.db, p.dir, input);
+    const r = await addRoot(p.db, p.folder, input);
     return respond(c, SourceRoot, r.root, r.created ? 201 : 200);
   });
 
   app.post(Api.scanRoot.path, async (c) => {
-    const id = idParam(c);
-    const { project: p, jobs } = projectContext(deps);
-    const root = requireRoot(p.db, id);
-    requireServerReadable(root);
-    const tools = await deps.tools();
-    const ffprobe = tools.ffprobe.path;
-    const ffmpeg = tools.ffmpeg.path;
-    if (!ffprobe || !ffmpeg) {
-      throw new AppError('FFMPEG_MISSING', '没有找到 ffmpeg / ffprobe：素材扫描需要它们。用 brew install ffmpeg 安装后重启 storyscript-mov', 409);
-    }
-    const job = jobs.enqueue({
-      kind: 'scan_root',
-      idempotency_key: `scan_root:${root.id}`,
-      input_hash: root.id,
-      remote: false,
-      lane: 'local',
-      run: (ctx) => runScanJob(ctx, { db: p.db, projectDir: p.dir, rootId: root.id, ffprobe, ffmpeg }),
-    });
+    const job = await enqueueRootScan(deps, idParam(c));
     return respond(c, JobAccepted, { job_id: job.id }, 202);
   });
 
   app.post(Api.checkRoot.path, async (c) => {
     const id = idParam(c);
-    const d = db();
-    const root = requireRoot(d, id);
-    return respond(c, RootCheckResult, await checkRoot(d, root));
+    const p = project();
+    const root = requireRoot(p.db, id);
+    return respond(c, RootCheckResult, await checkRoot(p.db, root, p.folder));
   });
 
   app.get(Api.listAssets.path, (c) => respond(c, z.array(MediaAssetView), listAssetViews(db())));
@@ -133,7 +115,8 @@ export function registerMediaRoutes(app: Hono, deps: AppDeps): void {
 
   app.get('/api/v1/media/assets/:id/stream', async (c) => {
     const id = idParam(c);
-    const file = await streamFile(db(), id);
+    const p = project();
+    const file = await streamFile(p.db, id, p.folder);
     const range = parseRange(c.req.header('range'), file.size);
     const head = rangeHeaders(range, file.size);
     const headers = { ...head.headers, 'Content-Type': contentTypeFor(extOf(file.asset.rel_path)) };

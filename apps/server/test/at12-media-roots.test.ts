@@ -54,8 +54,9 @@ describe('source roots: rules', () => {
     expect(outer.status).toBe(400);
   });
 
-  test('the project folder and its subfolders can never be a root', async () => {
-    for (const p of [ws.projectDir, join(ws.projectDir, 'derivatives'), join(ws.projectDir, 'derivatives', 'posters')]) {
+  test('the project folder and its subfolders can never be a root (their footage is the project root already)', async () => {
+    mkdirSync(join(ws.projectDir, 'A-roll'), { recursive: true });
+    for (const p of [ws.projectDir, join(ws.projectDir, 'A-roll'), ws.dataDir, join(ws.dataDir, 'derivatives', 'posters')]) {
       const r = await app.post('/api/v1/media/roots', { abs_path: p });
       expect(r.status, p).toBe(403);
       expect(r.body.error?.code).toBe('PATH_NOT_ALLOWED');

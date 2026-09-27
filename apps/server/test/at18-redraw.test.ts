@@ -143,7 +143,7 @@ describe('AT-18 AI pencil redraw (FakeImage)', () => {
     expect(maxChroma).toBeLessThanOrEqual(2);
 
     // sources and usage: sidecar ≡ row ≡ files on disk ≡ what the service received
-    const dir = join(app.projectDir, 'boards', boardId);
+    const dir = join(app.dataDir, 'boards', boardId);
     const sidecar = JSON.parse(readFileSync(join(dir, `raster-${r.id}.json`), 'utf8')) as RasterSidecar;
     const out = readFileSync(join(dir, `raster-${r.id}.png`));
     const raw = readFileSync(join(dir, `raw-${r.id}.png`));
@@ -232,11 +232,11 @@ describe('AT-18 AI pencil redraw (FakeImage)', () => {
     expect(w.error?.message).toContain('image/webp');
     const [row] = await rasters();
     expect(row).toMatchObject({ outcome: 'ok', file: null, sha256: null, image_url: null });
-    const sidecar = JSON.parse(readFileSync(join(app.projectDir, 'boards', boardId, `raster-${row!.id}.json`), 'utf8')) as RasterSidecar;
+    const sidecar = JSON.parse(readFileSync(join(app.dataDir, 'boards', boardId, `raster-${row!.id}.json`), 'utf8')) as RasterSidecar;
     expect(sidecar.raw?.file).toBe(`boards/${boardId}/raw-${row!.id}.webp`);
     expect(sidecar.control.mode).toBe('structure');
     expect(sidecar.postprocess_error).toContain('image/webp');
-    expect(readFileSync(join(app.projectDir, 'boards', boardId, `raw-${row!.id}.webp`)).length).toBeGreaterThan(0);
+    expect(readFileSync(join(app.dataDir, 'boards', boardId, `raw-${row!.id}.webp`)).length).toBeGreaterThan(0);
   });
 
   test('confirmed=false → 400 MISSING_CONFIRMATION, nothing sent', async () => {

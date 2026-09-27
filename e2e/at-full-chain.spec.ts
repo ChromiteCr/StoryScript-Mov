@@ -276,12 +276,13 @@ test('no-key full chain: script → boards → plan → set → media → covera
   // ------------------------------------------------------------ media
   await test.step('media: add the footage folder, scan, build candidates, confirm, reject, decide usable', async () => {
     await goStage(page, '素材');
-    const addForm = page.getByRole('form', { name: '添加素材目录' });
-    if (!(await addForm.isVisible())) await page.getByRole('button', { name: '添加素材目录' }).click();
+    const addForm = page.getByRole('form', { name: '添加外部素材目录' });
+    if (!(await addForm.isVisible())) await page.getByRole('button', { name: '添加外部素材目录' }).click();
     await addForm.getByLabel('素材文件夹').fill(footage);
     await addForm.getByRole('button', { name: '添加', exact: true }).click();
     await expect(page.getByText('CARD_A', { exact: true })).toBeVisible();
-    await page.getByRole('button', { name: '扫描', exact: true }).click();
+    // the project folder is a root of its own (empty here): scan the card just added
+    await page.getByRole('listitem').filter({ hasText: 'CARD_A' }).getByRole('button', { name: '扫描', exact: true }).click();
     await expect(page.locator('button[data-asset]')).toHaveCount(footageFiles.length, { timeout: 60_000 });
     await expect(page.locator('button[data-asset] img').first()).toBeVisible({ timeout: 30_000 });
 
@@ -350,7 +351,8 @@ test('no-key full chain: script → boards → plan → set → media → covera
     expect(data.setups).toHaveLength(2);
     expect((data.plans as { status: string }[]).map((p) => p.status)).toEqual(['approved']);
     expect((data.takes as { shot_ids: string[] }[]).map((t) => t.shot_ids.length).sort()).toEqual([1, 2]);
-    expect(data.source_roots.map((r) => r.label)).toEqual(['CARD_A']);
+    // the project folder's own root (named after the folder), then the card
+    expect(data.source_roots.map((r) => r.label)).toEqual(['full-chain', 'CARD_A']);
     expect(data.media_assets).toHaveLength(footageFiles.length);
     expect((data.shot_media_links as { status: string }[]).map((l) => l.status).sort()).toEqual(['candidate', 'candidate', 'confirmed', 'rejected', 'rejected']);
     expect((data.coverage_decisions as { decision: string }[]).map((d) => d.decision)).toEqual(['usable']);

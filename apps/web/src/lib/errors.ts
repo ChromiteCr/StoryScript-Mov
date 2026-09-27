@@ -51,7 +51,7 @@ const COPY: Record<ClientErrorCode, Copy> = {
     detail: '另一个 StoryScript-Mov 进程持有项目锁（project.lock）。先在那边关闭项目；如果那个进程已经退出，再打开一次即可接管。',
   },
   QUOTA_EXCEEDED: { title: '已达到调用次数上限', detail: '这是防止意外花费的上限。' },
-  PROJECT_EXISTS: { title: '这个目录里已经有项目了', detail: '请用"打开已有项目"打开它，或者换一个空目录新建。' },
+  PROJECT_EXISTS: { title: '这个文件夹已经是项目了', detail: '请用"打开文件夹…"直接打开它。' },
   NO_PROJECT_OPEN: { title: '当前没有打开的项目', detail: '回到首页打开或新建一个项目。' },
   SCHEMA_VERSION_UNSUPPORTED: {
     title: '无法打开这个版本的项目',
@@ -68,8 +68,8 @@ const COPY: Record<ClientErrorCode, Copy> = {
 const CONTEXT_COPY: Partial<Record<ErrorContext, Partial<Record<ClientErrorCode, Copy>>>> = {
   open: {
     NOT_FOUND: {
-      title: '这个目录里没有 StoryScript-Mov 项目',
-      detail: '没有找到 project.json。确认路径指向项目目录本身，而不是它的上级目录；目录被移动过的话，请重新选择。',
+      title: '这个文件夹还不是 StoryScript-Mov 项目',
+      detail: '可以在这里新建项目：项目数据会保存在文件夹里新建的 .storyscript-mov 中，素材留在原处。',
     },
   },
   create: {

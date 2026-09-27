@@ -51,8 +51,11 @@ async function dataOf(res: Response): Promise<unknown> {
   return ((await res.json()) as { data: unknown }).data;
 }
 
+/** a project's data folder (manifest, database, lock …) inside the folder the user opened */
+const data = (dir: string) => join(dir, '.storyscript-mov');
+
 function writeLock(dir: string, pid: number, host = hostname()) {
-  writeFileSync(join(dir, LOCK_FILE), JSON.stringify({ pid, hostname: host, started_at: '2026-09-26T00:00:00.000Z' }));
+  writeFileSync(join(data(dir), LOCK_FILE), JSON.stringify({ pid, hostname: host, started_at: '2026-09-26T00:00:00.000Z' }));
 }
 
 describe('AT-01 project lifecycle (API)', () => {
@@ -96,13 +99,13 @@ describe('AT-01 project lifecycle (API)', () => {
     expect(project).toMatchObject({ ...input, schema_version: PROJECT_SCHEMA_VERSION, code_format: 'S{scene:02}-{shot:03}-T{take:02}' });
 
     // on-disk layout
-    const manifest = ProjectManifest.parse(JSON.parse(readFileSync(join(dir, 'project.json'), 'utf8')));
+    const manifest = ProjectManifest.parse(JSON.parse(readFileSync(join(data(dir), 'project.json'), 'utf8')));
     expect(manifest).toMatchObject({ format: 'storyscript-mov-project', id: project.id, schema_version: PROJECT_SCHEMA_VERSION });
     for (const sub of ['scripts', 'boards', 'derivatives/posters', 'exports', 'recovery']) {
-      expect(statSync(join(dir, sub)).isDirectory(), sub).toBe(true);
+      expect(statSync(join(data(dir), sub)).isDirectory(), sub).toBe(true);
     }
-    expect(existsSync(join(dir, 'project.sqlite'))).toBe(true);
-    expect(readLock(join(dir, LOCK_FILE))).toMatchObject({ pid: process.pid, hostname: hostname() });
+    expect(existsSync(join(data(dir), 'project.sqlite'))).toBe(true);
+    expect(readLock(join(data(dir), LOCK_FILE))).toMatchObject({ pid: process.pid, hostname: hostname() });
 
     // current project + health flag
     expect(Project.parse(await dataOf(await call('/api/v1/project')))).toEqual(project);
@@ -110,7 +113,7 @@ describe('AT-01 project lifecycle (API)', () => {
 
     const closed = await call('/api/v1/projects/close', {});
     expect(closed.status).toBe(204);
-    expect(existsSync(join(dir, LOCK_FILE))).toBe(false);
+    expect(existsSync(join(data(dir), LOCK_FILE))).toBe(false);
     const none = await call('/api/v1/project');
     expect(none.status).toBe(409);
     expect(ApiError.parse(await none.json()).error.code).toBe('NO_PROJECT_OPEN');
@@ -148,7 +151,7 @@ describe('AT-01 project lifecycle (API)', () => {
       expect(res.status).toBe(400);
       expect(ApiError.parse(await res.json()).error.code).toBe('VALIDATION_ERROR');
     }
-    expect(existsSync(join(root, 'tz', 'project.json'))).toBe(false);
+    expect(existsSync(join(root, 'tz', '.storyscript-mov', 'project.json'))).toBe(false);
   });
 
   test('opening a missing project → 404', async () => {
@@ -180,18 +183,18 @@ describe('AT-01 project open/lock rules', () => {
   test('schema_version newer than supported → SCHEMA_VERSION_UNSUPPORTED (manifest or database)', async () => {
     const { dir, opened } = await make('too-new');
     opened.close();
-    const manifestFile = join(dir, 'project.json');
+    const manifestFile = join(data(dir), 'project.json');
     const original = readFileSync(manifestFile, 'utf8');
     writeFileSync(manifestFile, JSON.stringify({ ...JSON.parse(original), schema_version: 99 }));
     await expectAppError(openProject(dir), 'SCHEMA_VERSION_UNSUPPORTED');
-    expect(existsSync(join(dir, LOCK_FILE))).toBe(false);
+    expect(existsSync(join(data(dir), LOCK_FILE))).toBe(false);
 
     writeFileSync(manifestFile, original);
-    const db = openDb(join(dir, 'project.sqlite'));
+    const db = openDb(join(data(dir), 'project.sqlite'));
     db.exec('PRAGMA user_version = 7');
     db.close();
     await expectAppError(openProject(dir), 'SCHEMA_VERSION_UNSUPPORTED');
-    expect(existsSync(join(dir, LOCK_FILE))).toBe(false);
+    expect(existsSync(join(data(dir), LOCK_FILE))).toBe(false);
   });
 
   test('lock held by another live process on this host → PROJECT_LOCKED', async () => {
@@ -200,7 +203,7 @@ describe('AT-01 project open/lock rules', () => {
     writeLock(dir, process.ppid);
     await expectAppError(openProject(dir), 'PROJECT_LOCKED');
     // lock untouched
-    expect(readLock(join(dir, LOCK_FILE))?.pid).toBe(process.ppid);
+    expect(readLock(join(data(dir), LOCK_FILE))?.pid).toBe(process.ppid);
   });
 
   test('lock from another host is never taken over', async () => {
@@ -217,9 +220,9 @@ describe('AT-01 project open/lock rules', () => {
     writeLock(dir, pid);
     const again = await openProject(dir);
     toClose.push(again);
-    expect(readLock(join(dir, LOCK_FILE))).toMatchObject({ pid: process.pid });
+    expect(readLock(join(data(dir), LOCK_FILE))).toMatchObject({ pid: process.pid });
     again.close();
-    expect(existsSync(join(dir, LOCK_FILE))).toBe(false);
+    expect(existsSync(join(data(dir), LOCK_FILE))).toBe(false);
   });
 
   test('second open of the same project (two sessions, one process) → PROJECT_LOCKED', async () => {
@@ -245,8 +248,8 @@ describe('AT-01 project open/lock rules', () => {
     toClose.push({ close: () => s.closeNow() });
     await s.open(first.dir);
     await s.open(second.dir);
-    expect(existsSync(join(first.dir, LOCK_FILE))).toBe(false);
-    expect(existsSync(join(second.dir, LOCK_FILE))).toBe(true);
+    expect(existsSync(join(data(first.dir), LOCK_FILE))).toBe(false);
+    expect(existsSync(join(data(second.dir), LOCK_FILE))).toBe(true);
   });
 
   test('corrupt project.json → VALIDATION_ERROR; non-directory path → VALIDATION_ERROR', async () => {

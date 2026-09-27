@@ -23,6 +23,8 @@ import { getRoot } from '../db/repos/root.ts';
 import { redactSecrets } from '../adapters/llm/redact.ts';
 import { detectTools, type ToolsInfo } from '../diagnostics.ts';
 import { extOf, isInside, MEDIA_EXTS, resolveSourceFile, safeRealpathSync } from '../services/media/paths.ts';
+import { rootDirOf } from '../services/media/roots.ts';
+import { folderOfDataDir } from '../project/layout.ts';
 import { registerRerun, type JobRunContext, type JobRunResult, type JobSpec, type RerunFactory } from './queue.ts';
 
 /**
@@ -132,9 +134,12 @@ export async function runScanJob(ctx: JobRunContext, deps: ScanJobDeps): Promise
   try {
     const root = getRoot(db, rootId);
     if (!root) return { status: 'failed', attempts: 0, usage: null, error: { code: 'NOT_FOUND', message: '素材目录已不存在' } };
+    const projectFolder = folderOfDataDir(projectDir);
+    const rootAbs = rootDirOf(root, projectFolder);
+    if (rootAbs === null) return { status: 'failed', attempts: 0, usage: null, error: { code: 'VALIDATION_ERROR', message: '这个素材目录在队员的电脑上，服务器不能扫描' } };
     let rootReal: string;
     try {
-      rootReal = await realpath(root.abs_path);
+      rootReal = await realpath(rootAbs);
     } catch {
       db.tx(() => {
         for (const a of listRootAssets(db, rootId)) setAssetAvailability(db, a.id, 'offline');
@@ -143,7 +148,9 @@ export async function runScanJob(ctx: JobRunContext, deps: ScanJobDeps): Promise
     }
 
     // 1. walk + upsert
-    const found = await walk(rootReal, safeRealpathSync(projectDir), ctx.signal);
+    // the project folder's own footage belongs to its project root: an outer root skips all of it
+    const skip = root.kind === 'project' ? projectDir : projectFolder;
+    const found = await walk(rootReal, safeRealpathSync(skip), ctx.signal);
     summary.files = found.length;
     const seen = new Set(found.map((f) => f.rel));
     const needProbe: string[] = [];

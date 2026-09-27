@@ -2,6 +2,7 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { getRequestListener } from '@hono/node-server';
+import { FOLDER_RECORDS_DIR } from '@storyscript/contracts';
 import { createApp } from '../app.ts';
 import { ensureStateDir } from '../config/paths.ts';
 import { isPidAlive } from '../project/lock.ts';
@@ -61,9 +62,9 @@ export async function startHostedServer(opts: {
       const dir = teamDir(opts.dataDir, t.slug);
       const projectDir = join(dir, 'project');
       const stateDir = ensureStateDir(join(dir, 'state'));
-      const projectSession = new ProjectSession(stateDir);
+      const projectSession = new ProjectSession(stateDir, { projectRoot: false });
       sessionsByTeam.push(projectSession);
-      if (existsSync(join(projectDir, 'project.json'))) await projectSession.open(projectDir);
+      if (existsSync(join(projectDir, FOLDER_RECORDS_DIR, 'project.json')) || existsSync(join(projectDir, 'project.json'))) await projectSession.open(projectDir);
       else {
         await projectSession.create({ dir: projectDir, name: t.name, timezone: loaded.timezone, default_aspect: '2.39', target_duration_s: null });
       }

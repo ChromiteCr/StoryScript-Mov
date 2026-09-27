@@ -33,18 +33,19 @@ export class ProjectSession {
     return this.current;
   }
 
-  create(input: CreateProjectInput): Promise<Project> {
+  create(input: CreateProjectInput, overrides: Pick<ProjectOpOptions, 'projectRoot'> = {}): Promise<Project> {
     return this.serialize(async () => {
-      const opened = await createProject(input.dir, input, this.opts);
+      const opened = await createProject(input.dir, input, { ...this.opts, ...overrides });
       return this.swapIn(opened);
     });
   }
 
   open(dir: string): Promise<Project> {
     return this.serialize(async () => {
-      if (this.current && this.current.dir === safeReal(dir)) {
+      const real = safeReal(dir);
+      if (this.current && (this.current.folder === real || this.current.dir === real)) {
         const project = this.current.project();
-        this.remember(this.current.dir, project);
+        this.remember(this.current.folder, project);
         return project;
       }
       const opened = await openProject(dir, this.opts);
@@ -75,7 +76,7 @@ export class ProjectSession {
     }
     this.closeNow();
     this.current = opened;
-    this.remember(opened.dir, project);
+    this.remember(opened.folder, project);
     return project;
   }
 

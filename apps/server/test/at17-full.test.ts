@@ -60,7 +60,12 @@ interface RouteDef {
 const routeKey = (r: RouteDef) => `${r.method} ${r.path}`;
 const fill = (path: string, id: () => string = randomUUID) => path.replace(/:[A-Za-z_]\w*/g, () => id());
 
-const contractRoutes = (): RouteDef[] => Object.values(Api).map((r) => ({ method: r.method, path: r.path }));
+/** Accounts and groups exist only on the hosted server's gateway (hosted-server.test.ts calls each of them). */
+const HOSTED_ONLY = /^\/api\/v1\/(account|group)(\/|$)/;
+const contractRoutes = (): RouteDef[] =>
+  Object.values(Api)
+    .filter((r) => !HOSTED_ONLY.test(r.path))
+    .map((r) => ({ method: r.method, path: r.path }));
 
 function servedRoutes(app: { routes: { method: string; path: string }[] }): RouteDef[] {
   return app.routes.filter((r) => METHODS.has(r.method) && r.path.startsWith('/api/')).map((r) => ({ method: r.method, path: r.path }));

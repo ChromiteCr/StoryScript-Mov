@@ -37,8 +37,14 @@ export const ErrorCode = z.enum([
   'SCHEMA_VERSION_UNSUPPORTED',
   'UNAUTHORIZED',
   'FORBIDDEN',
-  /** hosted server: too many wrong team codes from this address; retry later */
+  /** hosted server: too many wrong attempts or emails from this address or account; retry later */
   'TOO_MANY_ATTEMPTS',
+  /** hosted server: this email already has an account */
+  'ACCOUNT_EXISTS',
+  /** hosted server: signed in, but not in a group yet (create or join one) */
+  'NO_TEAM',
+  /** hosted server: the verification email could not be sent */
+  'MAIL_FAILED',
   'INTERNAL',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCode>;

@@ -46,7 +46,7 @@ export const HealthInfo = z.object({
   home_dir: z.string(),
   /** hosted server mode: one fixed project per team, footage read in the browser, settings by the admin */
   hosted: z.boolean(),
-  /** hosted: the signed-in team's display name */
+  /** hosted: the signed-in account's group name */
   team_name: z.string().nullable(),
 });
 export type HealthInfo = z.infer<typeof HealthInfo>;
@@ -484,6 +484,59 @@ export const RasterView = BoardRaster.extend({
 });
 export type RasterView = z.infer<typeof RasterView>;
 
+// ---- S2a: accounts and groups (hosted server only; answered by the gateway) ----
+
+/** Trimmed, lower-cased; the same address typed with other capitals is the same account. */
+export const Email = z
+  .string()
+  .trim()
+  .toLowerCase()
+  .max(254)
+  .regex(/^[^\s@]+@[^\s@]+\.[^\s@]+$/, '邮箱格式不对');
+export const Password = z.string().min(8, '密码至少 8 位').max(128);
+export const DisplayName = z.string().trim().min(1).max(20);
+export const EmailCode = z.string().trim().regex(/^\d{6}$/, '验证码是 6 位数字');
+
+export const RegisterCodeInput = z.object({ email: Email, invite: z.string().trim().min(1).max(100) });
+export const RegisterInput = z.object({ email: Email, code: EmailCode, name: DisplayName, password: Password });
+export const PasswordLoginInput = z.object({ email: Email, password: z.string().min(1).max(128) });
+export const EmailOnlyInput = z.object({ email: Email });
+/** sign in with an emailed code; `new_password` also replaces the password (forgot password) */
+export const CodeLoginInput = z.object({ email: Email, code: EmailCode, new_password: Password.optional() });
+export const ChangePasswordInput = z.object({ current: z.string().min(1).max(128), next: Password });
+
+export const GroupRole = z.enum(['leader', 'member']);
+export type GroupRole = z.infer<typeof GroupRole>;
+export const GroupMember = z.object({
+  id: z.string(),
+  name: z.string(),
+  role: GroupRole,
+  joined_at: z.string(),
+  /** this member is the signed-in account */
+  you: z.boolean(),
+});
+export type GroupMember = z.infer<typeof GroupMember>;
+export const GroupView = z.object({
+  slug: z.string(),
+  name: z.string(),
+  /** what teammates type (or open as …/#join=<code>) to join */
+  join_code: z.string(),
+  role: GroupRole,
+  members: z.array(GroupMember),
+  max_members: z.number().int().positive(),
+});
+export type GroupView = z.infer<typeof GroupView>;
+export const AccountMe = z.object({ email: z.string(), name: z.string(), group: GroupView.nullable() });
+export type AccountMe = z.infer<typeof AccountMe>;
+
+export const CreateGroupInput = z.object({ name: DisplayName });
+/** the code, or the whole …/#join=<code> link pasted */
+export const JoinGroupInput = z.object({ code: z.string().trim().min(4).max(300) });
+export const GroupPreview = z.object({ name: z.string(), members: z.number().int().nonnegative(), full: z.boolean() });
+export type GroupPreview = z.infer<typeof GroupPreview>;
+export const DisbandGroupInput = z.object({ confirm: z.literal(true) });
+
+
 // -------------------------------------------------------------- registry ---
 
 export const Api = {
@@ -493,6 +546,21 @@ export const Api = {
   logout: { method: 'DELETE', path: '/api/v1/session' },
   site: { method: 'GET', path: '/api/v1/site', output: SiteInfo },
   health: { method: 'GET', path: '/api/v1/health', output: HealthInfo },
+  // S2a — hosted accounts and groups
+  registerCode: { method: 'POST', path: '/api/v1/account/register/code', input: RegisterCodeInput },
+  register: { method: 'POST', path: '/api/v1/account/register', input: RegisterInput },
+  passwordLogin: { method: 'POST', path: '/api/v1/account/login', input: PasswordLoginInput },
+  loginCode: { method: 'POST', path: '/api/v1/account/login/code', input: EmailOnlyInput },
+  codeLogin: { method: 'POST', path: '/api/v1/account/login/verify', input: CodeLoginInput },
+  me: { method: 'GET', path: '/api/v1/account', output: AccountMe },
+  changePassword: { method: 'POST', path: '/api/v1/account/password', input: ChangePasswordInput },
+  createGroup: { method: 'POST', path: '/api/v1/group', input: CreateGroupInput, output: GroupView },
+  previewGroup: { method: 'POST', path: '/api/v1/group/preview', input: JoinGroupInput, output: GroupPreview },
+  joinGroup: { method: 'POST', path: '/api/v1/group/join', input: JoinGroupInput, output: GroupView },
+  leaveGroup: { method: 'POST', path: '/api/v1/group/leave' },
+  resetGroupCode: { method: 'POST', path: '/api/v1/group/code', output: GroupView },
+  removeGroupMember: { method: 'DELETE', path: '/api/v1/group/members/:id', output: GroupView },
+  disbandGroup: { method: 'POST', path: '/api/v1/group/disband', input: DisbandGroupInput },
   recentProjects: { method: 'GET', path: '/api/v1/projects/recent', output: z.array(RecentProject) },
   createProject: { method: 'POST', path: '/api/v1/projects', input: CreateProjectInput, output: Project },
   openProject: { method: 'POST', path: '/api/v1/projects/open', input: OpenProjectInput, output: Project },

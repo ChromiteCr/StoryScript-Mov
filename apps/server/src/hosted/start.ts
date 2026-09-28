@@ -1,17 +1,16 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type ServerResponse } from 'node:http';
 import { join } from 'node:path';
 import { getRequestListener } from '@hono/node-server';
-import { FOLDER_RECORDS_DIR } from '@storyscript/contracts';
-import { createApp } from '../app.ts';
-import { ensureStateDir } from '../config/paths.ts';
 import { isPidAlive } from '../project/lock.ts';
-import { ProjectSession } from '../project/session.ts';
-import { generateToken } from '../security/token.ts';
 import { resolveWebDir } from '../server.ts';
-import { readHostedConfig, serverConfigPath, teamDir, type HostedConfig } from './config.ts';
-import { createGateway, type GatewayTeam } from './gateway.ts';
-import { HostedSessions, LoginLimiter } from './sessions.ts';
+import { Accounts } from './accounts.ts';
+import { hostedConfigExists, readHostedConfig, serverConfigPath, type HostedConfig } from './config.ts';
+import { createGateway } from './gateway.ts';
+import { Groups } from './groups.ts';
+import { mailerFromEnv, type Mailer } from './mail/mailer.ts';
+import { SiteDb } from './site-db.ts';
+import { TeamRuntime } from './teams.ts';
 
 export interface HostedServer {
   port: number;
@@ -32,8 +31,8 @@ export function runningServerPid(dataDir: string): number | null {
 }
 
 /**
- * Start the hosted server from <data>/server.json: open (or create) every
- * team's project, one app instance per team, and one gateway in front.
+ * Start the hosted server from <data>/server.json and <data>/site.db: open
+ * every group's project (one app instance each) and one gateway in front.
  */
 export async function startHostedServer(opts: {
   dataDir: string;
@@ -41,50 +40,40 @@ export async function startHostedServer(opts: {
   /** tests: override the configured port (0 = random) */
   port?: number;
   log?: (line: string) => void;
+  /** tests: a fake mail service; otherwise from the environment */
+  mailer?: Mailer;
+  now?: () => number;
 }): Promise<HostedServer> {
   const log = opts.log ?? ((line: string) => console.log(line));
   const loaded = readHostedConfig(opts.dataDir);
-  if (!loaded) throw new Error(`找不到或无法读取 ${serverConfigPath(opts.dataDir)}：先运行 storyscript-mov server init`);
-  if (loaded.teams.length === 0) throw new Error('还没有队伍：先运行 storyscript-mov server team add <代号> --name <队名>');
+  if (!loaded) {
+    throw new Error(
+      hostedConfigExists(opts.dataDir)
+        ? `无法读取 ${serverConfigPath(opts.dataDir)}：格式不对，或是旧版（队伍口令）配置。请删除后重新运行 storyscript-mov server init`
+        : `找不到 ${serverConfigPath(opts.dataDir)}：先运行 storyscript-mov server init`,
+    );
+  }
   const other = runningServerPid(opts.dataDir);
   if (other) throw new Error(`这个数据目录已经有服务在运行（进程 ${other}）`);
 
+  const config: HostedConfig = { ...loaded, port: opts.port ?? loaded.port };
   const webDir = opts.webDir ?? resolveWebDir();
-  const sessionsByTeam: ProjectSession[] = [];
-  const teams = new Map<string, GatewayTeam>();
+  const site = SiteDb.open(opts.dataDir, opts.now);
+  const runtime = new TeamRuntime({ dataDir: opts.dataDir, webDir, config });
+  const mailer = opts.mailer ?? mailerFromEnv(process.env, config.mail.from);
   const httpServer = createServer();
-  const closeTeams = () => {
-    for (const s of sessionsByTeam) s.closeNow();
+  const closeAll = () => {
+    runtime.closeAll();
+    site.close();
   };
 
   try {
-    for (const t of loaded.teams) {
-      const dir = teamDir(opts.dataDir, t.slug);
-      const projectDir = join(dir, 'project');
-      const stateDir = ensureStateDir(join(dir, 'state'));
-      const projectSession = new ProjectSession(stateDir, { projectRoot: false });
-      sessionsByTeam.push(projectSession);
-      if (existsSync(join(projectDir, FOLDER_RECORDS_DIR, 'project.json')) || existsSync(join(projectDir, 'project.json'))) await projectSession.open(projectDir);
-      else {
-        await projectSession.create({ dir: projectDir, name: t.name, timezone: loaded.timezone, default_aspect: '2.39', target_duration_s: null });
-      }
-      const { app } = createApp({
-        mode: 'production',
-        port: loaded.port,
-        token: generateToken(),
-        webDir,
-        stateDir,
-        projectSession,
-        hosted: { slug: t.slug, name: t.name, limits: loaded.limits },
-      });
-      teams.set(t.slug, { name: t.name, fetch: (req, env) => app.fetch(req, env) });
-    }
+    for (const t of site.listTeams()) await runtime.open(t);
   } catch (err) {
-    closeTeams();
+    closeAll();
     throw err;
   }
 
-  const config: HostedConfig = { ...loaded, port: opts.port ?? loaded.port };
   let handler: (req: IncomingMessage, res: ServerResponse) => void = (_req, res) => {
     res.writeHead(503, { 'Retry-After': '1' });
     res.end();
@@ -99,18 +88,22 @@ export async function startHostedServer(opts: {
       resolve(typeof addr === 'object' && addr ? addr.port : config.port);
     });
   }).catch((err: unknown) => {
-    closeTeams();
+    closeAll();
     throw err;
   });
   // loopback Host/Origin entries use the real port (tests listen on port 0)
   const running: HostedConfig = { ...config, port };
-  const gateway = createGateway({ config: running, teams, sessions: HostedSessions.inDataDir(opts.dataDir), limiter: new LoginLimiter(), webDir });
+  const accounts = new Accounts({ site, mailer, config: running, now: opts.now });
+  const groups = new Groups({ site, runtime, config: running, now: opts.now });
+  const gateway = createGateway({ config: running, site, accounts, groups, runtime, webDir });
   handler = getRequestListener(gateway.fetch);
   writeFileSync(pidPath(opts.dataDir), `${process.pid}\n`);
 
   log(`StoryScript-Mov 服务器版已启动：${running.site_name}`);
   log(`监听 ${running.listen_host}:${port}，对外地址 ${running.public_origin}`);
-  log(`队伍 ${running.teams.length} 个：${running.teams.map((t) => `${t.name}（${t.slug}）`).join('、')}`);
+  log(`账号 ${site.listAccounts().length} 个，小组 ${runtime.size} 个`);
+  const mailNote = { resend: `发信：Resend，发件人 ${running.mail.from}`, outbox: '发信：写入发件箱目录（STORYSCRIPT_MAIL_OUTBOX）', none: '发信：未配置（设置环境变量 STORYSCRIPT_RESEND_API_KEY 后重启），暂时不能注册' };
+  log(mailNote[mailer.kind]);
 
   let closing: Promise<void> | null = null;
   const close = () =>
@@ -119,7 +112,7 @@ export async function startHostedServer(opts: {
         httpServer.close(() => resolve());
         httpServer.closeAllConnections();
       });
-      closeTeams();
+      closeAll();
       rmSync(pidPath(opts.dataDir), { force: true });
     })());
   return { port, config: running, close };

@@ -1,37 +1,45 @@
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
+import { Email } from '@storyscript/contracts';
 import { SHUTDOWN_GRACE_MS } from '../shutdown.ts';
 import {
+  HostedLimits,
   TEAM_SLUG,
-  generateTeamCode,
-  hashTeamCode,
+  hashInvite,
   hostedConfigExists,
-  inviteLink,
+  normalizeInvite,
   normalizeOrigin,
+  normalizeSender,
   readHostedConfig,
   serverConfigPath,
+  showJoinCode,
   teamDir,
   writeHostedConfig,
   type HostedConfig,
 } from './config.ts';
-import { HostedSessions } from './sessions.ts';
+import { mailerFromEnv } from './mail/mailer.ts';
+import { codeEmail } from './mail/templates.ts';
+import { SiteDb } from './site-db.ts';
 import { runningServerPid, startHostedServer } from './start.ts';
 
-export const SERVER_HELP = `storyscript-mov server — 服务器版（多个队伍共用一个网站，素材留在各自电脑上）
+export const SERVER_HELP = `storyscript-mov server — 服务器版（邮箱注册，学生自建小组，素材留在各自电脑上）
 
 用法：
-  storyscript-mov server init --data <目录> --origin <公开地址> [--port 4700] [--listen 127.0.0.1] [--name 站点名] [--timezone Asia/Shanghai]
-  storyscript-mov server team add <代号> --name <队名> --data <目录>
-  storyscript-mov server team list --data <目录>
-  storyscript-mov server team reset <代号> --data <目录>      重新生成口令（旧口令和已登录的浏览器全部失效）
-  storyscript-mov server team remove <代号> --data <目录>     停用队伍（项目文件保留在 teams/<代号>/）
+  storyscript-mov server init --data <目录> --origin <公开地址> --invite <邀请码> --mail-from <发件地址>
+                              [--port 4700] [--listen 127.0.0.1] [--name 站点名] [--timezone Asia/Shanghai]
   storyscript-mov server start --data <目录>
+  storyscript-mov server invite set <邀请码> --data <目录>     更换注册邀请码（先停止服务）
+  storyscript-mov server user list --data <目录>
+  storyscript-mov server user remove <邮箱> --data <目录>      删除账号（该账号立即退出登录）
+  storyscript-mov server team list --data <目录>
+  storyscript-mov server team remove <代号> --data <目录>      删除小组（先停止服务；项目文件保留在 teams/<代号>/）
+  storyscript-mov server mail test <邮箱> --data <目录>        发一封测试邮件
 
   --data 也可以用环境变量 STORYSCRIPT_DATA 指定。
   公开地址只写协议和域名，例如 https://story.example.com（不支持子路径）。
-  修改队伍前请先停止服务；模型 key 用环境变量 STORYSCRIPT_LLM_* / STORYSCRIPT_IMAGE_* 配置。
-  每队 24 小时内的模型调用上限在 server.json 的 limits 里（默认文本 200 次、图像 20 次）。
-  代号：小写字母、数字和连字符，例如 team-1。`;
+  发信：环境变量 STORYSCRIPT_RESEND_API_KEY（Resend 的 API key）；发件地址的域名要先在 Resend 验证。
+  模型 key：环境变量 STORYSCRIPT_LLM_* / STORYSCRIPT_IMAGE_*。
+  上限在 server.json 的 limits 里：每组 24 小时文本 200 次、图像 20 次；全站每天邮件 100 封；小组 60 个，每组 12 人。`;
 
 function fail(message: string): number {
   console.error(message);
@@ -49,17 +57,19 @@ function loadOrFail(dataDir: string): HostedConfig | null {
   return config;
 }
 
-function refuseWhileRunning(dataDir: string): boolean {
+function refuseWhileRunning(dataDir: string, what: string): boolean {
   const pid = runningServerPid(dataDir);
-  if (pid) console.error(`服务正在运行（进程 ${pid}）。请先停止服务，改完队伍再启动。`);
+  if (pid) console.error(`服务正在运行（进程 ${pid}）。请先停止服务，${what}后再启动。`);
   return pid !== null;
 }
 
-function printCode(config: HostedConfig, name: string, code: string): void {
-  console.log(`队伍：${name}`);
-  console.log(`口令：${code}`);
-  console.log(`邀请链接：${inviteLink(config, code)}`);
-  console.log('口令只显示这一次，服务器上只保存它的哈希。请发给队员，丢了可以用 team reset 重新生成。');
+function checkInvite(code: string | undefined): string | null {
+  const n = code ? normalizeInvite(code) : '';
+  if (n.length < 4 || n.length > 100) {
+    console.error('需要邀请码（4–100 个字符，不区分大小写）');
+    return null;
+  }
+  return n;
 }
 
 export async function runServerCli(argv: string[]): Promise<number | undefined> {
@@ -76,6 +86,8 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
         listen: { type: 'string' },
         name: { type: 'string' },
         timezone: { type: 'string' },
+        invite: { type: 'string' },
+        'mail-from': { type: 'string' },
         help: { type: 'boolean', short: 'h', default: false },
       },
     });
@@ -94,12 +106,17 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
   if (cmd === 'init') {
     if (hostedConfigExists(dataDir)) return fail(`${serverConfigPath(dataDir)} 已存在，不会覆盖`);
     if (!values.origin) return fail('需要 --origin <公开地址>，例如 https://story.example.com');
+    if (!values['mail-from']) return fail('需要 --mail-from <发件地址>，例如 noreply@story.example.com（域名要先在 Resend 验证）');
     let origin: string;
+    let from: string;
     try {
       origin = normalizeOrigin(values.origin);
+      from = normalizeSender(values['mail-from']);
     } catch (err) {
       return fail((err as Error).message);
     }
+    const invite = checkInvite(values.invite);
+    if (!invite) return 2;
     const port = values.port === undefined ? 4700 : Number(values.port);
     if (!Number.isInteger(port) || port < 1 || port > 65535) return fail(`无效的端口：${values.port}`);
     const timezone = values.timezone ?? 'Asia/Shanghai';
@@ -110,58 +127,22 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
     }
     const config: HostedConfig = {
       format: 'storyscript-mov-server',
-      version: 1,
+      version: 2,
       site_name: values.name ?? 'StoryScript-Mov',
       public_origin: origin,
       listen_host: values.listen ?? '127.0.0.1',
       port,
       timezone,
-      limits: { llm_jobs_per_day: 200, image_jobs_per_day: 20 },
-      teams: [],
+      invite_sha256: hashInvite(invite),
+      mail: { from },
+      limits: HostedLimits.parse({}),
     };
     writeHostedConfig(dataDir, config);
+    SiteDb.open(dataDir).close();
     console.log(`已创建 ${serverConfigPath(dataDir)}`);
+    console.log(`注册邀请码已设置（服务器上只保存它的哈希），发件人：${from}`);
     if (!origin.startsWith('https://')) console.log('注意：公开地址不是 https。浏览器只在 HTTPS 下才能记住本机素材文件夹，登录 cookie 也不加密传输。');
-    console.log('下一步：storyscript-mov server team add <代号> --name <队名> --data ' + dataDir);
-    return 0;
-  }
-
-  if (cmd === 'team') {
-    const config = loadOrFail(dataDir);
-    if (!config) return 1;
-    if (sub === 'list') {
-      const sessions = HostedSessions.inDataDir(dataDir);
-      if (config.teams.length === 0) console.log('还没有队伍。');
-      for (const t of config.teams) console.log(`${t.slug}\t${t.name}\t已登录浏览器 ${sessions.count(t.slug)}\t${teamDir(dataDir, t.slug)}`);
-      return 0;
-    }
-    if (sub !== 'add' && sub !== 'reset' && sub !== 'remove') return fail(`未知命令：server team ${sub ?? ''}\n\n${SERVER_HELP}`);
-    if (!arg || !TEAM_SLUG.test(arg)) return fail('需要队伍代号：小写字母、数字和连字符，例如 team-1');
-    if (refuseWhileRunning(dataDir)) return 1;
-    const existing = config.teams.find((t) => t.slug === arg);
-
-    if (sub === 'add') {
-      if (existing) return fail(`队伍 ${arg} 已存在；要换口令用 team reset`);
-      const name = values.name?.trim();
-      if (!name) return fail('需要 --name <队名>');
-      const code = generateTeamCode();
-      config.teams.push({ slug: arg, name, code_sha256: hashTeamCode(code), created_at: new Date().toISOString() });
-      writeHostedConfig(dataDir, config);
-      printCode(config, name, code);
-      return 0;
-    }
-    if (!existing) return fail(`没有队伍 ${arg}`);
-    HostedSessions.inDataDir(dataDir).revokeTeam(arg);
-    if (sub === 'reset') {
-      const code = generateTeamCode();
-      existing.code_sha256 = hashTeamCode(code);
-      writeHostedConfig(dataDir, config);
-      printCode(config, existing.name, code);
-      return 0;
-    }
-    config.teams = config.teams.filter((t) => t.slug !== arg);
-    writeHostedConfig(dataDir, config);
-    console.log(`已停用队伍 ${existing.name}（${arg}）。项目文件保留在 ${teamDir(dataDir, arg)}`);
+    console.log(`下一步：设置环境变量 STORYSCRIPT_RESEND_API_KEY，然后 storyscript-mov server start --data ${dataDir}`);
     return 0;
   }
 
@@ -182,6 +163,90 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
     } catch (err) {
       console.error(`启动失败：${(err as Error).message}`);
       return 1;
+    }
+  }
+
+  const config = loadOrFail(dataDir);
+  if (!config) return 1;
+
+  if (cmd === 'invite') {
+    if (sub !== 'set') return fail(`未知命令：server invite ${sub ?? ''}\n\n${SERVER_HELP}`);
+    const invite = checkInvite(arg);
+    if (!invite) return 2;
+    if (refuseWhileRunning(dataDir, '换好邀请码')) return 1;
+    writeHostedConfig(dataDir, { ...config, invite_sha256: hashInvite(invite) });
+    console.log('注册邀请码已更换。已注册的账号不受影响。');
+    return 0;
+  }
+
+  if (cmd === 'mail') {
+    if (sub !== 'test') return fail(`未知命令：server mail ${sub ?? ''}\n\n${SERVER_HELP}`);
+    const to = Email.safeParse(arg ?? '');
+    if (!to.success) return fail('需要收件邮箱，例如 server mail test me@example.com');
+    const mailer = mailerFromEnv(process.env, config.mail.from);
+    const message = codeEmail({ purpose: 'test', code: '', siteName: config.site_name, origin: config.public_origin, minutes: 10 });
+    try {
+      await mailer.send({ to: to.data, ...message });
+    } catch (err) {
+      return fail(`没有发出去：${(err as Error).message}`);
+    }
+    console.log(mailer.kind === 'outbox' ? `已写入发件箱目录 ${process.env.STORYSCRIPT_MAIL_OUTBOX}` : `已发送到 ${to.data}，发件人 ${config.mail.from}`);
+    return 0;
+  }
+
+  if (cmd === 'user') {
+    const site = SiteDb.open(dataDir);
+    try {
+      if (sub === 'list') {
+        const accounts = site.listAccounts();
+        if (accounts.length === 0) console.log('还没有账号。');
+        for (const a of accounts) {
+          const team = a.team_slug ? site.team(a.team_slug) : null;
+          console.log(`${a.email}\t${a.name}\t${team ? `${team.name}（${a.team_role === 'leader' ? '组长' : '组员'}）` : '未加入小组'}\t注册于 ${a.created_at.slice(0, 10)}`);
+        }
+        return 0;
+      }
+      if (sub !== 'remove') return fail(`未知命令：server user ${sub ?? ''}\n\n${SERVER_HELP}`);
+      const email = Email.safeParse(arg ?? '');
+      const account = email.success ? site.accountByEmail(email.data) : null;
+      if (!account) return fail(`没有这个账号：${arg ?? ''}`);
+      site.db.tx(() => {
+        if (account.team_slug && account.team_role === 'leader') {
+          const next = site.members(account.team_slug).find((m) => m.id !== account.id);
+          if (next) site.setRole(next.id, 'leader');
+        }
+        site.deleteAccount(account.id);
+      });
+      console.log(`已删除账号 ${account.email}（${account.name}）。`);
+      return 0;
+    } finally {
+      site.close();
+    }
+  }
+
+  if (cmd === 'team') {
+    const site = SiteDb.open(dataDir);
+    try {
+      if (sub === 'list') {
+        const teams = site.listTeams();
+        if (teams.length === 0) console.log('还没有小组。');
+        for (const t of teams) {
+          const members = site.members(t.slug);
+          const leader = members.find((m) => m.team_role === 'leader');
+          console.log(`${t.slug}\t${t.name}\t${members.length} 人${leader ? `，组长 ${leader.name}` : ''}\t组码 ${showJoinCode(t.join_code)}\t${teamDir(dataDir, t.slug)}`);
+        }
+        return 0;
+      }
+      if (sub !== 'remove') return fail(`未知命令：server team ${sub ?? ''}\n\n${SERVER_HELP}`);
+      if (!arg || !TEAM_SLUG.test(arg)) return fail('需要小组代号（用 server team list 查看）');
+      const team = site.team(arg);
+      if (!team) return fail(`没有小组 ${arg}`);
+      if (refuseWhileRunning(dataDir, '删好小组')) return 1;
+      site.deleteTeam(arg);
+      console.log(`已删除小组 ${team.name}（${arg}），组员回到"未加入小组"。项目文件保留在 ${teamDir(dataDir, arg)}`);
+      return 0;
+    } finally {
+      site.close();
     }
   }
 

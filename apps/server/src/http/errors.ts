@@ -30,6 +30,9 @@ const DEFAULT_STATUS: Record<ErrorCode, ContentfulStatusCode> = {
   UNAUTHORIZED: 401,
   FORBIDDEN: 403,
   TOO_MANY_ATTEMPTS: 429,
+  ACCOUNT_EXISTS: 409,
+  NO_TEAM: 409,
+  MAIL_FAILED: 502,
   INTERNAL: 500,
 };
 

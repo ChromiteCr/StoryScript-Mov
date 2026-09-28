@@ -61,6 +61,18 @@ test('register, start a group, a teammate joins from the link; both work in one 
   await page.screenshot({ path: test.info().outputPath('group-panel.png') });
   await panel.getByRole('button', { name: '关闭' }).click();
 
+  // BYOK: the group fills in its own model service; the server only relays
+  await page.goto(`${app.base}/#/settings`);
+  await page.getByRole('tab', { name: '模型' }).click();
+  await expect(page.getByText('每个小组用自己的模型服务')).toBeVisible();
+  const textForm = page.locator('form').filter({ has: page.getByLabel('地址（base_url）') }).first();
+  await textForm.getByLabel('地址（base_url）').fill('https://127.0.0.1/v1');
+  await textForm.getByRole('textbox', { name: '模型', exact: true }).fill('m');
+  await textForm.getByLabel('API key').fill('sk-e2e-1234');
+  await textForm.getByRole('button', { name: '保存' }).click();
+  await expect(page.getByText(/本机或内网地址，服务器版不能连接/).first()).toBeVisible();
+  await page.screenshot({ path: test.info().outputPath('byok-settings.png') });
+
   // teammate: opens the link, registers, joins with the code already filled in
   const other = await browser.newContext();
   const p2 = await other.newPage();

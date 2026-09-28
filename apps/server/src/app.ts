@@ -10,6 +10,7 @@ import { registerPlatformRoutes } from './routes/platform.ts';
 import { registerProjectRoutes } from './routes/projects.ts';
 import { registerSessionRoutes } from './routes/session.ts';
 import { registerStaticRoutes } from './routes/static.ts';
+import { publicOnlyFetch } from './security/egress.ts';
 import { authGuard, headersMiddleware, hostGuard, originGuard, type ServerMode } from './security/guards.ts';
 import { SessionStore } from './security/sessions.ts';
 import { registerDraftRoutes } from './routes/drafts.ts';
@@ -50,6 +51,8 @@ export interface CreateAppOptions {
    * team session; the static frontend is served by the gateway too.
    */
   hosted?: HostedTeam;
+  /** tests: the transport to model services (default: global fetch; hosted: public https only) */
+  fetch?: typeof fetch;
 }
 
 export interface AppHandle {
@@ -68,10 +71,6 @@ const HOSTED_DENIED: { routes: (keyof typeof Api)[]; message: string }[] = [
     message: '服务器版中每个队伍固定使用一个项目，不能新建、打开或关闭其他项目。',
   },
   { routes: ['chooseFolder'], message: '服务器版不能在服务器上弹出文件夹选择框。' },
-  {
-    routes: ['saveTextProvider', 'testTextProvider', 'saveImageProvider', 'testImageProvider'],
-    message: '服务器版的模型由管理员在服务器上配置，队伍不能修改或测试。',
-  },
   {
     routes: ['addRoot', 'scanRoot', 'checkRoot'],
     message: '服务器版不读取服务器上的目录。素材请在浏览器里从本机添加。',
@@ -103,6 +102,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
     tools: opts.tools ?? (() => detectTools()),
     chooseFolder: opts.chooseFolder ?? (() => chooseFolder()),
     hosted: opts.hosted ?? null,
+    fetch: opts.fetch ?? (opts.hosted ? publicOnlyFetch : globalThis.fetch),
   };
 
   const app = new Hono();

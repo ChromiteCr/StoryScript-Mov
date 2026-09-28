@@ -7,6 +7,7 @@ import type { AppDeps } from '../deps.ts';
 import { AppError } from '../http/errors.ts';
 import { respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
+import { checkPublicBaseUrl, EgressBlockedError } from '../security/egress.ts';
 import { testImageProvider } from '../services/raster/provider-test.ts';
 
 /**
@@ -17,6 +18,13 @@ import { testImageProvider } from '../services/raster/provider-test.ts';
 
 const MODELS_TIMEOUT_MS = 10_000;
 
+/** Hosted server: a group's base_url must be a public https address (the fetch enforces it again at connect time). */
+async function assertReachable(deps: AppDeps, baseUrl: string): Promise<void> {
+  if (!deps.hosted) return;
+  const problem = await checkPublicBaseUrl(baseUrl);
+  if (problem) throw new AppError('VALIDATION_ERROR', `base_url 不能用：${problem}`, 400, { field: 'base_url' });
+}
+
 function view(deps: AppDeps) {
   return { text: textProviderView(deps.stateDir, deps.env), image: imageProviderView(deps.stateDir, deps.env) };
 }
@@ -26,6 +34,7 @@ export function registerSettingsRoutes(app: Hono, deps: AppDeps): void {
 
   app.put(Api.saveTextProvider.path, async (c) => {
     const input = await parseBody(c, SaveTextProviderInput);
+    await assertReachable(deps, input.base_url);
     saveTextProvider(deps.stateDir, input);
     const r = resolveTextProvider(deps.stateDir, deps.env);
     const notice = r.env_fields.length
@@ -51,12 +60,13 @@ export function registerSettingsRoutes(app: Hono, deps: AppDeps): void {
     const url = `${r.base_url.replace(/\/+$/, '')}/models`;
     let res: Response;
     try {
-      res = await fetch(url, {
+      res = await deps.fetch(url, {
         headers: { Authorization: `Bearer ${r.api_key}`, Accept: 'application/json' },
         signal: AbortSignal.timeout(MODELS_TIMEOUT_MS),
       });
     } catch (err) {
-      const reason = err instanceof Error && err.name === 'TimeoutError' ? '连接超时' : '无法连接';
+      const reason =
+        err instanceof EgressBlockedError ? err.message : err instanceof Error && err.name === 'TimeoutError' ? '连接超时' : '无法连接';
       return respond(c, ProviderTestResult, {
         ok: false,
         models_endpoint: false,
@@ -98,6 +108,7 @@ export function registerSettingsRoutes(app: Hono, deps: AppDeps): void {
 
   app.put(Api.saveImageProvider.path, async (c) => {
     const input = await parseBody(c, SaveImageProviderInput);
+    await assertReachable(deps, input.base_url);
     saveImageProvider(deps.stateDir, input);
     const r = resolveImageProvider(deps.stateDir, deps.env);
     const notice = r.env_fields.length

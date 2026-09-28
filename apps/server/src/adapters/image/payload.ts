@@ -21,10 +21,18 @@ function finish(bytes: Uint8Array, delivery: ReturnedImage['delivery']): Returne
   return { bytes, mime: info.mime, width: info.width, height: info.height, sha256: sha256Hex(bytes), delivery };
 }
 
-export async function downloadImage(url: string, opts: { timeoutMs: number; userAgent: string; secrets: readonly string[] }): Promise<ReturnedImage> {
+export interface DownloadOptions {
+  timeoutMs: number;
+  userAgent: string;
+  secrets: readonly string[];
+  /** default: global fetch (hosted: public https only) */
+  fetch?: typeof fetch;
+}
+
+export async function downloadImage(url: string, opts: DownloadOptions): Promise<ReturnedImage> {
   let res: Response;
   try {
-    res = await fetch(url, { headers: { 'User-Agent': opts.userAgent, Accept: 'image/*' }, signal: AbortSignal.timeout(opts.timeoutMs), redirect: 'follow' });
+    res = await (opts.fetch ?? fetch)(url, { headers: { 'User-Agent': opts.userAgent, Accept: 'image/*' }, signal: AbortSignal.timeout(opts.timeoutMs), redirect: 'follow' });
   } catch (err) {
     const timeout = err instanceof Error && err.name === 'TimeoutError';
     throw new ImageCallError('bad_response', timeout ? '图像已生成，但下载超时；请到服务商后台查看' : redactSecrets(`图像已生成，但下载失败：${err instanceof Error ? err.message : String(err)}`, opts.secrets));
@@ -35,7 +43,7 @@ export async function downloadImage(url: string, opts: { timeoutMs: number; user
 }
 
 /** base64 / data URL / http(s) URL → image bytes. */
-export async function materialize(value: string, opts: { timeoutMs: number; userAgent: string; secrets: readonly string[] }): Promise<ReturnedImage> {
+export async function materialize(value: string, opts: DownloadOptions): Promise<ReturnedImage> {
   const v = value.trim();
   if (/^https?:\/\//i.test(v)) return downloadImage(v, opts);
   const b64 = v.startsWith('data:') ? v.slice(v.indexOf(',') + 1) : v;

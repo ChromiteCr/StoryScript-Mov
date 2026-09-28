@@ -117,7 +117,7 @@ function General({ health, project }: { health: HealthInfo; project: Project | n
         </InspectorRow>
         <InspectorRow label="运行模式">
           {health.hosted
-            ? `服务器版（${health.team_name ?? '队伍'}）`
+            ? `服务器版（${health.team_name ?? '小组'}）`
             : health.demo
               ? '演示回放：模型输出来自录制的样例，不是真实调用'
               : '正常'}
@@ -185,25 +185,16 @@ function Environment({ health }: { health: HealthInfo }) {
 
 function Models() {
   const health = useHealth().data;
-  if (health?.hosted) {
-    // teams cannot see, change or test the server's keys
-    const state = (on: boolean) => (on ? '已由管理员配置' : '未配置');
-    return (
-      <Inspector>
-        <div className="px-3 py-3">
-          <Notice tone="info" title="服务器版的模型由管理员在服务器上配置">
-            队伍不能查看或修改 key。没有配置文本模型时，拆镜和实体抽取可以手工完成；没有配置图像模型时，AI 铅笔重绘不可用。
-          </Notice>
-        </div>
-        <InspectorGroup title="当前状态">
-          <InspectorRow label="文本模型">{state(health.text_provider_configured)}</InspectorRow>
-          <InspectorRow label="图像模型">{state(health.image_provider_configured)}</InspectorRow>
-        </InspectorGroup>
-      </Inspector>
-    );
-  }
   return (
     <Inspector>
+      {health?.hosted ? (
+        // BYOK per group: the server stores this group's settings and relays its requests
+        <div className="px-3 py-3">
+          <Notice tone="info" title="每个小组用自己的模型服务">
+            填写本组的 base_url、模型名和 key，组里的人共用这一套。服务器只保存它们并转发本组的请求，只能连接公网上的 https 地址。没有配置文本模型时，拆镜和实体抽取可以手工完成。
+          </Notice>
+        </div>
+      ) : null}
       <TextProviderPanel />
       <ImageProviderPanel />
     </Inspector>
@@ -276,7 +267,8 @@ export function SettingsView() {
   const idFor = (c: Category) => ({ tab: `${base}-tab-${c}`, panel: `${base}-panel-${c}` });
 
   const warn = new Set<Category>();
-  if (health.data && missingTools(health.data).length > 0) warn.add('environment');
+  // the hosted server handles no footage, so missing ffmpeg is not a problem there
+  if (health.data && !health.data.hosted && missingTools(health.data).length > 0) warn.add('environment');
 
   const label = CATEGORIES.find((c) => c.id === category)?.label ?? '';
 

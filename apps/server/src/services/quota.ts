@@ -3,9 +3,10 @@ import type { DbPort } from '../db/port.ts';
 import { AppError } from '../http/errors.ts';
 
 /**
- * Hosted server: every team shares the admin's model keys, so each team gets
- * a cap on paid (remote) jobs per rolling 24 hours (server.json `limits`).
- * The local single-user app has no cap.
+ * Hosted server: each group calls its own model service through the server,
+ * with a cap on paid (remote) jobs per rolling 24 hours (server.json
+ * `limits`) against runaway spending and load. The local single-user app has
+ * no cap.
  */
 
 const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order'] as const;
@@ -26,6 +27,6 @@ export function assertJobQuota(deps: AppDeps, db: DbPort, lane: 'llm' | 'image',
     )?.n ?? 0;
   if (Number(used) >= limit) {
     const what = lane === 'llm' ? '文本模型' : '图像模型';
-    throw new AppError('QUOTA_EXCEEDED', `本队 24 小时内的${what}调用已达 ${limit} 次上限，稍后再试，或请管理员调高`, 409, { lane, limit, used: Number(used) });
+    throw new AppError('QUOTA_EXCEEDED', `本组 24 小时内的${what}调用已达 ${limit} 次上限（防止意外花费），稍后再试，或请管理员调高`, 409, { lane, limit, used: Number(used) });
   }
 }

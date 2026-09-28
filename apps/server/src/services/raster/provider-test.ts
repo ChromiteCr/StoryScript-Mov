@@ -38,11 +38,11 @@ function summarizeUsage(usage: Record<string, number> | null): string {
     .join('，');
 }
 
-async function freeCheck(cfg: ReturnType<typeof requireImageClient>, warning: string): Promise<ProviderTestResult> {
+async function freeCheck(cfg: ReturnType<typeof requireImageClient>, warning: string, doFetch: typeof fetch): Promise<ProviderTestResult> {
   const url = `${cfg.base_url.replace(/\/+$/, '')}/models`;
   let res: Response;
   try {
-    res = await fetch(url, {
+    res = await doFetch(url, {
       headers: { Authorization: `Bearer ${cfg.api_key}`, Accept: 'application/json', 'User-Agent': USER_AGENT },
       signal: AbortSignal.timeout(MODELS_TIMEOUT_MS),
     });
@@ -82,7 +82,7 @@ export async function testImageProvider(deps: AppDeps, paid: boolean): Promise<P
   if (deps.demo) return { ok: false, models_endpoint: false, model_listed: null, message: '演示模式不会外发任何请求' };
   const cfg = requireImageClient(deps, { forRedraw: false });
   const warning = cfg.warning ? `（注意：${cfg.warning}）` : '';
-  if (!paid) return freeCheck(cfg, warning);
+  if (!paid) return freeCheck(cfg, warning, deps.fetch);
 
   const endpoint: ImageEndpoint = { base_url: cfg.base_url, api_key: cfg.api_key, model: cfg.model, dialect: cfg.dialect, preset: cfg.preset, host: cfg.host };
   let size: string;
@@ -106,6 +106,7 @@ export async function testImageProvider(deps: AppDeps, paid: boolean): Promise<P
     retryAfterCapMs: o.retryAfterCapMs,
     defaultRetryAfterMs: o.defaultRetryAfterMs,
     userAgent: USER_AGENT,
+    fetch: deps.fetch,
     attempt: o.attempt,
   });
   if (res.outcome === 'ok') {

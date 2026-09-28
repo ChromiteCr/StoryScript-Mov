@@ -79,6 +79,9 @@ interface ProviderFormProps {
 }
 
 function ProviderForm({ view, save, test }: ProviderFormProps) {
+  const hosted = useHealth().data?.hosted ?? false;
+  // a hosted server only reaches public https services, so the local one is left out there
+  const presets = hosted ? PROVIDER_PRESETS.filter((p) => p.base_url.startsWith('https://')) : PROVIDER_PRESETS;
   const fromEnv = view?.source === 'env';
 
   const [baseUrl, setBaseUrl] = useState(view?.base_url ?? '');
@@ -114,11 +117,12 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
     );
   };
 
+  const where = hosted ? '保存在服务器上本组的设置里，只用来转发本组的请求；组员和其他小组都看不到完整的 key，它也不进入项目文件和导出文件。' : '保存在本机 credentials.json（权限 0600），不进入项目目录和导出文件。';
   const keyHint = fromEnv
     ? '来自环境变量 STORYSCRIPT_LLM_API_KEY。'
     : view?.key_last4
-      ? '只写不读：留空表示沿用已保存的 key。保存在本机 credentials.json（权限 0600），不进入项目目录和导出文件。'
-      : '只写不读：保存在本机 credentials.json（权限 0600），不进入项目目录和导出文件。';
+      ? `只写不读：留空表示沿用已保存的 key。${where}`
+      : `只写不读：${where}`;
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-3">
@@ -150,7 +154,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
         )}
       </Field>
       <ul aria-label="常用服务" className="-mt-1 flex flex-wrap gap-1">
-        {PROVIDER_PRESETS.map((p) => (
+        {presets.map((p) => (
           <li key={p.base_url}>
             <button
               type="button"
@@ -173,7 +177,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
       <details className="text-xs text-graphite-300">
         <summary className="cursor-pointer select-none hover:text-graphite-100">各服务的地址与结构化输出能力</summary>
         <ul className="mt-1.5 space-y-1">
-          {PROVIDER_PRESETS.map((p) => (
+          {presets.map((p) => (
             <li key={p.base_url} className="flex flex-col">
               <span className="text-graphite-100">
                 {p.name} <span className="text-graphite-300">· {p.note}</span>

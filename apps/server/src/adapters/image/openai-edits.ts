@@ -48,7 +48,7 @@ export function toImageCallError(err: unknown, apiKey: string): ImageCallError {
 }
 
 export async function openaiEditsAttempt(endpoint: ImageEndpoint, req: ImageRequest, opts: AttemptOptions): Promise<AttemptResult> {
-  const client = new OpenAI({ baseURL: endpoint.base_url, apiKey: endpoint.api_key, maxRetries: 0, timeout: opts.timeoutMs });
+  const client = new OpenAI({ baseURL: endpoint.base_url, apiKey: endpoint.api_key, maxRetries: 0, timeout: opts.timeoutMs, fetch: opts.fetch });
   const secrets = [endpoint.api_key];
   let res: Awaited<ReturnType<typeof client.images.edit>>;
   try {
@@ -60,6 +60,6 @@ export async function openaiEditsAttempt(endpoint: ImageEndpoint, req: ImageRequ
   const first = res.data?.[0];
   const value = first?.b64_json ?? first?.url ?? null;
   if (!value) throw new ImageCallError('bad_response', '服务返回成功，但结果里没有图像');
-  const image = await materialize(value, { timeoutMs: opts.timeoutMs, userAgent: opts.userAgent, secrets });
+  const image = await materialize(value, { timeoutMs: opts.timeoutMs, userAgent: opts.userAgent, secrets, fetch: opts.fetch });
   return { image, usage: flattenUsage(res.usage) };
 }

@@ -1,6 +1,6 @@
 {
   "name": "storyscript-mov",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "开源、本地运行的实拍分镜工作台：剧本拆镜、宽银幕铅笔分镜、拍摄顺序、场记与素材回链。",
   "license": "MIT",
   "repository": {

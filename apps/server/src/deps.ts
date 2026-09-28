@@ -29,4 +29,6 @@ export interface AppDeps {
   chooseFolder: () => Promise<string | null>;
   /** null = the local single-user app */
   hosted: HostedTeam | null;
+  /** how model services are reached: global fetch locally, public https only on a hosted server (security/egress.ts) */
+  fetch: typeof fetch;
 }

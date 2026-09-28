@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -407,13 +407,65 @@ describe('hosted server: groups', () => {
   });
 });
 
+describe('hosted server: each group brings its own model (BYOK)', () => {
+  test("a group saves its own base_url, model and key; the server's own keys stay unused; other groups see nothing", async () => {
+    vi.stubEnv('STORYSCRIPT_LLM_BASE_URL', 'https://server-owned.example/v1');
+    vi.stubEnv('STORYSCRIPT_LLM_API_KEY', 'sk-server-owned-key');
+    vi.stubEnv('STORYSCRIPT_LLM_MODEL', 'server-model');
+    try {
+      await start();
+      const a = await register('byok-a@school.test');
+      const b = await register('byok-b@school.test');
+      const ga = await createGroup(a, '甲组');
+      const gb = await createGroup(b, '乙组');
+      const providers = async (cookie: string) => (await call('GET', '/api/v1/settings/providers', { cookie })).json().data;
+      expect((await providers(a)).text).toBeNull();
+      expect((await call('GET', '/api/v1/health', { cookie: a })).json().data.text_provider_configured).toBe(false);
+
+      const save = (cookie: string, base_url: string) =>
+        call('PUT', '/api/v1/settings/providers/text', { cookie, body: { base_url, model: 'deepseek-chat', api_key: 'sk-group-a-1234' } });
+      const ok = await save(a, 'https://api.example.invalid/v1');
+      expect(ok.status, ok.body).toBe(200);
+      expect(ok.json().data.text).toMatchObject({ base_url: 'https://api.example.invalid/v1', model: 'deepseek-chat', key_last4: '1234' });
+      expect(ok.body).not.toContain('sk-group-a');
+      expect((await call('GET', '/api/v1/health', { cookie: a })).json().data.text_provider_configured).toBe(true);
+      expect((await providers(b)).text).toBeNull();
+
+      // stored with the group's instance, readable by the service only, outside the project folder
+      const creds = join(teamDir(data, ga.slug), 'state', 'credentials.json');
+      expect(statSync(creds).mode & 0o777).toBe(0o600);
+      expect(readFileSync(creds, 'utf8')).toContain('sk-group-a-1234');
+      expect(existsSync(join(teamDir(data, gb.slug), 'state', 'credentials.json'))).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  test.each([
+    ['http://api.example.com/v1', 'https'],
+    ['https://localhost/v1', '本机或内网'],
+    ['https://127.0.0.1:8080/v1', '本机或内网'],
+    ['https://169.254.169.254/v1', '本机或内网'],
+    ['https://10.0.0.8/v1', '本机或内网'],
+  ])('base_url %s is refused (%s)', async (base_url, why) => {
+    await start();
+    const cookie = await register('byok-c@school.test');
+    await createGroup(cookie, '丙组');
+    for (const path of ['/api/v1/settings/providers/text', '/api/v1/settings/providers/image']) {
+      const body = path.endsWith('text') ? { base_url, model: 'm', api_key: 'k' } : { base_url, model: 'm', api_key: 'k', dialect_override: null };
+      const r = await call('PUT', path, { cookie, body });
+      expect(r.status, r.body).toBe(400);
+      expect(r.json().error.message).toContain(why);
+    }
+  });
+});
+
 describe('hosted server: what a group cannot do, and the front door', () => {
   test.each([
     ['POST', '/api/v1/projects/open', { dir: '/etc' }],
     ['POST', '/api/v1/projects', { dir: '/tmp/x', name: 'x', timezone: 'Asia/Shanghai', default_aspect: '2.39', target_duration_s: null }],
     ['POST', '/api/v1/projects/close', undefined],
     ['POST', '/api/v1/platform/choose-folder', undefined],
-    ['PUT', '/api/v1/settings/providers/text', { base_url: 'http://169.254.169.254', model: 'x', api_key: 'k' }],
     ['POST', '/api/v1/media/roots', { abs_path: '/etc' }],
   ])('%s %s is refused on a hosted server', async (method, path, body) => {
     await start();

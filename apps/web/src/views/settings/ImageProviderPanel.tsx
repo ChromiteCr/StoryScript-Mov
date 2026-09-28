@@ -75,6 +75,7 @@ interface FormProps {
 }
 
 function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
+  const hosted = useHealth().data?.hosted ?? false;
   const fromEnv = view?.source === 'env';
   const [baseUrl, setBaseUrl] = useState(view?.base_url ?? '');
   const [model, setModel] = useState(view?.model ?? '');
@@ -117,11 +118,12 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
     );
   };
 
+  const where = hosted ? '保存在服务器上本组的设置里，只用来转发本组的请求；组员和其他小组都看不到完整的 key，它也不进入项目文件和导出文件。' : '保存在本机 credentials.json（权限 0600），不进入项目目录、日志和导出文件。';
   const keyHint = fromEnv
     ? '来自环境变量 STORYSCRIPT_IMAGE_API_KEY。'
     : hasKey
-      ? '只写不读：留空表示沿用已保存的 key。保存在本机 credentials.json（权限 0600），不进入项目目录、日志和导出文件。'
-      : '只写不读：保存在本机 credentials.json（权限 0600），不进入项目目录、日志和导出文件。';
+      ? `只写不读：留空表示沿用已保存的 key。${where}`
+      : `只写不读：${where}`;
 
   const testTitle = !testable ? '先保存地址、模型和 key' : dirty ? '测试使用已保存的配置，请先保存' : undefined;
 

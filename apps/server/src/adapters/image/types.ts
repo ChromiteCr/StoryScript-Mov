@@ -55,6 +55,8 @@ export interface AttemptOptions {
   /** strip the dialect's optional params (second try after an "unknown parameter" 400) */
   strip: boolean;
   userAgent: string;
+  /** transport to the service (hosted: public https only) */
+  fetch: typeof fetch;
 }
 
 /** One transport attempt. Throws ImageCallError. */

@@ -48,6 +48,8 @@ export interface CallPolicy {
   /** called right before every outbound request with the 1-based attempt number */
   onAttempt?: (attempt: number) => void;
   userAgent: string;
+  /** transport to the service (default: global fetch) */
+  fetch?: typeof fetch;
   /** transport override (tests) */
   attempt?: ImageAttempt;
 }
@@ -241,7 +243,7 @@ export async function callImage(endpoint: ImageEndpoint, req: ImageRequest, poli
     policy.onAttempt?.(attempts);
     let res: AttemptResult;
     try {
-      res = await attempt(endpoint, req, { timeoutMs, strip, userAgent: policy.userAgent });
+      res = await attempt(endpoint, req, { timeoutMs, strip, userAgent: policy.userAgent, fetch: policy.fetch ?? globalThis.fetch });
     } catch (err) {
       const e = err instanceof ImageCallError ? err : new ImageCallError('network', redactSecrets(err instanceof Error ? err.message : String(err), [endpoint.api_key]));
       const canRetry = attempts < max;

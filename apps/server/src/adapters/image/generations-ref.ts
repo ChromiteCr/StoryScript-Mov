@@ -70,7 +70,7 @@ export async function generationsRefAttempt(endpoint: ImageEndpoint, req: ImageR
   let res: Response;
   let text: string;
   try {
-    res = await fetch(url, {
+    res = await opts.fetch(url, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${endpoint.api_key}`,
@@ -109,6 +109,6 @@ export async function generationsRefAttempt(endpoint: ImageEndpoint, req: ImageR
     const pe = providerError(parsed, '');
     throw new ImageCallError('bad_response', redactSecrets(`服务返回成功，但结果里没有图像（${pe.message}）`, secrets), { providerCode: pe.code });
   }
-  const image = await materialize(value, { timeoutMs: opts.timeoutMs, userAgent: opts.userAgent, secrets });
+  const image = await materialize(value, { timeoutMs: opts.timeoutMs, userAgent: opts.userAgent, secrets, fetch: opts.fetch });
   return { image, usage: flattenUsage((parsed as { usage?: unknown }).usage) };
 }

@@ -57,6 +57,8 @@ export class TeamRuntime {
       token: generateToken(),
       webDir: this.o.webDir,
       stateDir,
+      // BYOK per group: each group's own settings (in its state dir); the server's STORYSCRIPT_LLM_*/IMAGE_* stay unused
+      env: {},
       projectSession: session,
       hosted: { slug: team.slug, name: team.name, limits: config.limits },
     });

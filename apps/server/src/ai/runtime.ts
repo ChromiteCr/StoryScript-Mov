@@ -62,7 +62,8 @@ export function resolveAi(deps: AppDeps): AiClient {
   }
   const cfg = textClientConfig(deps.stateDir, deps.env);
   if (!cfg) {
-    throw new AppError('PROVIDER_NOT_CONFIGURED', '尚未配置文本模型：请在设置中填写 base_url、API key 和模型名（或设置 STORYSCRIPT_LLM_* 环境变量）', 409);
+    const orEnv = deps.hosted ? '' : '（或设置 STORYSCRIPT_LLM_* 环境变量）';
+    throw new AppError('PROVIDER_NOT_CONFIGURED', `尚未配置文本模型：请在设置中填写 base_url、API key 和模型名${orEnv}`, 409);
   }
   let cache = o.capabilityCache ?? fileCaches.get(deps);
   if (!cache) {
@@ -71,7 +72,7 @@ export function resolveAi(deps: AppDeps): AiClient {
   }
   return {
     cfg,
-    chat: o.chat ? o.chat(cfg) : new OpenAIChat(cfg),
+    chat: o.chat ? o.chat(cfg) : new OpenAIChat(cfg, { fetch: deps.fetch }),
     capabilityCache: cache,
     remote: true,
     sleep: o.sleep,

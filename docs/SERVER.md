@@ -13,7 +13,7 @@
 - 一台能长期运行的 Linux 服务器，装好 **Node.js ≥ 24.15**。服务器版不需要 ffmpeg。服务器上已有别的项目在用旧版 Node 时，把 Node 24 单独解压到本项目的目录里（见第 1 节），不要升级系统的 Node。
 - 一个子域名，例如 `story.example.com`，解析到这台服务器。服务器版不支持挂在子路径（如 `example.com/story/`）下。
 - HTTPS 证书。已经在跑 Nginx 或 Caddy 的服务器，沿用现有的证书方式即可。浏览器只有在 HTTPS 下才能记住本机素材文件夹，登录 cookie 也需要加密传输。
-- 一个 [Resend](https://resend.com) 账号，用来发验证码邮件（见第 3 节）。
+- 一个 [Resend](https://resend.com) 账号，用来发验证码邮件（见第 3 节）。模型不需要管理员准备：每个小组用自己的 key（见第 4 节）。
 - 服务器在中国大陆以外（例如韩国）时不需要 ICP 备案；在中国大陆并用域名对公网开放时需要备案。
 
 ## 1. 安装
@@ -75,22 +75,21 @@ ssm server init --data /var/lib/storyscript-mov \
 - 同一邮箱 1 分钟内只发 1 封、1 小时最多 5 封；同一访问者地址 1 小时最多 20 封；
 - 全站 24 小时最多 `emails_per_day` 封，默认 100。这正好是 Resend 免费档每天的额度：同一天注册的人很多时，要么分几天注册，要么升级 Resend 套餐并调高这个数。
 
-## 4. 配置模型（可选）
+## 4. 模型：每个小组用自己的（BYOK）
 
-模型 key 只放在服务器上，组员在网页里看不到、也不能修改。和 Resend 的 key 写进同一个环境文件 `/etc/storyscript-mov/env`（属主 root、组 storyscript，权限 640）：
+服务器版不替小组付模型费用。每个小组在网页的「设置 → 模型」里填自己的 base_url、模型名和 key（OpenAI 协议，例如 DeepSeek、通义、OpenAI），组员共用这一套：
+
+- key 存在服务器上这个小组的状态目录里（`teams/<代号>/state/credentials.json`，权限 600），只用来转发本组的请求；网页上只显示后 4 位，其他小组看不到。管理员能在服务器上读到这些文件，请告诉同学们用单独建的、设了余额上限的 key。
+- 服务器只连接公网上的 https 地址：base_url 指向本机、内网或云服务器元数据地址时，保存会被拒绝；连接时还会再检查一次每个解析到的地址和每次跳转，防止有人借服务器访问内部服务。
+- 环境文件里的 `STORYSCRIPT_LLM_*`、`STORYSCRIPT_IMAGE_*` 在服务器版里不使用（可以留着，不影响）。
+
+环境文件 `/etc/storyscript-mov/env`（属主 root、组 storyscript，权限 640）只需要 Resend 的 key：
 
 ```ini
 STORYSCRIPT_RESEND_API_KEY=re_…
-STORYSCRIPT_LLM_BASE_URL=https://api.deepseek.com/v1
-STORYSCRIPT_LLM_API_KEY=你的 key
-STORYSCRIPT_LLM_MODEL=deepseek-chat
-# 图像重绘（实验，可不填）
-# STORYSCRIPT_IMAGE_BASE_URL=
-# STORYSCRIPT_IMAGE_API_KEY=
-# STORYSCRIPT_IMAGE_MODEL=
 ```
 
-所有小组共用这组 key。每个小组在 24 小时内的调用有上限，默认文本模型 200 次、图像模型 20 次：
+每个小组在 24 小时内的调用仍有上限（防止意外花费和服务器过载），默认文本模型 200 次、图像模型 20 次：
 
 ```json
 "limits": {
@@ -102,7 +101,7 @@ STORYSCRIPT_LLM_MODEL=deepseek-chat
 }
 ```
 
-超出后，小组会看到「已达到调用次数上限」，24 小时后恢复。也建议在模型服务商的后台给这个 key 设置余额上限。不配置模型时，拆镜和实体抽取可以手工完成。`max_teams` 是全站最多的小组数，`max_team_members` 是每组最多人数。
+超出后，小组会看到「已达到调用次数上限」，24 小时后恢复。没有配置模型时，拆镜和实体抽取可以手工完成。`max_teams` 是全站最多的小组数，`max_team_members` 是每组最多人数。
 
 ## 5. 用 systemd 常驻
 
@@ -248,5 +247,5 @@ sudo systemctl restart storyscript-mov
 | 访问 | 本机浏览器，终端打印的一次性链接 | 公网域名，邮箱账号（邀请码注册） |
 | 项目 | 打开任意文件夹作为项目（数据在其中的 .storyscript-mov） | 每个小组固定一个项目，学生自己建组、入组 |
 | 素材 | 登记本机目录，ffprobe 扫描，本机播放 | 在浏览器里打开本机项目文件夹，只上传素材信息和海报小图，本机播放 |
-| 模型 key | 在设置页填写 | 管理员用环境变量配置 |
+| 模型 key | 在设置页填写，存在本机 | 每个小组在设置页填自己的，存在服务器上本组的目录里，服务器只转发（只连公网 https） |
 | 文件夹选择框、最近项目 | 有 | 没有 |

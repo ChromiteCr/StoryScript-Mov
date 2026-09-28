@@ -13,13 +13,14 @@ export class OpenAIChat implements ChatPort {
   private readonly client: OpenAI;
   private readonly apiKey: string;
 
-  constructor(cfg: TextClientConfig, opts: { timeoutMs?: number } = {}) {
+  constructor(cfg: TextClientConfig, opts: { timeoutMs?: number; fetch?: typeof fetch } = {}) {
     this.apiKey = cfg.api_key;
     this.client = new OpenAI({
       baseURL: cfg.base_url,
       apiKey: cfg.api_key,
       maxRetries: 0,
       timeout: opts.timeoutMs ?? LLM_TIMEOUT_MS,
+      ...(opts.fetch ? { fetch: opts.fetch } : {}),
     });
   }
 

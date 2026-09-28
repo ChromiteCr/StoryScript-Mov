@@ -310,6 +310,7 @@ async function runRedraw(deps: AppDeps, db: DbPort, projectDir: string, endpoint
     signal: ctx.signal,
     onAttempt: ctx.markSent,
     userAgent: USER_AGENT,
+    fetch: deps.fetch,
     attempt: o.attempt,
   });
   if (res.outcome === 'cancelled') return { status: 'failed', attempts: res.attempts, usage: null, error: { code: 'CANCELLED', message: '已取消' } };

@@ -6,7 +6,7 @@
  * The server runs in its own process group so npx → tsx → node stop together.
  */
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
-import { mkdir, mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdir, mkdtemp, readdir, readFile, rm } from 'node:fs/promises';
 import { createServer } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
@@ -192,16 +192,19 @@ export async function importAndBreakdownBookshop(page: Page, base: string): Prom
 }
 
 // ---------------------------------------------------------------------------
-// hosted server (S1a+): a throwaway data dir, teams created through the CLI
+// hosted server (S2a): a throwaway data dir; verification emails land in an
+// outbox folder, so tests read the codes from there
 // ---------------------------------------------------------------------------
+
+export const HOSTED_INVITE = 'e2e-Invite';
 
 export interface HostedApp {
   base: string;
-  /** team slug → one-time team code printed by `server team add` */
-  codes: Record<string, string>;
   tmp: string;
   log(): string;
   stop(): Promise<void>;
+  /** the newest 6-digit code mailed to this address (waits for it) */
+  codeFor(email: string): Promise<string>;
 }
 
 function cli(args: string[]): string {
@@ -210,22 +213,29 @@ function cli(args: string[]): string {
   return r.stdout;
 }
 
-export async function startHostedApp(teams: { slug: string; name: string }[]): Promise<HostedApp> {
+async function newestCode(outbox: string, email: string): Promise<string> {
+  for (let i = 0; i < 100; i++) {
+    const files = (await readdir(outbox).catch(() => [] as string[])).sort().reverse();
+    for (const f of files) {
+      const m = JSON.parse(await readFile(join(outbox, f), 'utf8')) as { to: string; text: string };
+      const code = m.to === email ? /验证码：(\d{6})/.exec(m.text)?.[1] : undefined;
+      if (code) return code;
+    }
+    await sleep(100);
+  }
+  throw new Error(`no code mailed to ${email}`);
+}
+
+export async function startHostedApp(): Promise<HostedApp> {
   const tmp = await mkdtemp(join(tmpdir(), 'storyscript-hosted-'));
   const data = join(tmp, 'data');
+  const outbox = join(tmp, 'outbox');
   const port = await freePort();
   const base = `http://127.0.0.1:${port}`;
-  cli(['server', 'init', '--data', data, '--origin', base, '--port', String(port), '--name', '测试短片节']);
-  const codes: Record<string, string> = {};
-  for (const t of teams) {
-    const out = cli(['server', 'team', 'add', t.slug, '--name', t.name, '--data', data]);
-    const code = /口令：(\S+)/.exec(out)?.[1];
-    if (!code) throw new Error(`no team code in:\n${out}`);
-    codes[t.slug] = code;
-  }
+  cli(['server', 'init', '--data', data, '--origin', base, '--port', String(port), '--name', '测试短片节', '--invite', HOSTED_INVITE, '--mail-from', 'noreply@e2e.test']);
   const server = spawn('npx', ['tsx', 'apps/server/src/cli.ts', 'server', 'start', '--data', data], {
     cwd: ROOT,
-    env: withoutKeys(process.env),
+    env: { ...withoutKeys(process.env), STORYSCRIPT_MAIL_OUTBOX: outbox },
     stdio: ['ignore', 'pipe', 'pipe'],
     detached: true,
   });
@@ -246,9 +256,20 @@ export async function startHostedApp(teams: { slug: string; name: string }[]): P
   for (let i = 0; i < 300; i++) {
     if (server.exitCode !== null) break;
     const ok = await fetch(`${base}/api/v1/site`).then((r) => r.ok).catch(() => false);
-    if (ok) return { base, codes, tmp, log: () => log, stop };
+    if (ok) return { base, tmp, log: () => log, stop, codeFor: (email) => newestCode(outbox, email) };
     await sleep(100);
   }
   await stop();
   throw new Error(`hosted server did not start:\n${log}`);
+}
+
+/** Register through the API in the page's browser context (so it carries the cookie) and optionally start a group. */
+export async function signUpHosted(page: Page, app: HostedApp, email: string, name: string, group?: string): Promise<void> {
+  const post = async (path: string, data: unknown) => {
+    const r = await page.request.post(`${app.base}${path}`, { data, headers: { origin: app.base } });
+    if (!r.ok()) throw new Error(`${path}: HTTP ${r.status()} ${await r.text()}`);
+  };
+  await post('/api/v1/account/register/code', { email, invite: HOSTED_INVITE });
+  await post('/api/v1/account/register', { email, code: await app.codeFor(email), name, password: 'password-1' });
+  if (group) await post('/api/v1/group', { name: group });
 }

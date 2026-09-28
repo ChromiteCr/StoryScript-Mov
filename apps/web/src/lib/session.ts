@@ -10,6 +10,8 @@ import { ApiClientError, isUnauthorized, type ApiClient } from './api.ts';
 export type BootResult =
   | { kind: 'ready'; health: HealthInfo }
   | { kind: 'expired' }
+  /** hosted server: signed in, not in a group yet */
+  | { kind: 'no-team' }
   | { kind: 'unreachable'; error: ApiClientError };
 
 export interface BootDeps {
@@ -63,6 +65,7 @@ export async function bootstrapSession(deps: BootDeps): Promise<BootResult> {
     return { kind: 'ready', health };
   } catch (e) {
     if (isUnauthorized(e)) return { kind: 'expired' };
+    if (e instanceof ApiClientError && e.code === 'NO_TEAM') return { kind: 'no-team' };
     return { kind: 'unreachable', error: asClientError(e) };
   }
 }
@@ -92,4 +95,30 @@ export function isSessionExpired(): boolean {
 export function subscribeSessionExpired(listener: () => void): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
+}
+
+// ---- hosted server: "no longer in a group" (removed by the leader, group disbanded) ----
+
+let noTeam = false;
+const noTeamListeners = new Set<() => void>();
+
+export function markNoTeam(): void {
+  if (noTeam) return;
+  noTeam = true;
+  for (const l of noTeamListeners) l();
+}
+
+export function resetNoTeam(): void {
+  if (!noTeam) return;
+  noTeam = false;
+  for (const l of noTeamListeners) l();
+}
+
+export function isNoTeam(): boolean {
+  return noTeam;
+}
+
+export function subscribeNoTeam(listener: () => void): () => void {
+  noTeamListeners.add(listener);
+  return () => noTeamListeners.delete(listener);
 }

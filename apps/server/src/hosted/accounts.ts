@@ -145,15 +145,25 @@ export class Accounts {
   }
 
   async sendLoginCode(email: string, ip: string): Promise<void> {
-    if (!this.d.site.accountByEmail(email)) throw new AppError('NOT_FOUND', '这个邮箱还没有注册。', 404);
+    // asking about unknown addresses counts like a wrong password, so the list of accounts cannot be harvested
+    const wait = this.byAddress.retryAfter(ip);
+    if (wait > 0) throw tooMany(wait, `尝试次数太多，请 ${minutes(wait)} 分钟后再试。`);
+    if (!this.d.site.accountByEmail(email)) {
+      this.byAddress.fail(ip);
+      throw new AppError('NOT_FOUND', '这个邮箱还没有注册。', 404);
+    }
     await this.sendCode(email, 'login', ip);
   }
 
   /** Emailed code; with `newPassword` the password is replaced and other browsers are signed out. */
   async codeLogin(input: { email: string; code: string; new_password?: string | undefined }, ip: string): Promise<SignedIn> {
     const { site } = this.d;
+    this.assertNotLocked(input.email, ip);
     const account = site.accountByEmail(input.email);
-    if (!account) throw new AppError('NOT_FOUND', '这个邮箱还没有注册。', 404);
+    if (!account) {
+      this.byAddress.fail(ip);
+      throw new AppError('NOT_FOUND', '这个邮箱还没有注册。', 404);
+    }
     this.checkCode(input.email, 'login', input.code, ip);
     this.byAddress.succeed(ip);
     this.byEmail.succeed(input.email);

@@ -85,7 +85,7 @@ ${bar('4px 4px 0 0')}
 <tr><td style="background:${FRAME};padding:0;">
 <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0"><tr>
 <td width="20%" style="border-right:1px dashed ${GUIDE};font-size:0;line-height:0;">&nbsp;</td>
-<td align="center" style="padding:40px 0;font-family:${MONO};font-size:34px;line-height:1;font-weight:600;letter-spacing:10px;color:${INK};">${content}</td>
+<td align="center" style="padding:40px 0 40px 8px;font-family:${MONO};font-size:30px;line-height:1;font-weight:600;letter-spacing:8px;color:${INK};">${content}</td>
 <td width="20%" style="border-left:1px dashed ${GUIDE};font-size:0;line-height:0;">&nbsp;</td>
 </tr></table>
 </td></tr>

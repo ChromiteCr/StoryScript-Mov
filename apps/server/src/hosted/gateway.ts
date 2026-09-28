@@ -48,18 +48,19 @@ const NOT_SIGNED_IN = '请先登录。';
 
 /**
  * The address to rate-limit by. Behind a reverse proxy on the same machine the
- * peer is loopback: X-Real-IP, else the last X-Forwarded-For hop (the one the
- * proxy appended), identifies the browser.
+ * peer is loopback: the last X-Forwarded-For hop is the one the proxy itself
+ * appended (Caddy and the documented Nginx setup both add it), so a browser
+ * cannot choose it. X-Real-IP counts only when no proxy hop is present, since
+ * a proxy that does not overwrite it passes the browser's own value through.
  */
 export function clientAddress(c: Context): string {
   const incoming = (c.env as { incoming?: IncomingMessage } | undefined)?.incoming;
   const peer = incoming?.socket?.remoteAddress ?? 'unknown';
   const loopback = peer === '127.0.0.1' || peer === '::1' || peer === '::ffff:127.0.0.1';
   if (!loopback) return peer;
-  const real = c.req.header('x-real-ip')?.trim();
-  if (real) return real;
   const hops = (c.req.header('x-forwarded-for') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  return hops.at(-1) ?? peer;
+  if (hops.length > 0) return hops.at(-1)!;
+  return c.req.header('x-real-ip')?.trim() || peer;
 }
 
 export function createGateway(o: GatewayOptions): Hono {

@@ -2,14 +2,15 @@ import { cpSync, existsSync, mkdirSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { expect, test } from '@playwright/test';
-import { ROOT, startHostedApp, type HostedApp } from './support.ts';
+import { ROOT, signUpHosted, startHostedApp, type HostedApp } from './support.ts';
 
 /**
- * Hosted server, footage on the member's computer (S1d): a team signs in with
- * its invite link, opens a project folder (A-roll/B-roll subfolders) in the
+ * Hosted server, footage on the member's computer (S1d): a group member
+ * opens a project folder (A-roll/B-roll subfolders) in the
  * browser, and the library fills from facts the browser read locally — no
  * video is uploaded. The clip plays from a blob: URL; another team sees none
- * of it. The file-list path (<input webkitdirectory>) is read-only, so the
+ * of it. (Accounts are made through the API here; hosted-accounts covers
+ * the sign-up screens.) The file-list path (<input webkitdirectory>) is read-only, so the
  * folder gets no .storyscript-mov records.
  */
 
@@ -18,10 +19,7 @@ let app: HostedApp;
 let folder = '';
 
 test.beforeAll(async () => {
-  app = await startHostedApp([
-    { slug: 'team-1', name: '一组' },
-    { slug: 'team-2', name: '二组' },
-  ]);
+  app = await startHostedApp();
   const parent = mkdtempSync(join(tmpdir(), 'ssm-folder-'));
   folder = join(parent, '我的短片');
   for (const [sub, files] of [
@@ -43,8 +41,9 @@ test('a team opens its project folder: facts and posters only, local playback, o
   const pageErrors: string[] = [];
   page.on('pageerror', (e) => pageErrors.push(e.message));
 
-  await page.goto(`${app.base}/#t=${encodeURIComponent(app.codes['team-1']!)}`);
-  await expect(page.getByRole('banner').getByText('一组', { exact: true }).first()).toBeVisible();
+  await signUpHosted(page, app, 'lin@school.test', '小林', '一组');
+  await page.goto(app.base);
+  await expect(page.getByRole('banner').getByText('一组：小林')).toBeVisible();
   await page.goto(`${app.base}/#/media`);
   await expect(page.getByRole('heading', { name: '素材', level: 1 })).toBeVisible();
   await expect(page.getByText('打开项目文件夹后，素材会出现在这里。')).toBeVisible();
@@ -82,8 +81,9 @@ test('a team opens its project folder: facts and posters only, local playback, o
   // another team: nothing of this
   const other = await browser.newContext();
   const p2 = await other.newPage();
-  await p2.goto(`${app.base}/#t=${encodeURIComponent(app.codes['team-2']!)}`);
-  await expect(p2.getByRole('banner').getByText('二组', { exact: true }).first()).toBeVisible();
+  await signUpHosted(p2, app, 'zhou@school.test', '小周', '二组');
+  await p2.goto(app.base);
+  await expect(p2.getByRole('banner').getByText('二组：小周')).toBeVisible();
   await p2.goto(`${app.base}/#/media`);
   await expect(p2.getByText('打开项目文件夹后，素材会出现在这里。')).toBeVisible();
   await expect(p2.locator('button[data-asset]')).toHaveCount(0);

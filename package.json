@@ -1,7 +1,7 @@
 {
   "name": "storyscript-mov-monorepo",
   "private": true,
-  "version": "0.2.0",
+  "version": "0.3.0",
   "type": "module",
   "workspaces": [
     "packages/contracts",
@@ -23,6 +23,7 @@
     "e2e": "playwright test",
     "licenses": "node scripts/check-licenses.mjs",
     "readme:media": "tsx scripts/readme-media.ts",
+    "mail:preview": "tsx scripts/mail-preview.ts",
     "ui:shots": "tsx scripts/ui-shots.ts",
     "eval:breakdown": "tsx scripts/eval-breakdown.ts",
     "gen:media": "tsx scripts/gen-media.ts",

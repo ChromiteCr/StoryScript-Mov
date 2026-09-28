@@ -4,19 +4,25 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { api } from './lib/api.ts';
 import {
   bootstrapSession,
+  isNoTeam,
   isSessionExpired,
   readTokenFromHash,
+  resetNoTeam,
   resetSessionExpired,
+  subscribeNoTeam,
   subscribeSessionExpired,
   type BootResult,
 } from './lib/session.ts';
+import { takeJoinFromLocation } from './lib/join.ts';
 import { keys, useCloseProject, useCurrentProject, useHealth } from './lib/queries.ts';
 import { useView } from './lib/route.ts';
 import { isStage, type StageId } from './lib/stages.ts';
 import { resetSaveState } from './lib/saveStatus.ts';
 import { DemoBanner } from './components/DemoBanner.tsx';
 import { ErrorNotice } from './components/ErrorNotice.tsx';
-import { ConnectingScreen, SessionExpiredScreen, SignInScreen, UnreachableScreen } from './components/FullScreenNotice.tsx';
+import { AccountMenu } from './components/AccountMenu.tsx';
+import { AuthScreen, GroupScreen } from './components/AccountScreens.tsx';
+import { ConnectingScreen, SessionExpiredScreen, UnreachableScreen } from './components/FullScreenNotice.tsx';
 import { PageBar } from './components/PageBar.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
@@ -49,6 +55,18 @@ export function App() {
   const [attempt, setAttempt] = useState(0);
   const [state, setState] = useState<BootState>({ kind: 'checking' });
   const expired = useSyncExternalStore(subscribeSessionExpired, isSessionExpired);
+  const noTeam = useSyncExternalStore(subscribeNoTeam, isNoTeam);
+  // hosted server: a group join link (#join=…) is kept until the person is signed in
+  const [joinLinks, setJoinLinks] = useState(() => (takeJoinFromLocation(window.location, window.history) ? 1 : 0));
+
+  /** Start over after signing in or changing group: the project behind every query changes. */
+  const restart = () => {
+    qc.clear();
+    resetSessionExpired();
+    resetNoTeam();
+    setState({ kind: 'checking' });
+    setAttempt((a) => a + 1);
+  };
 
   useEffect(() => {
     let live = true;
@@ -66,9 +84,14 @@ export function App() {
     };
   }, [attempt, qc]);
 
-  // A new terminal link pasted into this tab only changes the hash (no reload).
+  // A new terminal link (or group join link) pasted into this tab only changes the hash (no reload).
   useEffect(() => {
     const onHash = () => {
+      if (takeJoinFromLocation(window.location, window.history)) {
+        setJoinLinks((n) => n + 1);
+        window.dispatchEvent(new Event('ssm-join-link'));
+        return;
+      }
       if (readTokenFromHash(window.location.hash) === null) return;
       resetSessionExpired();
       setState({ kind: 'checking' });
@@ -78,18 +101,9 @@ export function App() {
     return () => window.removeEventListener('hashchange', onHash);
   }, []);
 
-  if (expired || state.kind === 'expired') {
-    return (
-      <SignedOut
-        onSignedIn={() => {
-          resetSessionExpired();
-          setState({ kind: 'checking' });
-          setAttempt((a) => a + 1);
-        }}
-      />
-    );
-  }
+  if (expired || state.kind === 'expired') return <SignedOut key={joinLinks} onSignedIn={restart} />;
   if (state.kind === 'checking') return <ConnectingScreen />;
+  if (state.kind === 'no-team' || noTeam) return <GroupScreen key={joinLinks} onJoined={restart} />;
   if (state.kind === 'unreachable') {
     return (
       <UnreachableScreen
@@ -101,18 +115,18 @@ export function App() {
       />
     );
   }
-  return <Workbench />;
+  return <Workbench onGroupChanged={restart} />;
 }
 
-/** No session: a hosted server asks for the team code; the local app points at the terminal link. */
+/** No session: a hosted server offers sign-in and registration; the local app points at the terminal link. */
 function SignedOut({ onSignedIn }: { onSignedIn: () => void }) {
   const site = useQuery({ queryKey: ['site'], queryFn: ({ signal }) => api.call('site', undefined, { signal }), retry: false });
   if (site.isPending) return <ConnectingScreen />;
-  if (site.data?.hosted) return <SignInScreen siteName={site.data.name} onSignedIn={onSignedIn} />;
+  if (site.data?.hosted) return <AuthScreen siteName={site.data.name} onSignedIn={onSignedIn} />;
   return <SessionExpiredScreen />;
 }
 
-function Workbench() {
+function Workbench({ onGroupChanged }: { onGroupChanged: () => void }) {
   const health = useHealth();
   const project = useCurrentProject();
   const close = useCloseProject();
@@ -159,7 +173,7 @@ function Workbench() {
       <TitleBar
         project={current}
         view={view}
-        team={health.data?.hosted ? (health.data.team_name ?? '') : null}
+        account={health.data?.hosted ? <AccountMenu onGroupChanged={onGroupChanged} /> : null}
         switching={close.isPending}
         onSwitchProject={() =>
           close.mutate(undefined, {

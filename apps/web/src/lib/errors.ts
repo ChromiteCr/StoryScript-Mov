@@ -21,8 +21,8 @@ export type ErrorContext =
   | 'script-import'
   /** set log and media library (takes, roots, assets, links, coverage) */
   | 'media'
-  /** hosted server: signing in with a team code */
-  | 'sign-in';
+  /** hosted server: registering, signing in, groups (the server's message says exactly what went wrong) */
+  | 'account';
 
 type Copy = { title: string; detail: string | null };
 
@@ -59,7 +59,10 @@ const COPY: Record<ClientErrorCode, Copy> = {
   },
   UNAUTHORIZED: { title: '会话已失效', detail: '请使用终端打印的链接，或运行 storyscript-mov open' },
   FORBIDDEN: { title: '请求被本地服务拒绝', detail: '来源校验没有通过。请用终端打印的链接重新打开页面。' },
-  TOO_MANY_ATTEMPTS: { title: '尝试次数太多', detail: '队伍口令连续输错，这台电脑暂时不能登录。过一会儿再试，或向管理员要邀请链接。' },
+  TOO_MANY_ATTEMPTS: { title: '尝试次数太多', detail: '过一会儿再试。' },
+  ACCOUNT_EXISTS: { title: '这个邮箱已经注册过了', detail: '直接登录；忘记密码可以用验证码登录。' },
+  NO_TEAM: { title: '还没有加入小组', detail: '创建一个小组，或用组长发的链接加入。' },
+  MAIL_FAILED: { title: '邮件没有发出去', detail: '过一会儿再试；一直不行请联系管理员。' },
   INTERNAL: { title: '本地服务出错', detail: '终端里有详细日志。' },
   NETWORK_ERROR: { title: '连接不上本地服务', detail: '确认运行 storyscript-mov 的终端窗口还开着，然后重试。' },
   BAD_RESPONSE: { title: '本地服务返回了无法识别的数据', detail: '页面与服务的版本可能不一致。刷新页面；仍然出现就重启 storyscript-mov。' },
@@ -90,10 +93,6 @@ const CONTEXT_COPY: Partial<Record<ErrorContext, Partial<Record<ClientErrorCode,
   },
   'ai-request': {
     PROVIDER_NOT_CONFIGURED: { title: '还没有配置文本模型', detail: '在"设置 → 模型"里填写 base_url、模型和 key。手工流程照常可用。' },
-  },
-  'sign-in': {
-    UNAUTHORIZED: { title: '队伍口令不对', detail: '检查后重新输入，或使用管理员发的邀请链接。' },
-    VALIDATION_ERROR: { title: '队伍口令不完整', detail: '口令是 16 位字母和数字，例如 ABCD-EFGH-JKMN-PQRS。' },
   },
   'script-import': {
     VALIDATION_ERROR: { title: '剧本内容无法导入', detail: null },
@@ -143,6 +142,12 @@ export function describeError(error: unknown, context: ErrorContext = 'general')
       detail: '可以直接把完整路径粘贴到输入框里。',
       technical: technicalLine(error),
     };
+  }
+
+  // Account and group answers from the hosted server are written for the
+  // person at the form ("邀请码不对", "验证码已过期"…): show them as they are.
+  if (context === 'account' && error.status > 0 && error.message && error.code !== 'INTERNAL') {
+    return { title: error.message, detail: null, technical: null };
   }
 
   // The server answers "not in this state" with VALIDATION_ERROR + 409 (draft

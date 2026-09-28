@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S2-blue)
+![version](https://img.shields.io/badge/version-S2a-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -83,17 +83,17 @@ npm start
 
 > 如果坚持用 Homebrew 的 `node@24`：它是 keg-only 包，默认不会进入 PATH。需要按 `brew info node@24` 的提示把它加进 PATH，否则 `npx` 仍会用旧版 Node。
 
-## 服务器版（多个队伍共用一个网站）
+## 服务器版（多个小组共用一个网站）
 
-课堂、社团或短片节可以把它部署到一台服务器上：每个队伍用口令或邀请链接登录，各自有一个项目；剧本、镜头表、分镜、计划和场记存在服务器上，视频素材不上传。
+课堂、社团或短片节可以把它部署到一台服务器上：同学用邮箱注册（需要活动的邀请码和邮箱验证码），自己建小组或用组长发的链接加入，每个小组共用一个项目；剧本、镜头表、分镜、计划和场记存在服务器上，视频素材不上传。
 
 ```bash
-storyscript-mov server init --data /srv/storyscript --origin https://story.example.com
-storyscript-mov server team add team-1 --name "一组" --data /srv/storyscript
-storyscript-mov server start --data /srv/storyscript
+storyscript-mov server init --data /var/lib/storyscript-mov --origin https://story.example.com \
+  --invite 邀请码 --mail-from noreply@story.example.com
+STORYSCRIPT_RESEND_API_KEY=re_… storyscript-mov server start --data /var/lib/storyscript-mov
 ```
 
-需要 HTTPS 和反向代理（Nginx 或 Caddy）。完整步骤见 [docs/SERVER.md](docs/SERVER.md)。队员在素材页「打开项目文件夹…」，浏览器在本机读取素材，只上传素材信息和海报小图。单机版的用法不变。
+验证码邮件通过 [Resend](https://resend.com) 发送。需要 HTTPS 和反向代理（Caddy 或 Nginx）。完整步骤见 [docs/SERVER.md](docs/SERVER.md)。组员在素材页「打开项目文件夹…」，浏览器在本机读取素材，只上传素材信息和海报小图。单机版的用法不变。
 
 ## 配置模型（BYOK）
 
@@ -122,14 +122,14 @@ API key 只保存在本机的 `~/.config/storyscript-mov/credentials.json`（权
 | 排期、独立校验、批准闸门、拍摄单、打板卡、场记模板 | | 转录、打板 OCR、剪辑软件交换（OTIO） |
 | 场记、素材只读导入、候选审核、覆盖状态与漏拍清单 | | 3D 取景助手、参考图库 |
 | 分镜 PDF、CSV（防公式注入、整数时间码列）、项目 JSON 导出 | | 桌面安装包、Windows/Linux 验证 |
-| 服务器版：多队伍口令登录、每队一个项目、在浏览器里打开本机项目文件夹（视频不上传）、每队用量上限（[部署指南](docs/SERVER.md)） | | 服务器版在浏览器里读取 MXF/MTS 等格式 |
+| 服务器版：邮箱注册（邀请码 + 验证码）、学生自建小组、每组一个项目、在浏览器里打开本机项目文件夹（视频不上传）、每组用量上限（[部署指南](docs/SERVER.md)） | | 服务器版在浏览器里读取 MXF/MTS 等格式 |
 
 平台：只在 macOS Apple Silicon 加 Chrome 上验证过；Safari 尽力支持；Linux 预计可用但未验证；Windows 未验证。
 
 ## 隐私与安全
 
 - 服务只监听 `127.0.0.1`。令牌换成 HttpOnly cookie，并校验 Host 与 Origin，防止其他网页读取你的本地数据。
-- 视频只读：项目的数据和派生文件（海报帧等）只写进项目文件夹里的 `.storyscript-mov`，视频文件本身和外部素材目录不会多出或改动任何文件。服务器版在队员电脑上只读取视频，记录同样只写 `.storyscript-mov`。
+- 视频只读：项目的数据和派生文件（海报帧等）只写进项目文件夹里的 `.storyscript-mov`，视频文件本身和外部素材目录不会多出或改动任何文件。服务器版在组员电脑上只读取视频，记录同样只写 `.storyscript-mov`。
 - 发给模型的内容只有你点击时选中的剧本段落，或分镜的控制图与镜头描述，不会发送原片。
 
 威胁模型与漏洞报告方式见 [SECURITY.md](SECURITY.md)。
@@ -163,6 +163,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S2a | 2026-09-28 | 服务器版改为邮箱账号（npm 0.3.0）：注册要填活动邀请码和邮箱里的 6 位验证码（经 Resend 发送，注册和登录两封邮件单独设计，验证码放在 2.39 画幅框里），登录用密码或邮箱验证码（可顺便设新密码）；学生自己建小组、用链接或组码加入，组长管理组员、换组码，只剩一人时可解散；账号、小组、会话存在 site.db（密码 scrypt，会话和验证码只存哈希），发信、输错和查询都按地址与邮箱限速，全站每天邮件上限默认 100 封；新的管理命令 invite set、user list/remove、team list/remove、mail test；取消队伍口令登录；npm run mail:preview 预览邮件；部署指南按实际部署重写 | feat |
 | S2 | 2026-09-28 | 服务器版与项目文件夹（npm 0.2.0）：一台服务器给多个队伍用，口令或邀请链接登录，每队一个项目、互相隔离、有调用上限；队员在浏览器里打开本机项目文件夹，视频不上传，只传素材信息和海报小图，本机直接播放；单机版和服务器版都以「打开项目文件夹」为中心，项目数据在 .storyscript-mov；部署指南见 docs/SERVER.md。单机版 npx 用法不变 | milestone |
 | S1e | 2026-09-28 | 单机版像 VS Code 一样打开项目文件夹：首页「打开文件夹…」，还不是项目的文件夹可以直接在那里新建项目；项目数据改存到文件夹里的 .storyscript-mov，素材放在 A-roll、B-roll 等子文件夹，项目文件夹本身就是素材目录，打开项目时自动增量扫描，整个文件夹移动后素材仍然在线；旧版本的项目目录照常打开；外部存储卡仍可登记为「外部素材目录」；视频只读规则改为「只写 .storyscript-mov」 | feat |
 | S1d | 2026-09-28 | 服务器版在浏览器里打开本机项目文件夹：像 VS Code 打开文件夹一样选择放素材的文件夹（A-roll、B-roll 等子文件夹一起列出），浏览器在本机读取 MP4/MOV 信息、截海报、后台算校验值，只上传信息和海报小图；Chrome/Edge 记住最近打开的文件夹，并在文件夹里的 .storyscript-mov 保存记录（队友拿到拷贝可以直接用，不用重新计算）；Safari/Firefox 只读打开；检查器直接播放本机文件；素材页左栏按子文件夹筛选 | feat |

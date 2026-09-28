@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S2-blue)
+![version](https://img.shields.io/badge/version-S2a-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -57,7 +57,7 @@ npm start
 
 ## Server mode (several teams, one site)
 
-For a class, club or short-film festival you can host it on a server: each team signs in with a team code or invite link and gets its own project. Scripts, shots, boards, plans and camera logs live on the server; footage is never uploaded. See [docs/SERVER.md](docs/SERVER.md) (Chinese). Each member opens their project folder (e.g. A-roll/B-roll subfolders) in the browser: facts and small posters are read locally and sent, videos stay on their computer and play from there. The local single-user app is unchanged.
+For a class, club or short-film festival you can host it on a server: people register with an email address (the event's invite code plus an emailed code, sent through Resend), then start a group or join one from its link; each group shares one project. Scripts, shots, boards, plans and camera logs live on the server; footage is never uploaded. See [docs/SERVER.md](docs/SERVER.md) (Chinese). Each group member opens their project folder (e.g. A-roll/B-roll subfolders) in the browser: facts and small posters are read locally and sent, videos stay on their computer and play from there. The local single-user app is unchanged.
 
 ## Models (bring your own key)
 

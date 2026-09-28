@@ -4,7 +4,7 @@ import { api, isApiClientError, isUnauthorized, type InputOf } from './api.ts';
 import { describeError } from './errors.ts';
 import { isTerminalJob, resetTrackedJobs } from './jobs.ts';
 import { markSaved, markSaveFailed, markSaving } from './saveStatus.ts';
-import { markSessionExpired } from './session.ts';
+import { markNoTeam, markSessionExpired } from './session.ts';
 import { mergeShots, reorderLocally } from './shots.ts';
 import { navigate } from './route.ts';
 
@@ -36,6 +36,7 @@ function dropProjectData(qc: QueryClient): void {
 
 function onAnyError(error: unknown): void {
   if (isUnauthorized(error)) markSessionExpired();
+  else if (isApiClientError(error) && error.code === 'NO_TEAM') markNoTeam();
 }
 
 export function createQueryClient(): QueryClient {

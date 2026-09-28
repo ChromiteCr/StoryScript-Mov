@@ -59,10 +59,14 @@ interface Res {
   json: () => any;
 }
 
-function call(method: string, path: string, opts: { cookie?: string; body?: unknown; host?: string; origin?: string | null; ip?: string } = {}): Promise<Res> {
+function call(
+  method: string,
+  path: string,
+  opts: { cookie?: string; body?: unknown; host?: string; origin?: string | null; ip?: string; headers?: Record<string, string> } = {},
+): Promise<Res> {
   const port = server!.port;
   const host = opts.host ?? `127.0.0.1:${port}`;
-  const headers: Record<string, string> = { host };
+  const headers: Record<string, string> = { host, ...opts.headers };
   if (opts.ip) headers['x-forwarded-for'] = `10.0.0.1, ${opts.ip}`;
   if (opts.cookie) headers.cookie = opts.cookie;
   if (method !== 'GET' && opts.origin !== null) headers.origin = opts.origin ?? `http://127.0.0.1:${port}`;
@@ -231,6 +235,16 @@ describe('hosted server: signing in', () => {
     expect(blocked.status).toBe(429);
     clock += 15 * 60_000 + 1;
     expect((await login('correct-horse', '198.51.100.99')).status).toBe(204);
+  });
+
+  test('asking codes for unknown addresses is limited per address, and a spoofed X-Real-IP does not dodge it', async () => {
+    await start();
+    const ask = (i: number, headers: { ip?: string; realIp?: string }) =>
+      call('POST', '/api/v1/account/login/code', { body: { email: `nobody${i}@school.test` }, ip: headers.ip, headers: headers.realIp ? { 'x-real-ip': headers.realIp } : {} });
+    for (let i = 0; i < 10; i++) expect((await ask(i, { ip: '203.0.113.50', realIp: `192.0.2.${i}` })).status).toBe(404);
+    const blocked = await ask(99, { ip: '203.0.113.50', realIp: '192.0.2.200' });
+    expect(blocked.status).toBe(429);
+    expect((await ask(100, { ip: '203.0.113.51' })).status).toBe(404);
   });
 
   test('an emailed code signs in and can set a new password, which signs out other browsers', async () => {

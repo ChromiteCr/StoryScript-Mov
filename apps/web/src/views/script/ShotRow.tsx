@@ -1,8 +1,9 @@
 import { memo, useState, type DragEvent, type KeyboardEvent, type MouseEvent } from 'react';
 import type { Shot } from '@storyscript/contracts';
-import { Archive, ArrowDown, ArrowUp, Ban, GripVertical, History, Lock, LockOpen, Pencil, RotateCcw } from 'lucide-react';
+import { Archive, ArrowDown, ArrowUp, Ban, GripVertical, History, Lock, LockOpen, Pencil, RotateCcw, Sparkles } from 'lucide-react';
 import { isRevisionConflict } from '../../lib/errors.ts';
 import { ANGLE_LABEL, LENS_LABEL, MOVEMENT_LABEL, QUOTE_MATCH_LABEL, REQUIRED_STATUS_LABEL, SHOT_SIZE_LABEL } from '../../lib/labels.ts';
+import { polishAiReason } from '../../lib/polish.ts';
 import { useArchiveShot, useSetRequirement, useUpdateShot } from '../../lib/queries.ts';
 import { sourceState } from '../../lib/shots.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
@@ -172,12 +173,24 @@ export const ShotRow = memo(function ShotRow({
 
   const toggleLock = () => update.mutate({ id: shot.id, input: { expected_revision: shot.revision, locked: !shot.locked } });
 
+  // S3a: 选择 mode ticks rows; a locked shot is never polished
+  const ticked = ws.selected.has(shot.id);
+  const polishBlocked = shot.locked ? '镜头已锁定，先解锁再润色' : (polishAiReason(ws.ai) ?? undefined);
+
   const items: (MenuItem | 'separator')[] = [
     {
       key: 'edit',
       label: shot.locked ? '查看' : '编辑',
       icon: <Pencil className="size-3.5" />,
       onSelect: () => ws.selectShot(shot),
+    },
+    {
+      key: 'polish',
+      label: 'AI 润色…',
+      icon: <Sparkles className="size-3.5" />,
+      disabled: polishBlocked !== undefined,
+      hint: polishBlocked ?? '让模型按方式和风格重写这个镜头，结果先进草案',
+      onSelect: () => ws.openPolish([shot.id]),
     },
     {
       key: 'lock',
@@ -228,7 +241,7 @@ export const ShotRow = memo(function ShotRow({
 
   // Clicking the row body selects the shot; its own controls keep their meaning.
   const onRowClick = (e: MouseEvent<HTMLLIElement>) => {
-    if ((e.target as HTMLElement).closest('button, input, a, [role="menu"]')) return;
+    if ((e.target as HTMLElement).closest('button, input, label, a, [role="menu"]')) return;
     ws.selectShot(shot);
   };
 
@@ -247,6 +260,21 @@ export const ShotRow = memo(function ShotRow({
     >
       {selected ? <span aria-hidden className="absolute inset-y-1 left-0 w-0.5 rounded-full bg-accent" /> : null}
       <div className="flex flex-col items-center">
+        {ws.selecting ? (
+          <label
+            className={`inline-flex size-6 items-center justify-center rounded-control ${shot.locked ? 'cursor-not-allowed' : 'cursor-pointer hover:bg-graphite-700'}`}
+            title={shot.locked ? '镜头已锁定，不能润色' : undefined}
+          >
+            <input
+              type="checkbox"
+              checked={ticked}
+              disabled={shot.locked}
+              onChange={() => ws.toggleSelect(shot.id)}
+              aria-label={`选择镜头 ${shot.code}`}
+              className="size-3.5 accent-graphite-100 disabled:cursor-not-allowed disabled:opacity-40"
+            />
+          </label>
+        ) : null}
         {reorderable ? (
           <span
             draggable

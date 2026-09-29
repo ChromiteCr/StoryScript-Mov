@@ -4,6 +4,7 @@ import { Palette, ScrollText, Upload } from 'lucide-react';
 import { draftSceneId } from '../../lib/drafts.ts';
 import { SCRIPT_FORMAT_LABEL } from '../../lib/labels.ts';
 import { useAiGate, useDrafts, useEntities, useProviders, useScriptVersions, useShots } from '../../lib/queries.ts';
+import { pendingPolishDrafts, pruneSelection, selectableShotIds, setShots, toggleShot } from '../../lib/polish.ts';
 import { locateParagraph } from '../../lib/shots.ts';
 import { stageDef } from '../../lib/stages.ts';
 import { useMediaQuery, WIDE_QUERY } from '../../lib/useMediaQuery.ts';
@@ -15,6 +16,8 @@ import { DraftDiffDialog } from './DraftDiffDialog.tsx';
 import { EntitiesPanel } from './EntitiesPanel.tsx';
 import { EntityDraftDialog } from './EntityDraftDialog.tsx';
 import { InspectorBody, inspectorTitle } from './InspectorPanel.tsx';
+import { PolishDialog } from './PolishDialog.tsx';
+import { PolishDiffDialog } from './PolishDiffDialog.tsx';
 import { ReasonDialog } from './ReasonDialog.tsx';
 import { RevisionsDialog } from './RevisionsDialog.tsx';
 import { ScenesPanel } from './ScenesPanel.tsx';
@@ -75,6 +78,11 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const [revisionsOf, setRevisionsOf] = useState<Shot | null>(null);
   const [reason, setReason] = useState<ReasonRequest | null>(null);
   const [stylesOpen, setStylesOpen] = useState(false);
+  // S3a: selection mode of the shot table, the polish request and the polish draft under review
+  const [selecting, setSelectingState] = useState(false);
+  const [selected, setSelected] = useState<ReadonlySet<string>>(() => new Set());
+  const [polishIds, setPolishIds] = useState<string[] | null>(null);
+  const [polishDraftId, setPolishDraftId] = useState<string | null>(null);
   const [relinkOnly, setRelinkOnly] = useState(false);
   const seq = useRef(0);
   const dirty = useRef(false);
@@ -95,6 +103,23 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
 
   const showTab = useCallback((t: MainTab) => setTab(t), []);
   const openStyles = useCallback(() => setStylesOpen(true), []);
+
+  // Ticks: only live, unlocked shots; a shot that disappears or gets locked drops out.
+  const selectable = useMemo(() => selectableShotIds(liveShots), [liveShots]);
+  useEffect(() => {
+    if (!shots.data) return;
+    setSelected((cur) => pruneSelection(cur, selectable));
+  }, [selectable, shots.data]);
+  const setSelecting = useCallback((on: boolean) => {
+    setSelectingState(on);
+    if (!on) setSelected((cur) => (cur.size === 0 ? cur : new Set()));
+  }, []);
+  const toggleSelect = useCallback((id: string) => setSelected((cur) => toggleShot(cur, id, selectable)), [selectable]);
+  const selectMany = useCallback((ids: readonly string[], on: boolean) => setSelected((cur) => setShots(cur, ids, on, selectable)), [selectable]);
+  const clearSelection = useCallback(() => setSelected((cur) => (cur.size === 0 ? cur : new Set())), []);
+  const openPolish = useCallback((ids: string[]) => {
+    if (ids.length > 0) setPolishIds(ids);
+  }, []);
 
   const locate = useCallback<WorkspaceValue['locate']>(
     (anchor, scroll = 'center') => {
@@ -198,6 +223,8 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
     return m;
   }, [drafts.data]);
 
+  const polishDrafts = useMemo(() => pendingPolishDrafts(drafts.data ?? []), [drafts.data]);
+
   const providerHost = ai.demo ? '演示回放（不外发）' : hostOf(providers.data?.text?.base_url);
 
   const ws = useMemo<WorkspaceValue>(
@@ -225,6 +252,15 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       openEntityDraft: setEntityDraftId,
       openRevisions: setRevisionsOf,
       openStyles,
+      selecting,
+      setSelecting,
+      selected,
+      toggleSelect,
+      selectMany,
+      clearSelection,
+      openPolish,
+      openPolishDraft: setPolishDraftId,
+      pendingPolishDrafts: polishDrafts,
       askReason: setReason,
       notify: onNotice,
       showTab,
@@ -252,6 +288,14 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       onNotice,
       showTab,
       openStyles,
+      selecting,
+      setSelecting,
+      selected,
+      toggleSelect,
+      selectMany,
+      clearSelection,
+      openPolish,
+      polishDrafts,
     ],
   );
 
@@ -391,6 +435,8 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       {revisionsOf ? <RevisionsDialog shot={revisionsOf} onClose={() => setRevisionsOf(null)} /> : null}
       {reason ? <ReasonDialog request={reason} onClose={() => setReason(null)} /> : null}
       {stylesOpen ? <StyleLibraryDialog onClose={() => setStylesOpen(false)} /> : null}
+      {polishIds ? <PolishDialog shotIds={polishIds} onClose={() => setPolishIds(null)} /> : null}
+      {polishDraftId ? <PolishDiffDialog draftId={polishDraftId} onClose={() => setPolishDraftId(null)} /> : null}
     </WorkspaceContext.Provider>
   );
 }

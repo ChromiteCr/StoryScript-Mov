@@ -19,7 +19,7 @@ import {
   type ShotSubject,
 } from '@storyscript/contracts';
 import { TECHNIQUES } from '@storyscript/core';
-import { History, Lock, LockOpen, Plus, RefreshCw, Trash2 } from 'lucide-react';
+import { History, Lock, LockOpen, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { isRevisionConflict } from '../../lib/errors.ts';
 import {
   ANGLE_LABEL,
@@ -39,6 +39,7 @@ import {
   SUBJECT_MOTION_LABEL,
   TEMPLATE_LABEL,
 } from '../../lib/labels.ts';
+import { polishAiReason } from '../../lib/polish.ts';
 import { useCreateShot, useUpdateShot } from '../../lib/queries.ts';
 import { emptyShotFields, emptySubject, linesToList, parseNumberField, revisionLabel } from '../../lib/shots.ts';
 import { stableKey } from '../../lib/stable.ts';
@@ -271,6 +272,19 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
     update.reset();
   };
 
+  /** AI 润色 works on the saved shot: unsaved edits are dropped first, after asking (same question as switching away). */
+  const startPolish = () => {
+    if (!base) return;
+    if (dirty) {
+      if (!window.confirm('这个镜头有未保存的修改。润色用的是已保存的内容，放弃这些修改再继续吗？')) return;
+      setForm(formFromShot(base));
+      setErrors({});
+      update.reset();
+      ws.setEditorDirty(false);
+    }
+    ws.openPolish([base.id]);
+  };
+
   const submit = (e: FormEvent) => {
     e.preventDefault();
     const next: Errors = {};
@@ -353,6 +367,18 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
             title="概况"
             actions={
               <>
+                {base.locked ? null : (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={polishAiReason(ws.ai) !== null || pending}
+                    title={polishAiReason(ws.ai) ?? '让模型按方式和风格重写这个镜头，结果先进草案'}
+                    onClick={startPolish}
+                  >
+                    <Sparkles aria-hidden className="size-3" />
+                    AI 润色…
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"

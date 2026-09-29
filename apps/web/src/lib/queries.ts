@@ -3,6 +3,7 @@ import type { CreateProjectInput, CurrentScript, Entity, Job, Project, Scene, Sh
 import { api, isApiClientError, isUnauthorized, type InputOf } from './api.ts';
 import { describeError } from './errors.ts';
 import { isTerminalJob, resetTrackedJobs } from './jobs.ts';
+import { invalidateCast } from './queries-cast.ts';
 import { markSaved, markSaveFailed, markSaving } from './saveStatus.ts';
 import { markNoTeam, markSessionExpired } from './session.ts';
 import { mergeShots, reorderLocally } from './shots.ts';
@@ -260,7 +261,10 @@ export function useCreateEntity() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (input: InputOf<'createEntity'>) => saving(() => api.call('createEntity', input)),
-    onSuccess: (e) => upsertEntity(qc, e),
+    onSuccess: (e) => {
+      upsertEntity(qc, e);
+      invalidateCast(qc);
+    },
   });
 }
 
@@ -269,7 +273,10 @@ export function useUpdateEntity() {
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: InputOf<'updateEntity'> }) =>
       saving(() => api.call('updateEntity', input, { params: { id } })),
-    onSuccess: (e) => upsertEntity(qc, e),
+    onSuccess: (e) => {
+      upsertEntity(qc, e);
+      invalidateCast(qc);
+    },
   });
 }
 
@@ -295,7 +302,7 @@ export function useShots() {
   return useQuery({ queryKey: keys.shots, queryFn: ({ signal }) => api.call('listShots', undefined, { signal }) });
 }
 
-function shotsUpdated(qc: QueryClient, updated: readonly Shot[]): void {
+export function shotsUpdated(qc: QueryClient, updated: readonly Shot[]): void {
   // GET /shots lists live shots only; an archived one leaves the table.
   qc.setQueryData<Shot[]>(keys.shots, (old) => mergeShots(old, updated).filter((s) => !s.archived));
   for (const s of updated) void qc.invalidateQueries({ queryKey: keys.shotRevisions(s.id) });

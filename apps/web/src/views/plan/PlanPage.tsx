@@ -83,7 +83,16 @@ function PlanPage({ project }: { project: Project }) {
   const lookup = useMemo(
     () =>
       data && detail
-        ? buildLookup({ timezone: tz, date: detail.plan.date, setups: data.setups, shots: data.shots, resources: data.resources, scenes: data.scenes })
+        ? buildLookup({
+            timezone: tz,
+            date: detail.plan.date,
+            setups: data.setups,
+            shots: data.shots,
+            resources: data.resources,
+            scenes: data.scenes,
+            // performers read "周远（饰 林川）" on the call sheet and in its CSV
+            characters: data.entities.filter((e) => e.type === 'character').map((e) => ({ id: e.id, name: e.name })),
+          })
         : null,
     [data, detail, tz],
   );

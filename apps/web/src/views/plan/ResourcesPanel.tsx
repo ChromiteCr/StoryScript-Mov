@@ -6,7 +6,9 @@ import { Button, Field, IconButton, Notice, Tag, TextInput } from '../../compone
 import { EmptyState, Panel } from '../../components/workspace.tsx';
 import { isApiClientError } from '../../lib/api.ts';
 import { PLAN_ERROR_COPY, RESOURCE_TYPE_LABEL } from '../../lib/labels-plan.ts';
+import { useCastSync } from '../../lib/queries-cast.ts';
 import { useDeleteResource, useSaveResource } from '../../lib/queries-plan.ts';
+import { CastSyncDialog } from './CastSyncDialog.tsx';
 import { CheckRow, Modal, TimeField } from './controls.tsx';
 import { fromLocalWindow, toLocalWindow, uncastCharacters, windowLabel, type LocalWindow, type PlanData } from './data.ts';
 
@@ -21,7 +23,13 @@ const TYPE_ICON: Record<ResourceType, LucideIcon> = { performer: User, location:
 
 export function ResourcesPanel({ data, refDate }: { data: PlanData; refDate: string }) {
   const [editing, setEditing] = useState<Resource | 'new' | null>(null);
+  const [syncing, setSyncing] = useState(false);
+  const [synced, setSynced] = useState<string | null>(null);
+  const castSync = useCastSync();
+  const syncChanges = castSync.data?.changes.length ?? 0;
   const uncast = uncastCharacters(data);
+  // uncast characters the script has no actor for: the script's 演员 field is the place to fill it in
+  const withoutActor = uncast.filter((e) => !e.actor_name);
   const tz = data.project.timezone;
   const entityName = new Map(data.entities.map((e) => [e.id, e.name]));
 
@@ -31,10 +39,30 @@ export function ResourcesPanel({ data, refDate }: { data: PlanData; refDate: str
       padded={false}
       tools={<IconButton icon={Plus} label="新增资源" onClick={() => setEditing('new')} />}
     >
+      {syncChanges > 0 ? (
+        <div className="p-2">
+          <Notice tone="info" title={`剧本里的演员表和地点有 ${syncChanges} 处还没同步到计划`}>
+            <Button
+              size="sm"
+              onClick={() => {
+                setSynced(null);
+                setSyncing(true);
+              }}
+            >
+              同步…
+            </Button>
+          </Notice>
+        </div>
+      ) : synced ? (
+        <div className="p-2">
+          <Notice tone="info" role="status" title={synced} />
+        </div>
+      ) : null}
       {uncast.length > 0 ? (
         <div className="p-2">
           <Notice tone="warn" title={`${uncast.length} 个角色还没有演员`}>
             {uncast.map((e) => e.name).join('、')}：没有演员的角色不受时间窗约束。
+            {withoutActor.length > 0 ? ' 在剧本页的角色里填上「演员」，回来同步，就不用再逐个选角。' : ''}
           </Notice>
         </div>
       ) : null}
@@ -92,6 +120,15 @@ export function ResourcesPanel({ data, refDate }: { data: PlanData; refDate: str
           })}
         </div>
       )}
+      {syncing && castSync.data ? (
+        <CastSyncDialog
+          data={data}
+          refDate={refDate}
+          preview={castSync.data}
+          onClose={() => setSyncing(false)}
+          onSynced={(n) => setSynced(`已同步，更新了 ${n} 个演员和场地。`)}
+        />
+      ) : null}
       {editing ? <ResourceDialog data={data} resource={editing === 'new' ? null : editing} refDate={refDate} onClose={() => setEditing(null)} /> : null}
     </Panel>
   );

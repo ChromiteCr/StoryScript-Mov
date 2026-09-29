@@ -140,3 +140,5 @@ export const breakdownSlot = (sceneId: string) => `breakdown:${sceneId}`;
 export const ENTITIES_SLOT = 'entities';
 /** the style library's research job (S3) */
 export const STYLE_RESEARCH_SLOT = 'style-research';
+/** the AI polish job of the shot table (S3a) */
+export const POLISH_SLOT = 'polish';

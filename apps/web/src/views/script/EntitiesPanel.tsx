@@ -1,14 +1,17 @@
 import { useCallback, useState, type FormEvent } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { Entity, EntityType, Job } from '@storyscript/contracts';
+import { ACTOR_NAME_MAX, type CastSuggestion, type Entity, type EntityType, type Job } from '@storyscript/contracts';
 import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles } from 'lucide-react';
+import { pendingCastCount } from '../../lib/cast.ts';
 import { formatAliases, parseAliasInput } from '../../lib/drafts.ts';
 import { ENTITIES_SLOT, trackJob, useTrackedJob } from '../../lib/jobs.ts';
 import { ENTITY_TYPE_LABEL } from '../../lib/labels.ts';
 import { useCreateEntity, useDrafts, useExtractEntities, useUpdateEntity } from '../../lib/queries.ts';
+import { useCastSuggestions } from '../../lib/queries-cast.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
-import { Button, IconButton, SelectInput, Spinner, TextInput } from '../../components/ui.tsx';
+import { Button, IconButton, Notice, SelectInput, Spinner, TextInput } from '../../components/ui.tsx';
 import { EmptyState, Panel } from '../../components/workspace.tsx';
+import { CastDialog } from './CastDialog.tsx';
 import { JobLine, useDraftFinder } from './JobLine.tsx';
 import { useWorkspace } from './context.ts';
 
@@ -18,17 +21,23 @@ function EntityEditor({ entity, onDone }: { entity: Entity; onDone: () => void }
   const update = useUpdateEntity();
   const [name, setName] = useState(entity.name);
   const [aliases, setAliases] = useState(formatAliases(entity.aliases));
+  const [actor, setActor] = useState(entity.actor_name ?? '');
+  const isCharacter = entity.type === 'character';
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (name.trim() === '') return;
-    update.mutate({ id: entity.id, input: { name: name.trim(), aliases: parseAliasInput(aliases) } }, { onSuccess: onDone });
+    const input = { name: name.trim(), aliases: parseAliasInput(aliases), ...(isCharacter ? { actor_name: actor.trim() === '' ? null : actor.trim() } : {}) };
+    update.mutate({ id: entity.id, input }, { onSuccess: onDone });
   };
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-1.5 px-3 py-2">
       <TextInput aria-label={`${entity.alias} 的名称`} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
       <TextInput aria-label="别名，用顿号或逗号分隔" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔" />
+      {isCharacter ? (
+        <TextInput aria-label="演员" value={actor} onChange={(e) => setActor(e.target.value)} maxLength={ACTOR_NAME_MAX} placeholder="演员姓名，可不填" />
+      ) : null}
       {update.isError ? <ErrorNotice error={update.error} /> : null}
       <div className="flex gap-1.5">
         <Button type="submit" variant="primary" size="sm" busy={update.isPending} disabled={name.trim() === ''}>
@@ -58,7 +67,10 @@ function EntityRow({ entity }: { entity: Entity }) {
     <li className="group flex items-start gap-2 py-1 pr-1 pl-3 hover:bg-graphite-800/60">
       <span className="w-6 shrink-0 pt-px text-xs text-graphite-300 tabular-nums">{entity.alias}</span>
       <div className="min-w-0 flex-1">
-        <p className="text-sm break-words text-graphite-100">{entity.name}</p>
+        <p className="text-sm break-words text-graphite-100">
+          {entity.name}
+          {entity.actor_name ? <span className="text-xs text-graphite-300"> · {entity.actor_name} 饰</span> : null}
+        </p>
         {entity.aliases.length > 0 ? <p className="text-xs break-words text-graphite-300">又称 {formatAliases(entity.aliases)}</p> : null}
         {update.isError ? <p className="text-xs text-graphite-100">保存失败，请重试。</p> : null}
       </div>
@@ -81,7 +93,7 @@ function EntityRow({ entity }: { entity: Entity }) {
           {entity.confirmed ? <Check aria-hidden className="size-3 text-ok" /> : <span aria-hidden className="size-1.5 rounded-full bg-warn" />}
           {entity.confirmed ? '已确认' : '确认'}
         </button>
-        <IconButton icon={Pencil} label={`编辑 ${entity.name}`} title="改名 / 编辑别名" onClick={() => setEditing(true)} />
+        <IconButton icon={Pencil} label={`编辑 ${entity.name}`} title={entity.type === 'character' ? '改名 / 别名 / 演员' : '改名 / 编辑别名'} onClick={() => setEditing(true)} />
       </div>
     </li>
   );
@@ -92,16 +104,19 @@ function AddEntityForm({ onDone }: { onDone: () => void }) {
   const [type, setType] = useState<EntityType>('character');
   const [name, setName] = useState('');
   const [aliases, setAliases] = useState('');
+  const [actor, setActor] = useState('');
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (name.trim() === '') return;
+    const withActor = type === 'character' && actor.trim() !== '';
     create.mutate(
-      { type, name: name.trim(), aliases: parseAliasInput(aliases) },
+      { type, name: name.trim(), aliases: parseAliasInput(aliases), ...(withActor ? { actor_name: actor.trim() } : {}) },
       {
         onSuccess: () => {
           setName('');
           setAliases('');
+          setActor('');
         },
       },
     );
@@ -120,6 +135,9 @@ function AddEntityForm({ onDone }: { onDone: () => void }) {
         <TextInput aria-label="名称" value={name} onChange={(e) => setName(e.target.value)} placeholder="名称" autoFocus />
       </div>
       <TextInput aria-label="别名" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔（可不填）" />
+      {type === 'character' ? (
+        <TextInput aria-label="演员" value={actor} onChange={(e) => setActor(e.target.value)} maxLength={ACTOR_NAME_MAX} placeholder="演员姓名，可不填" />
+      ) : null}
       {create.isError ? <ErrorNotice error={create.error} /> : null}
       <div className="flex gap-1.5">
         <Button type="submit" variant="primary" size="sm" busy={create.isPending} disabled={name.trim() === ''}>
@@ -145,6 +163,10 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
   const [adding, setAdding] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [confirmingAll, setConfirmingAll] = useState(false);
+  const [casting, setCasting] = useState<CastSuggestion[] | null>(null);
+  const cast = useCastSuggestions();
+  const castPending = pendingCastCount(cast.data ?? []);
+  const hasCharacters = ws.entities.some((e) => e.type === 'character');
 
   const pending = (drafts.data ?? [])
     .filter((d) => d.kind === 'entities' && d.status === 'pending')
@@ -178,6 +200,17 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
   const startExtract = () => {
     extract.mutate(undefined, { onSuccess: ({ job_id }) => trackJob(ENTITIES_SLOT, job_id) });
   };
+
+  // the script's cast list names actors the characters do not have yet (S3b)
+  const castNotice =
+    castPending > 0 ? (
+      <Notice tone="info" title={`剧本的人物表写了 ${castPending} 位演员`}>
+        <p>还没填进角色的「演员」里。</p>
+        <Button size="sm" className="mt-1.5" onClick={() => setCasting(cast.data ?? [])}>
+          填入演员…
+        </Button>
+      </Notice>
+    ) : null;
 
   const extractTitle = ws.ai.reason ?? (tracked ? '抽取任务进行中' : `AI 抽取：把剧本全文发送到 ${ws.providerHost ?? '你配置的地址'}，结果先进草案`);
 
@@ -239,23 +272,26 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
             <ErrorNotice error={entitiesQuery.error} />
           </div>
         ) : ws.entities.length === 0 && !adding ? (
-          <EmptyState
-            quiet
-            title="还没有角色、地点或道具。"
-            description={
-              ws.ai.enabled
-                ? '可以用 AI 抽取生成草案，或点 + 手工添加。拆镜时，人物只能从角色名单里选。'
-                : '点 + 手工添加。AI 抽取需要先在"设置 → 模型"里配置文本模型。拆镜时，人物只能从角色名单里选。'
-            }
-            action={
-              ws.ai.enabled ? (
-                <Button size="sm" onClick={startExtract} disabled={tracked !== null || extract.isPending} title={extractTitle}>
-                  <Sparkles aria-hidden className="size-3" />
-                  AI 抽取
-                </Button>
-              ) : undefined
-            }
-          />
+          <>
+            {castNotice ? <div className="p-2">{castNotice}</div> : null}
+            <EmptyState
+              quiet
+              title="还没有角色、地点或道具。"
+              description={
+                ws.ai.enabled
+                  ? '可以用 AI 抽取生成草案，或点 + 手工添加。拆镜时，人物只能从角色名单里选。'
+                  : '点 + 手工添加。AI 抽取需要先在"设置 → 模型"里配置文本模型。拆镜时，人物只能从角色名单里选。'
+              }
+              action={
+                ws.ai.enabled ? (
+                  <Button size="sm" onClick={startExtract} disabled={tracked !== null || extract.isPending} title={extractTitle}>
+                    <Sparkles aria-hidden className="size-3" />
+                    AI 抽取
+                  </Button>
+                ) : undefined
+              }
+            />
+          </>
         ) : (
           <div className="flex flex-col py-1">
             {unconfirmed > 0 ? (
@@ -270,6 +306,7 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
                 {confirmAll.isError ? <ErrorNotice error={confirmAll.error} /> : null}
               </div>
             ) : null}
+            {hasCharacters ? null : castNotice ? <div className="px-3 pb-1.5">{castNotice}</div> : null}
             {TYPES.map((t) => {
               const list = ws.entities.filter((e) => e.type === t);
               if (list.length === 0) return null;
@@ -278,6 +315,7 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
                   <h3 className="px-3 pt-2 pb-1 text-xs font-semibold text-graphite-300">
                     {ENTITY_TYPE_LABEL[t]} <span className="tabular-nums">{list.length}</span>
                   </h3>
+                  {t === 'character' && castNotice ? <div className="px-3 pb-1.5">{castNotice}</div> : null}
                   <ul>
                     {list.map((e) => (
                       <EntityRow key={e.id} entity={e} />
@@ -289,6 +327,7 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
           </div>
         )
       )}
+      {casting ? <CastDialog suggestions={casting} onClose={() => setCasting(null)} /> : null}
     </Panel>
   );
 }

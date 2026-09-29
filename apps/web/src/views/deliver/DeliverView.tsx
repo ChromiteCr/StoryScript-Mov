@@ -137,6 +137,7 @@ function DeliverPage({ project }: { project: Project }) {
             shots: planData.data.shots,
             resources: planData.data.resources,
             scenes: planData.data.scenes,
+            characters: planData.data.entities.filter((e) => e.type === 'character').map((e) => ({ id: e.id, name: e.name })),
           })
         : null,
     [planData.data, detail],

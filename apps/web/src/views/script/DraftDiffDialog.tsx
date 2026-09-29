@@ -46,7 +46,7 @@ import { useWorkspace } from './context.ts';
 
 const CLAIM_NOTE = '含具体影片/年份等断言，未核实';
 
-function ClaimList({ claims }: { claims: readonly ClaimFlagView[] }) {
+export function ClaimList({ claims }: { claims: readonly ClaimFlagView[] }) {
   if (claims.length === 0) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5 text-xs">

@@ -141,14 +141,17 @@ export function emptySubject(alias: string): ShotSubject {
   return { alias, screen: null, depth: null, facing: null, pose: null };
 }
 
-/** Names of ShotFields keys that differ between two revisions. */
-export function changedFieldLabels(prev: ShotFields | null, next: ShotFields): string[] {
+/** ShotFields keys that differ between two revisions (label order, see SHOT_FIELD_LABEL). */
+export function changedFieldKeys(prev: ShotFields | null, next: ShotFields): (keyof ShotFields)[] {
   if (!prev) return [];
   // camera_notes: a missing key, null and '' all mean "no notes"
   const val = (f: ShotFields, k: keyof ShotFields): unknown => (k === 'camera_notes' ? f.camera_notes?.trim() || null : f[k]);
-  return (Object.keys(SHOT_FIELD_LABEL) as (keyof ShotFields)[])
-    .filter((k) => stableKey(val(prev, k)) !== stableKey(val(next, k)))
-    .map((k) => SHOT_FIELD_LABEL[k]);
+  return (Object.keys(SHOT_FIELD_LABEL) as (keyof ShotFields)[]).filter((k) => stableKey(val(prev, k)) !== stableKey(val(next, k)));
+}
+
+/** Names of ShotFields keys that differ between two revisions. */
+export function changedFieldLabels(prev: ShotFields | null, next: ShotFields): string[] {
+  return changedFieldKeys(prev, next).map((k) => SHOT_FIELD_LABEL[k]);
 }
 
 /** Lines of a textarea list editor → trimmed, non-empty items. */

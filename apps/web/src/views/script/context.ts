@@ -69,6 +69,22 @@ export interface ScriptWorkspace {
   openRevisions: (shot: Shot) => void;
   /** open the style library drawer (S3) */
   openStyles: () => void;
+  /** S3a: 选择 mode of the shot table (a tick on every row) */
+  selecting: boolean;
+  /** leaving selection mode clears the selection */
+  setSelecting: (on: boolean) => void;
+  /** ids of the ticked shots; locked and gone shots are never in it */
+  selected: ReadonlySet<string>;
+  toggleSelect: (shotId: string) => void;
+  /** tick (on) or untick several shots; locked ones are skipped when ticking */
+  selectMany: (shotIds: readonly string[], on: boolean) => void;
+  clearSelection: () => void;
+  /** open the AI 润色 request for these shots */
+  openPolish: (shotIds: string[]) => void;
+  /** open a polish draft for review */
+  openPolishDraft: (draftId: string) => void;
+  /** polish drafts still waiting for review, newest first */
+  pendingPolishDrafts: readonly ShotDraft[];
   askReason: (req: ReasonRequest) => void;
   notify: (message: string) => void;
   showTab: (tab: MainTab) => void;

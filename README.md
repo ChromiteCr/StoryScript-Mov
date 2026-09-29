@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S3-blue)
+![version](https://img.shields.io/badge/version-S3b-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -167,6 +167,8 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S3b | 2026-09-30 | 计划直接用剧本的演员表：角色新增「演员」字段；读出剧本开头人物表（演员：角色：简介、角色（演员 饰）等写法，按角色名、别名和近似名对上角色；同一角色的别名由另一位演员饰演时建议拆成新角色），勾选后填入；计划页一键把演员和地点同步成资源（同名合并、换演员时从原演员移走，附到场时间和确认勾选）；通告单写成「演员（饰 角色）」；演员姓名不发给 AI | feat |
+| S3a | 2026-09-30 | AI 润色：镜头表「选择」多选（全选本场、锁定镜头不可选）或单个镜头菜单，按细化/优化/重写、润色要求、风格和难度一次润色 1–12 个镜头；逐镜头对比改前改后、标出改动字段和模型说明，勾选后原位写入并记修订（出处不变，别人先改过会提示）；任务结果写不进数据库时不再一直显示进行中 | feat |
 | S3 | 2026-09-30 | 风格化拆镜：内置 8 张按手法命名的风格卡和本组自建风格卡，难度三档（稳妥/进取/挑战），拆镜提示词 breakdown-v2（无风格时与 v1 逐字相同）；新增「拍法说明」字段和环绕、航拍、变焦推拉三种运镜；风格研究用本组自己的 key 把用户说出的参考整理成风格卡（通用手法建议，未核实），可设研究用模型和联网搜索（通义 enable_search、OpenAI search 模型，服务商拒绝时自动不联网）；数据库迁移 3 | milestone |
 | S2d1 | 2026-09-29 | 字号与层次：字号拉开档次（正文 13→14px，页面标题 22px 加粗，面板标题 14px 加粗亮色，标签 12px 灰、数值 14px 亮色），镜头表的场次标题、名单和资源的分组标题与名称加粗，面板头、检查器分组和对话框留出更多间距，主次一眼分清 | style |
 | S2d | 2026-09-29 | 服务器版支持一人多组（npm 0.5.0，含 S2c 和 S2d1）：每人最多同时在 2 个小组（包括自己建的，server.json 的 limits 可调）；新增「切换项目」页，用和单机版一样的画幅卡片列出自己的小组，点一下切换项目，每个浏览器记住自己正在用的小组；加入链接会先问是否再加入一个小组，满 2 个时说明要先退出哪个；小组设置可以从项目页对任意一个小组打开；site.db 升级到第 2 版（成员关系单独成表），旧数据自动迁移 | feat |

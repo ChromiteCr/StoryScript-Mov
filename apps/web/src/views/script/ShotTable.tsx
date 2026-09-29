@@ -1,8 +1,9 @@
 import { memo, useCallback, useMemo, useState } from 'react';
 import type { UseQueryResult } from '@tanstack/react-query';
 import type { Job, Scene, Shot } from '@storyscript/contracts';
-import { FileSearch, Plus, SlidersHorizontal, Sparkles, X } from 'lucide-react';
-import { breakdownSlot, useTrackedJob } from '../../lib/jobs.ts';
+import { FileSearch, ListChecks, Plus, SlidersHorizontal, Sparkles, Square, SquareCheckBig, X } from 'lucide-react';
+import { breakdownSlot, POLISH_SLOT, useTrackedJob } from '../../lib/jobs.ts';
+import { canPolish, polishBlockedReason, POLISH_MAX, sceneSelection } from '../../lib/polish.ts';
 import { useSetNarrativeOrder } from '../../lib/queries.ts';
 import { groupShotsByScene, moveId, narrativeOrderIds } from '../../lib/shots.ts';
 import { pageHref } from '../../lib/stages.ts';
@@ -37,6 +38,7 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
     .filter((s) => s.required_status !== 'waived')
     .reduce((sum, s) => sum + (Number.isFinite(s.fields.est_seconds) ? s.fields.est_seconds : 0), 0);
   const pendingDraft = ws.pendingDraftByScene.get(scene.id) ?? null;
+  const pick = sceneSelection(shots, ws.selected);
 
   const move = (from: number, to: number) => {
     const ids = moveId(
@@ -63,11 +65,11 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
 
   return (
     <section id={sceneGroupDomId(scene.id)} aria-labelledby={`${sceneGroupDomId(scene.id)}-title`} className="scroll-mt-0 border-b border-graphite-800 last:border-b-0">
-      <header className="sticky top-0 z-10 flex min-h-11 items-center gap-2 border-b border-graphite-700 bg-graphite-900 py-1.5 pr-1 pl-3">
+      <header className="sticky top-0 z-10 flex min-h-11 flex-wrap items-center gap-x-2 gap-y-0.5 border-b border-graphite-700 bg-graphite-900 py-1.5 pr-1 pl-3">
         <button
           type="button"
           onClick={() => ws.selectScene(scene, { open: true })}
-          className="flex min-w-0 flex-1 items-baseline gap-2 rounded-control text-left"
+          className="flex min-w-[9rem] flex-1 items-baseline gap-2 rounded-control text-left"
           title="在检查器里查看场次设置与 AI 拆镜"
         >
           <span className="shrink-0 text-sm font-semibold text-graphite-300 tabular-nums">{scene.display_no}</span>
@@ -78,7 +80,19 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
             {shots.length} 镜{totalSeconds > 0 ? ` · 约 ${Math.round(totalSeconds)} 秒` : ''}
           </span>
         </button>
-        <div className="flex shrink-0 items-center gap-0.5">
+        <div className="ml-auto flex shrink-0 items-center gap-0.5">
+          {ws.selecting ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              disabled={pick.ids.length === 0}
+              onClick={() => ws.selectMany(pick.ids, !pick.all)}
+              title={pick.ids.length === 0 ? '本场没有可选的镜头（锁定的镜头不能润色）' : '锁定的镜头不会被选中'}
+            >
+              {pick.all ? <SquareCheckBig aria-hidden className="size-3" /> : <Square aria-hidden className="size-3" />}
+              {pick.all ? '取消本场' : '全选本场'}
+            </Button>
+          ) : null}
           {pendingDraft ? (
             <Button size="sm" onClick={() => ws.openDraft(pendingDraft.id)} title="模型的拆镜结果在草案里，勾选后才写入镜头表">
               <FileSearch aria-hidden className="size-3" />
@@ -154,56 +168,127 @@ export interface ShotTableProps {
 /** Shot table grouped by scene (narrative order). Selection opens the shot in the inspector. */
 export function ShotTable({ shotsQuery, relinkOnly, notice, onDismissNotice }: ShotTableProps) {
   const ws = useWorkspace();
+  const polishJob = useTrackedJob(POLISH_SLOT);
+  const findDraft = useDraftFinder();
   const live = useMemo(() => (shotsQuery.data ?? []).filter((s) => !s.archived), [shotsQuery.data]);
   const grouped = useMemo(() => groupShotsByScene(live), [live]);
   const sceneIds = useMemo(() => new Set(ws.script.scenes.map((s) => s.id)), [ws.script.scenes]);
   const orphans = useMemo(() => live.filter((s) => !sceneIds.has(s.scene_id)), [live, sceneIds]);
   const selectedShotId = ws.inspector?.kind === 'shot' ? ws.inspector.shotId : null;
+  const hasScenes = ws.script.scenes.length > 0;
+
+  // a finished polish job opens its draft (INV-03: nothing is written before the ticks)
+  const onPolishSucceeded = useCallback(
+    async (job: Job) => {
+      const id = await findDraft(job, 'polish', null);
+      if (id) ws.openPolishDraft(id);
+      else ws.notify('AI 润色已完成，但没有找到对应的草案。');
+    },
+    [findDraft, ws],
+  );
+
+  const count = ws.selected.size;
+  const blocked = polishBlockedReason(count, ws.ai);
 
   return (
-    <Panel title={`镜头表 · ${live.length}`} padded={false}>
-      {notice ? (
-        <div className="flex items-start gap-1 border-b border-graphite-800 p-2">
-          <Notice tone="info" role="status" title={notice} className="min-w-0 flex-1" />
-          <IconButton icon={X} label="关闭提示" onClick={onDismissNotice} className="mt-1.5" />
-        </div>
-      ) : null}
-      {!ws.ai.enabled && ws.ai.reason ? (
-        <div className="border-b border-graphite-800 p-2">
-          <Notice tone="info" title="AI 拆镜和实体抽取已置灰">
-            {ws.ai.reason}{' '}
-            <a href={pageHref('settings')} className="text-graphite-100 underline underline-offset-2 hover:decoration-2">
-              前往设置
-            </a>
-          </Notice>
-        </div>
-      ) : null}
+    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <Panel
+        title={`镜头表 · ${live.length}`}
+        padded={false}
+        tools={
+          hasScenes && live.length > 0 ? (
+            <Button variant={ws.selecting ? 'primary' : 'ghost'} size="sm" aria-pressed={ws.selecting} onClick={() => ws.setSelecting(!ws.selecting)} title="选择几个镜头，一起交给 AI 润色">
+              <ListChecks aria-hidden className="size-3" />
+              选择
+            </Button>
+          ) : undefined
+        }
+      >
+        {notice ? (
+          <div className="flex items-start gap-1 border-b border-graphite-800 p-2">
+            <Notice tone="info" role="status" title={notice} className="min-w-0 flex-1" />
+            <IconButton icon={X} label="关闭提示" onClick={onDismissNotice} className="mt-1.5" />
+          </div>
+        ) : null}
+        {!ws.ai.enabled && ws.ai.reason ? (
+          <div className="border-b border-graphite-800 p-2">
+            <Notice tone="info" title="AI 拆镜和实体抽取已置灰">
+              {ws.ai.reason}{' '}
+              <a href={pageHref('settings')} className="text-graphite-100 underline underline-offset-2 hover:decoration-2">
+                前往设置
+              </a>
+            </Notice>
+          </div>
+        ) : null}
 
-      {shotsQuery.isPending ? (
-        <div className="p-3">
-          <Spinner label="正在读取镜头…" />
+        {polishJob ? (
+          <div className="border-b border-graphite-800 p-2">
+            <JobLine slot={POLISH_SLOT} onSucceeded={onPolishSucceeded} onOpenDraft={ws.openPolishDraft} />
+          </div>
+        ) : ws.pendingPolishDrafts.length > 0 ? (
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b border-graphite-800 px-3 py-2">
+            <span className="text-sm text-graphite-100">
+              有 {ws.pendingPolishDrafts.length} 份 AI 润色草案待审阅
+            </span>
+            <Button size="sm" onClick={() => ws.pendingPolishDrafts[0] && ws.openPolishDraft(ws.pendingPolishDrafts[0].id)} title="模型的润色结果在草案里，勾选后才写入镜头">
+              <FileSearch aria-hidden className="size-3" />
+              审阅草案
+            </Button>
+          </div>
+        ) : null}
+
+        {shotsQuery.isPending ? (
+          <div className="p-3">
+            <Spinner label="正在读取镜头…" />
+          </div>
+        ) : shotsQuery.isError ? (
+          <div className="flex flex-col items-start gap-2 p-3">
+            <ErrorNotice error={shotsQuery.error} />
+            <Button onClick={() => void shotsQuery.refetch()}>重试</Button>
+          </div>
+        ) : !hasScenes ? (
+          <EmptyState title="当前版本没有场次。" description="导入新版本时，在预览里把场次标题行标为「场」。" />
+        ) : (
+          <>
+            {ws.script.scenes.map((scene) => (
+              <SceneGroup key={scene.id} scene={scene} shots={grouped.get(scene.id) ?? []} relinkOnly={relinkOnly} selectedShotId={selectedShotId} />
+            ))}
+            {orphans.length > 0 ? (
+              <div className="p-3">
+                <Notice tone="warn" title={`${orphans.length} 个镜头不在当前版本的场次里`}>
+                  它们所属的场次在新版本中没有对应（{orphans.map((s) => s.code).join('、')}），这里暂不显示，数据仍然保留。
+                </Notice>
+              </div>
+            ) : null}
+          </>
+        )}
+      </Panel>
+      {ws.selecting ? (
+        <div
+          role="region"
+          aria-label="已选镜头"
+          className="sticky bottom-0 z-10 flex shrink-0 flex-wrap items-center gap-x-3 gap-y-1.5 rounded-panel border-t border-graphite-700 bg-graphite-800 px-3 py-2"
+        >
+          <span className="text-sm font-semibold text-graphite-100 tabular-nums" role="status">
+            已选 {count} 个镜头
+          </span>
+          {blocked ? <span className="min-w-0 text-xs text-graphite-300">{blocked}</span> : null}
+          <span className="ml-auto flex items-center gap-2">
+            <Button variant="ghost" onClick={() => ws.setSelecting(false)}>
+              取消
+            </Button>
+            <Button
+              variant="primary"
+              disabled={!canPolish(count, ws.ai)}
+              onClick={() => ws.openPolish([...ws.selected])}
+              title={blocked ?? (count === 0 ? '先勾选要润色的镜头' : `按方式、风格和你的要求重写这 ${count} 个镜头，结果先进草案（一次最多 ${POLISH_MAX} 个）`)}
+            >
+              <Sparkles aria-hidden className="size-3.5" />
+              AI 润色（{count}）
+            </Button>
+          </span>
         </div>
-      ) : shotsQuery.isError ? (
-        <div className="flex flex-col items-start gap-2 p-3">
-          <ErrorNotice error={shotsQuery.error} />
-          <Button onClick={() => void shotsQuery.refetch()}>重试</Button>
-        </div>
-      ) : ws.script.scenes.length === 0 ? (
-        <EmptyState title="当前版本没有场次。" description="导入新版本时，在预览里把场次标题行标为「场」。" />
-      ) : (
-        <>
-          {ws.script.scenes.map((scene) => (
-            <SceneGroup key={scene.id} scene={scene} shots={grouped.get(scene.id) ?? []} relinkOnly={relinkOnly} selectedShotId={selectedShotId} />
-          ))}
-          {orphans.length > 0 ? (
-            <div className="p-3">
-              <Notice tone="warn" title={`${orphans.length} 个镜头不在当前版本的场次里`}>
-                它们所属的场次在新版本中没有对应（{orphans.map((s) => s.code).join('、')}），这里暂不显示，数据仍然保留。
-              </Notice>
-            </div>
-          ) : null}
-        </>
-      )}
-    </Panel>
+      ) : null}
+    </div>
   );
 }

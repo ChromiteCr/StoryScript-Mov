@@ -57,7 +57,7 @@ export function ResourcesPanel({ data, refDate }: { data: PlanData; refDate: str
             const Icon = TYPE_ICON[type];
             return (
               <section key={type} aria-label={RESOURCE_TYPE_LABEL[type]}>
-                <h3 className="flex h-7 items-center gap-1.5 px-3 text-xs font-medium text-graphite-300">
+                <h3 className="mt-1 flex h-8 items-center gap-1.5 px-3 text-xs font-semibold text-graphite-300">
                   <Icon aria-hidden className="size-3.5" />
                   {RESOURCE_TYPE_LABEL[type]}
                   <span className="tabular-nums">{list.length}</span>
@@ -71,7 +71,7 @@ export function ResourcesPanel({ data, refDate }: { data: PlanData; refDate: str
                         className="flex w-full flex-col gap-0.5 px-3 py-1.5 text-left hover:bg-graphite-800"
                       >
                         <span className="flex w-full items-center gap-2">
-                          <span className="min-w-0 flex-1 truncate text-sm text-graphite-100">{r.name}</span>
+                          <span className="min-w-0 flex-1 truncate text-sm font-medium text-graphite-100">{r.name}</span>
                           {r.confirmed ? null : <Tag>未确认</Tag>}
                         </span>
                         {r.cast_character_ids.length > 0 ? (

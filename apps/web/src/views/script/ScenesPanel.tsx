@@ -41,7 +41,7 @@ export function ScenesPanel({ shots }: { shots: readonly Shot[] }) {
                   {selected ? <span aria-hidden className="absolute inset-y-1.5 left-0 w-0.5 rounded-full bg-graphite-300" /> : null}
                   <span className="w-7 shrink-0 pt-px text-xs text-graphite-300 tabular-nums">{scene.display_no}</span>
                   <span className="min-w-0 flex-1">
-                    <span className={`block truncate text-sm ${selected ? 'font-medium text-graphite-100' : 'text-graphite-100'}`}>{scene.heading}</span>
+                    <span className={`block truncate text-sm font-medium ${selected ? 'text-graphite-100' : 'text-graphite-100/90'}`}>{scene.heading}</span>
                     <span className="flex items-center gap-2 text-xs text-graphite-300 tabular-nums">
                       <span>{list.length} 镜</span>
                       {draft ? (

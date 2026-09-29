@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S2d-blue)
+![version](https://img.shields.io/badge/version-S2d1-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -163,6 +163,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S2d1 | 2026-09-29 | 字号与层次：字号拉开档次（正文 13→14px，页面标题 22px 加粗，面板标题 14px 加粗亮色，标签 12px 灰、数值 14px 亮色），镜头表的场次标题、名单和资源的分组标题与名称加粗，面板头、检查器分组和对话框留出更多间距，主次一眼分清 | style |
 | S2d | 2026-09-29 | 服务器版支持一人多组：每人最多同时在 2 个小组（包括自己建的，server.json 的 limits 可调）；新增「切换项目」页，用和单机版一样的画幅卡片列出自己的小组，点一下切换项目，每个浏览器记住自己正在用的小组；加入链接会先问是否再加入一个小组，满 2 个时说明要先退出哪个；小组设置可以从项目页对任意一个小组打开；site.db 升级到第 2 版（成员关系单独成表），旧数据自动迁移 | feat |
 | S2c | 2026-09-29 | 修复导入时的场次识别：分镜脚本（每行一个镜头，或从 Word/Excel 复制的镜号、景别、画面表格）不再被切成一镜一场，而是按场次导入为镜头，景别、角度、运镜、时长、台词自动填好，没写的字段注明默认值；识别更多场次标题写法（场景一、一、、S1、【教室·日·内】、教室（日））；「1-1 内景 客厅 日」这类集-场编号仍算场次；导入预览每行可以在正文、场、镜之间切换，并列出每场会导入的镜头；界面统一叫法：场次、镜头、地点 | fix |
 | S2b | 2026-09-28 | 服务器版每组自带模型（npm 0.4.0）：小组在「设置 → 模型」里填自己的 base_url、模型名和 key（文本和图像都可以），存在服务器上本组的状态目录，只用于转发本组请求、其他小组看不到；服务器环境变量里的模型 key 在服务器版不再使用；所有发往模型服务的请求改走受保护的出站通道：只连公网 https，连接时逐个检查解析出的地址、每次跳转重新检查并在换站时去掉 key，本机、内网和云元数据地址一律拒绝，保存设置时也会提前提示 | feat |

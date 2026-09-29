@@ -142,7 +142,7 @@ export function Field({ label, hint, error, children }: FieldProps) {
   const describedBy = error ? errorId : hint ? hintId : undefined;
   return (
     <div className="flex flex-col gap-1">
-      <label htmlFor={id} className="text-xs font-medium text-graphite-100">
+      <label htmlFor={id} className="text-xs font-medium text-graphite-300">
         {label}
       </label>
       {children({ id, describedBy, invalid: Boolean(error) })}
@@ -287,8 +287,8 @@ export function Notice({ tone, title, children, className = '', role }: NoticePr
     >
       <Icon aria-hidden className={`mt-0.5 size-4 shrink-0 ${NOTICE_ICON_COLOR[tone]}`} />
       <div className="min-w-0 text-sm">
-        <p className="font-medium text-graphite-100">{title}</p>
-        {children ? <div className="mt-0.5 text-graphite-300">{children}</div> : null}
+        <p className="font-semibold text-graphite-100">{title}</p>
+        {children ? <div className="mt-1 text-xs leading-5 text-graphite-300">{children}</div> : null}
       </div>
     </div>
   );

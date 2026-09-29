@@ -63,15 +63,15 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
 
   return (
     <section id={sceneGroupDomId(scene.id)} aria-labelledby={`${sceneGroupDomId(scene.id)}-title`} className="scroll-mt-0 border-b border-graphite-800 last:border-b-0">
-      <header className="sticky top-0 z-10 flex min-h-9 items-center gap-2 border-b border-graphite-800 bg-graphite-900 py-1 pr-1 pl-3">
+      <header className="sticky top-0 z-10 flex min-h-11 items-center gap-2 border-b border-graphite-700 bg-graphite-900 py-1.5 pr-1 pl-3">
         <button
           type="button"
           onClick={() => ws.selectScene(scene, { open: true })}
           className="flex min-w-0 flex-1 items-baseline gap-2 rounded-control text-left"
           title="在检查器里查看场次设置与 AI 拆镜"
         >
-          <span className="shrink-0 text-xs text-graphite-300 tabular-nums">{scene.display_no}</span>
-          <h3 id={`${sceneGroupDomId(scene.id)}-title`} className="min-w-0 truncate text-sm font-medium text-graphite-100">
+          <span className="shrink-0 text-sm font-semibold text-graphite-300 tabular-nums">{scene.display_no}</span>
+          <h3 id={`${sceneGroupDomId(scene.id)}-title`} className="min-w-0 truncate text-base font-semibold text-graphite-100">
             {scene.heading}
           </h3>
           <span className="shrink-0 text-xs text-graphite-300 tabular-nums">

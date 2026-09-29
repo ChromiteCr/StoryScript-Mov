@@ -89,13 +89,13 @@ export interface PageHeaderProps {
 /** The page's h1 row: title, optional status tag and lead, actions on the right. */
 export function PageHeader({ title, icon: Icon, status, lead, actions }: PageHeaderProps) {
   return (
-    <div className="flex min-h-10 flex-wrap items-center gap-x-3 gap-y-1 px-2 py-1.5">
+    <div className="flex min-h-12 flex-wrap items-center gap-x-4 gap-y-1 px-2 py-2">
       <div className="flex shrink-0 items-center gap-2">
-        {Icon ? <Icon aria-hidden className="size-4 text-graphite-300" /> : null}
-        <h1 className="text-lg font-medium text-graphite-100">{title}</h1>
+        {Icon ? <Icon aria-hidden className="size-5 text-graphite-300" /> : null}
+        <h1 className="text-xl font-semibold text-graphite-100">{title}</h1>
         {status}
       </div>
-      {lead ? <p className="min-w-0 text-sm text-graphite-300">{lead}</p> : null}
+      {lead ? <p className="min-w-0 text-xs text-graphite-300">{lead}</p> : null}
       {actions ? <div className="ml-auto flex shrink-0 items-center gap-2">{actions}</div> : null}
     </div>
   );
@@ -126,8 +126,8 @@ export function Panel({ title, tools, children, padded = true, className = '', b
         `print:overflow-visible print:rounded-none print:bg-transparent ${className}`
       }
     >
-      <header className="flex h-7 shrink-0 items-center justify-between gap-2 border-b border-graphite-950 bg-graphite-800 pr-1 pl-3 print:hidden">
-        <h2 id={titleId} className="truncate text-xs font-medium text-graphite-300">
+      <header className="flex h-9 shrink-0 items-center justify-between gap-2 border-b border-graphite-950 bg-graphite-800 pr-1 pl-3 print:hidden">
+        <h2 id={titleId} className="truncate text-sm font-semibold text-graphite-100">
           {title}
         </h2>
         {tools ? <div className="flex shrink-0 items-center gap-0.5">{tools}</div> : null}
@@ -187,27 +187,27 @@ export interface InspectorGroupProps {
 export function InspectorGroup({ title, actions, note, children }: InspectorGroupProps) {
   const titleId = useId();
   return (
-    <section aria-labelledby={titleId} className="py-3 first:pt-1">
-      <div className="flex min-h-6 items-center justify-between gap-2 px-3">
-        <h3 id={titleId} className="text-xs font-medium text-graphite-100">
+    <section aria-labelledby={titleId} className="py-4 first:pt-2">
+      <div className="flex min-h-7 items-center justify-between gap-2 px-3">
+        <h3 id={titleId} className="text-sm font-semibold text-graphite-100">
           {title}
         </h3>
         {actions ? <div className="flex shrink-0 items-center gap-1">{actions}</div> : null}
       </div>
-      {note ? <div className="mt-1.5 px-3 text-sm">{note}</div> : null}
+      {note ? <div className="mt-1.5 px-3 text-xs leading-5 text-graphite-300">{note}</div> : null}
       {children ? (
-        <dl className="mt-2 grid grid-cols-[minmax(84px,112px)_minmax(0,1fr)] gap-x-3 gap-y-2 px-3">{children}</dl>
+        <dl className="mt-3 grid grid-cols-[minmax(84px,112px)_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2.5 px-3">{children}</dl>
       ) : null}
     </section>
   );
 }
 
-/** One label/value line. Values default to 13px graphite-100. */
+/** One label/value line: a 12px grey label, the value in 14px primary text. */
 export function InspectorRow({ label, children }: { label: string; children: ReactNode }) {
   return (
     <>
-      <dt className="text-xs leading-5 text-graphite-300">{label}</dt>
-      <dd className="min-w-0 text-sm leading-5 text-graphite-100">{children}</dd>
+      <dt className="text-xs leading-6 text-graphite-300">{label}</dt>
+      <dd className="min-w-0 text-sm leading-6 text-graphite-100">{children}</dd>
     </>
   );
 }
@@ -272,7 +272,7 @@ export function EmptyState({ title, description, action, icon: Icon, tone = 'chr
   return (
     <div className={`flex h-full min-h-[112px] flex-col items-center justify-center gap-1.5 px-5 py-6 text-center ${className}`}>
       {Icon ? <Icon aria-hidden className={`mb-1 size-5 ${paper ? 'text-ink/60' : 'text-graphite-500'}`} /> : null}
-      <p className={`max-w-[42ch] text-sm text-balance ${titleColor}`}>{title}</p>
+      <p className={`max-w-[42ch] text-sm font-medium text-balance ${titleColor}`}>{title}</p>
       {description ? <p className={`max-w-[46ch] text-xs text-balance ${secondary}`}>{description}</p> : null}
       {action ? <div className="mt-2">{action}</div> : null}
     </div>

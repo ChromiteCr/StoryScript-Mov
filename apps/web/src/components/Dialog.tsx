@@ -70,8 +70,8 @@ export function Dialog({ onClose, title, description, variant = 'center', footer
       className={`bg-graphite-900 p-0 text-graphite-100 ${VARIANT[variant]}`}
     >
       <div className={`flex h-full flex-col ${variant === 'center' ? 'max-h-[calc(100dvh-2rem)]' : ''}`}>
-        <header className="flex min-h-10 shrink-0 items-center gap-2 border-b border-graphite-950 bg-graphite-800 py-1.5 pr-2 pl-4">
-          <h2 id={titleId} className="min-w-0 flex-1 text-sm font-medium break-words text-graphite-100">
+        <header className="flex min-h-12 shrink-0 items-center gap-2 border-b border-graphite-950 bg-graphite-800 py-2 pr-2 pl-4">
+          <h2 id={titleId} className="min-w-0 flex-1 text-lg font-semibold break-words text-graphite-100">
             {title}
           </h2>
           {headerActions ? <div className="flex shrink-0 items-center gap-1">{headerActions}</div> : null}

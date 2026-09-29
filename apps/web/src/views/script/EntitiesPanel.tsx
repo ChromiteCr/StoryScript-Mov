@@ -275,7 +275,7 @@ export function EntitiesPanel({ entitiesQuery }: { entitiesQuery: UseQueryResult
               if (list.length === 0) return null;
               return (
                 <section key={t} aria-label={ENTITY_TYPE_LABEL[t]} className="py-1">
-                  <h3 className="px-3 pb-0.5 text-xs text-graphite-300">
+                  <h3 className="px-3 pt-2 pb-1 text-xs font-semibold text-graphite-300">
                     {ENTITY_TYPE_LABEL[t]} <span className="tabular-nums">{list.length}</span>
                   </h3>
                   <ul>

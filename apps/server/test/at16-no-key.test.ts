@@ -82,7 +82,7 @@ describe('AT-16 without any key', () => {
     // base_url + model saved, but no key: still not configured
     const saved = await app.put<ProvidersView>('/api/v1/settings/providers/text', { base_url: fake.url, model: 'fake-model' });
     expect(saved.status, saved.text).toBe(200);
-    expect(saved.data.text).toEqual({ base_url: fake.url, model: 'fake-model', key_last4: null, source: 'file' });
+    expect(saved.data.text).toEqual({ base_url: fake.url, model: 'fake-model', key_last4: null, source: 'file', research_model: null, research_search: false, search_support: null });
 
     const imported = await importFixture(app, '01-bookshop.txt', 'txt');
     const extract = await app.post('/api/v1/entities/extract');

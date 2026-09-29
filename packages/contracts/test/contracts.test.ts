@@ -32,9 +32,13 @@ describe('LLM-facing schemas stay provider-portable', () => {
     expect(JSON.stringify(schema)).not.toContain('anyOf":[{"type":"object"');
   });
 
-  test('ShotFields has every key required (nullable instead of optional)', () => {
+  test('ShotFields has every key required (nullable instead of optional), except S3 camera_notes', () => {
     const schema = z.toJSONSchema(ShotFields) as { properties: Record<string, unknown>; required: string[] };
-    expect(new Set(schema.required)).toEqual(new Set(Object.keys(schema.properties)));
+    // camera_notes is optional only so shots written before S3 keep parsing and
+    // hashing the same; the strict schema sent to providers still requires it
+    // (toStrictJsonSchema lists every property as required).
+    expect(new Set(schema.required)).toEqual(new Set(Object.keys(schema.properties).filter((k) => k !== 'camera_notes')));
+    expect(schema.properties).toHaveProperty('camera_notes');
   });
 });
 

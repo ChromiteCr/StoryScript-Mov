@@ -80,6 +80,7 @@ export function buildCsvExport(db: DbPort, kind: ExportCsvKind, opts: CsvExportO
         shots,
         resources: listResources(db),
         scenes,
+        characters: listEntities(db).filter((e) => e.type === 'character'),
       });
       const draft = plan.status === 'approved' ? '' : '-草案';
       return { kind, filename: name(`${EXPORT_CSV_TITLE.callsheet}${draft}`, plan.date), text: callSheetCsv(plan, lookup, opts.bom) };

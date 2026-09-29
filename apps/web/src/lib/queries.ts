@@ -27,7 +27,7 @@ export const keys = {
 };
 
 /** Query roots that belong to the open project; dropped when it changes. */
-const PROJECT_SCOPED_ROOTS: ReadonlySet<string> = new Set(['script', 'entities', 'shots', 'shot-revisions', 'drafts', 'jobs', 'boards']);
+const PROJECT_SCOPED_ROOTS: ReadonlySet<string> = new Set(['script', 'entities', 'shots', 'shot-revisions', 'drafts', 'jobs', 'boards', 'styles']);
 
 function dropProjectData(qc: QueryClient): void {
   qc.removeQueries({ predicate: (q) => PROJECT_SCOPED_ROOTS.has(String(q.queryKey[0])) });

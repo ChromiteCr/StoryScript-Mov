@@ -8,7 +8,7 @@
 import type { BoardSpec, Movement } from '@storyscript/contracts';
 import { ZH_BOARD } from '../i18n/zh.ts';
 import { rngFor } from '../util/random.ts';
-import type { V2 } from './math.ts';
+import { DEG, type V2 } from './math.ts';
 import { arrowPx, badgePlacement, FONT, guideLines } from './overlay-geom.ts';
 import type { FrameScene } from './scene.ts';
 import { looseLoop, sym, taperedStroke, type Rng } from './strokes.ts';
@@ -168,6 +168,60 @@ function cameraMove(m: Movement | null, W: number, H: number, rng: Rng, ctx: Ctx
       for (const cx of [x + 24, x + 80]) {
         g.push(el('path', { d: polyPath(looseLoop(cx, y, 8, 8, rng, 16)), fill: ctx.ink, 'fill-opacity': 0.9 }));
       }
+      break;
+    }
+    case 'orbit': {
+      const cx = W / 2;
+      const cy = H * 0.84;
+      const rx = W * 0.3;
+      const ry = H * 0.075;
+      const pts: V2[] = [];
+      for (let i = 0; i <= 64; i++) {
+        const a = (150 + (300 * i) / 64) * DEG;
+        pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+      }
+      g.push(penArrow(pts, rng, ctx, { width: w, head: 24 }));
+      break;
+    }
+    case 'aerial': {
+      const cx = W - 96;
+      const cy = 74;
+      const k = 26;
+      g.push(penLine([[cx - k, cy - k], [cx + k, cy + k]], rng, ctx, 3.4));
+      g.push(penLine([[cx + k, cy - k], [cx - k, cy + k]], rng, ctx, 3.4, false));
+      for (const [ox, oy] of [[-k, -k], [k, -k], [-k, k], [k, k]] as const) {
+        const ring = taperedStroke(looseLoop(cx + ox, cy + oy, 10, 10, rng, 18), { w0: 2.6, rng, overshoot: 0, wobble: 0.2 });
+        g.push(el('circle', { cx: cx + ox, cy: cy + oy, r: 11, fill: ctx.paper, 'fill-opacity': 0.92 }));
+        if (ring) g.push(el('path', { d: ring, fill: ctx.ink, 'fill-opacity': 0.9 }));
+      }
+      g.push(el('path', { d: polyPath(looseLoop(cx, cy, 7, 7, rng, 14)), fill: ctx.ink, 'fill-opacity': 0.9 }));
+      g.push(penArrow([[cx, cy + 58], [cx, cy + 120]], rng, ctx, { width: w, head: 22 }));
+      break;
+    }
+    case 'dolly_zoom': {
+      for (const [cx, cy, dx, dy] of [
+        [0, 0, 1, 1],
+        [W, 0, -1, 1],
+        [0, H, 1, -1],
+        [W, H, -1, -1],
+      ] as const) {
+        const u = Math.SQRT1_2;
+        g.push(penArrow([[cx + dx * u * 34, cy + dy * u * 34], [cx + dx * u * 118, cy + dy * u * 118]], rng, ctx, { width: w, head: 22 }));
+      }
+      for (const [a, b] of [
+        [[W / 2, 80], [W / 2, 30]],
+        [[W / 2, H - 80], [W / 2, H - 30]],
+        [[80, H / 2], [30, H / 2]],
+        [[W - 80, H / 2], [W - 30, H / 2]],
+      ] as const) {
+        g.push(penArrow([a as V2, b as V2], rng, ctx, { width: w, head: 20 }));
+      }
+      g.push(
+        text(
+          { x: 120, y: H - 30, 'font-family': FONT, 'font-size': 22, 'font-weight': 700, fill: ctx.ink, stroke: ctx.paper, 'stroke-width': 5, 'paint-order': 'stroke', 'letter-spacing': 3 },
+          ZH_BOARD.dollyZoom,
+        ),
+      );
       break;
     }
   }

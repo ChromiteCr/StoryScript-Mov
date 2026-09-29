@@ -121,6 +121,9 @@ const EN_MOVE: Record<Movement, string> = {
   crane: 'crane move',
   handheld: 'handheld camera',
   vehicle: 'camera hard-mounted on a vehicle',
+  orbit: 'camera orbiting around the subject',
+  aerial: 'aerial drone move high above',
+  dolly_zoom: 'dolly zoom (push in while zooming out)',
 };
 const ZH_MOVE: Record<Movement, string> = {
   static: '固定机位',
@@ -132,6 +135,9 @@ const ZH_MOVE: Record<Movement, string> = {
   crane: '升降',
   handheld: '手持',
   vehicle: '车载硬挂机位',
+  orbit: '环绕运动',
+  aerial: '航拍',
+  dolly_zoom: '变焦推拉',
 };
 
 const EN_POSE: Record<Pose, string> = { stand: 'standing', walk: 'walking', run: 'running', sit: 'sitting', point: 'pointing', crouch: 'crouching' };

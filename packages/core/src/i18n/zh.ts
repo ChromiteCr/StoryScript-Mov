@@ -54,6 +54,9 @@ export const ZH_MOVEMENT: Record<Movement, string> = {
   crane: '升降',
   handheld: '手持',
   vehicle: '车载',
+  orbit: '环绕',
+  aerial: '航拍',
+  dolly_zoom: '变焦推拉',
 };
 
 export const ZH_SCREEN_POS: Record<ScreenPos, string> = { L: '画左', C: '画中', R: '画右' };
@@ -124,6 +127,7 @@ export const ZH_BOARD = {
   camera: '摄影机',
   cameraAbove: '（正上方）',
   track: 'TRACK',
+  dollyZoom: '变焦推拉',
   lint: {
     subject_count: (board: number, shot: number) => `分镜人数（${board}）与镜头人物数（${shot}）不一致`,
     ots_fg_not_cropped: (label: string) => `过肩前景人物「${label}」没有被画框裁切`,

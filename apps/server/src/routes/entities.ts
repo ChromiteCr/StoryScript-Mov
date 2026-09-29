@@ -1,11 +1,12 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { Api, CreateEntityInput, Entity, EntityDraftSelection, JobAccepted, UpdateEntityInput } from '@storyscript/contracts';
+import { Api, CastApplyInput, CastSuggestion, CreateEntityInput, Entity, EntityDraftSelection, JobAccepted, UpdateEntityInput } from '@storyscript/contracts';
 import { startEntityExtraction } from '../ai/jobs.ts';
 import type { AppDeps } from '../deps.ts';
 import { listEntities } from '../db/repos/entity.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
+import { applyCast, castSuggestions } from '../services/cast.ts';
 import { applyEntityDraft, createEntity, updateEntity } from '../services/entities.ts';
 
 /** Entities (FR-02): manual CRUD without a key; LLM extraction → draft → apply with edits. */
@@ -13,6 +14,13 @@ export function registerEntityRoutes(app: Hono, deps: AppDeps): void {
   const db = () => deps.projectSession.require().db;
 
   app.get(Api.listEntities.path, (c) => respond(c, z.array(Entity), listEntities(db())));
+
+  // S3b: the cast list at the top of the script (static path before /entities/:id)
+  app.get(Api.castSuggestions.path, (c) => respond(c, z.array(CastSuggestion), castSuggestions(db())));
+  app.post(Api.applyCast.path, async (c) => {
+    const input = await parseBody(c, CastApplyInput);
+    return respond(c, z.array(Entity), applyCast(db(), input));
+  });
 
   app.post(Api.createEntity.path, async (c) => {
     const input = await parseBody(c, CreateEntityInput);

@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import type { ProviderTestResult, TextProviderView } from '@storyscript/contracts';
 import { PlugZap, Save } from 'lucide-react';
 import { useHealth, useProviders, useSaveTextProvider, useTestTextProvider } from '../lib/queries.ts';
@@ -46,6 +46,13 @@ export function hostOf(raw: string | null | undefined): string | null {
   }
 }
 
+/** What the web-search checkbox does on this service (view.search_support). */
+export function searchHint(support: TextProviderView['search_support'] | null): string {
+  if (support === 'dashscope') return '通义会用 enable_search 联网搜索。';
+  if (support === 'openai') return 'OpenAI 只有带 search 的模型（如 …-search-preview）才联网。';
+  return '这个服务商没有我们已知的联网参数，研究时只用模型自己的知识。';
+}
+
 function Dot({ ok, children }: { ok: boolean; children: ReactNode }) {
   return (
     <span className="inline-flex items-center gap-1.5">
@@ -80,6 +87,7 @@ interface ProviderFormProps {
 
 function ProviderForm({ view, save, test }: ProviderFormProps) {
   const hosted = useHealth().data?.hosted ?? false;
+  const searchHintId = useId();
   // a hosted server only reaches public https services, so the local one is left out there
   const presets = hosted ? PROVIDER_PRESETS.filter((p) => p.base_url.startsWith('https://')) : PROVIDER_PRESETS;
   const fromEnv = view?.source === 'env';
@@ -88,9 +96,17 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
   const [model, setModel] = useState(view?.model ?? '');
   const [key, setKey] = useState('');
   const [clearKey, setClearKey] = useState(false);
+  const [researchModel, setResearchModel] = useState(view?.research_model ?? '');
+  const [researchSearch, setResearchSearch] = useState(view?.research_search ?? false);
   const [errors, setErrors] = useState<{ base_url?: string; model?: string }>({});
 
-  const dirty = baseUrl.trim() !== (view?.base_url ?? '') || model.trim() !== (view?.model ?? '') || key !== '' || clearKey;
+  const dirty =
+    baseUrl.trim() !== (view?.base_url ?? '') ||
+    model.trim() !== (view?.model ?? '') ||
+    key !== '' ||
+    clearKey ||
+    researchModel.trim() !== (view?.research_model ?? '') ||
+    researchSearch !== (view?.research_search ?? false);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -107,6 +123,9 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
         model: model.trim(),
         // omitted = keep the stored key; "" = clear it
         api_key: clearKey ? '' : key.trim() !== '' ? key.trim() : undefined,
+        // empty = use the main model
+        research_model: researchModel.trim() === '' ? null : researchModel.trim(),
+        research_search: researchSearch,
       },
       {
         onSuccess: () => {
@@ -205,6 +224,39 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
         )}
       </Field>
 
+      <Field label="研究用模型" hint="研究新风格时用这个模型（同一服务、同一个 key），可以换成知识更多的型号。">
+        {({ id, describedBy }) => (
+          <TextInput
+            id={id}
+            aria-describedby={describedBy}
+            value={researchModel}
+            readOnly={fromEnv}
+            maxLength={100}
+            onChange={(e) => setResearchModel(e.target.value)}
+            placeholder="不填就用上面的模型"
+            spellCheck={false}
+            autoComplete="off"
+            className="font-mono text-xs read-only:text-graphite-300"
+          />
+        )}
+      </Field>
+      <div className="-mt-1 flex flex-col gap-1">
+        <label className="inline-flex items-center gap-1.5 text-sm text-graphite-100">
+          <input
+            type="checkbox"
+            checked={researchSearch}
+            disabled={fromEnv}
+            onChange={(e) => setResearchSearch(e.target.checked)}
+            aria-describedby={searchHintId}
+            className="size-3.5 accent-graphite-100"
+          />
+          研究风格时联网搜索
+        </label>
+        <p id={searchHintId} className="text-xs text-graphite-300">
+          {searchHint(view?.search_support ?? null)}
+        </p>
+      </div>
+
       <Field label="API key" hint={keyHint}>
         {({ id, describedBy }) => (
           <TextInput
@@ -275,7 +327,7 @@ export function TextProviderPanel() {
         title="文本模型"
         note={
           <p className="text-graphite-300">
-            拆镜和实体抽取使用 OpenAI 兼容的 chat completions 接口。未配置时这些按钮置灰，手工流程照常可用。
+            拆镜、实体抽取和风格研究使用 OpenAI 兼容的 chat completions 接口。未配置时这些按钮置灰，手工流程照常可用。
             {demo ? ' 当前是演示模式：AI 按钮回放录制的样例输出，不会外发。' : ''}
           </p>
         }
@@ -305,7 +357,12 @@ export function TextProviderPanel() {
           ) : providers.isError ? (
             <ErrorNotice error={providers.error} />
           ) : (
-            <ProviderForm key={view ? `${view.source}|${view.base_url}|${view.model}|${view.key_last4 ?? ''}` : 'none'} view={view} save={save} test={test} />
+            <ProviderForm
+              key={view ? `${view.source}|${view.base_url}|${view.model}|${view.key_last4 ?? ''}|${view.research_model ?? ''}|${view.research_search}` : 'none'}
+              view={view}
+              save={save}
+              test={test}
+            />
           )
         }
       />
@@ -314,7 +371,7 @@ export function TextProviderPanel() {
         title="外发说明"
         note={
           <p className="text-graphite-300">
-            只有在你点击 AI 按钮时，才会把相关剧本段落发送到你配置的地址
+            只有在你点击 AI 按钮时，才会把相关剧本段落（研究风格时是你输入的参考）发送到你配置的地址
             {host ? (
               <>
                 （当前为 <span className="font-mono text-xs text-graphite-100">{host}</span>）

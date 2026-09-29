@@ -4,6 +4,8 @@ export * from './entity.ts';
 export * from './shot.ts';
 export * from './board.ts';
 export * from './preset.ts';
+export * from './style.ts';
+export * from './cast.ts';
 export * from './plan.ts';
 export * from './take.ts';
 export * from './media.ts';

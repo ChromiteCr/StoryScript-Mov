@@ -9,7 +9,7 @@ import { AppError } from '../http/errors.ts';
  * no cap.
  */
 
-const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order'] as const;
+const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order', 'research_style', 'polish_shots'] as const;
 const IMAGE_JOB_KINDS = ['image_redraw'] as const;
 const DAY_MS = 24 * 3600 * 1000;
 

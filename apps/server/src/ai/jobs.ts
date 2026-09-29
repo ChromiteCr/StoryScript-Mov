@@ -1,15 +1,16 @@
 import { assertJobQuota } from '../services/quota.ts';
 import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
 import {
   BreakdownOutput,
+  BreakdownRequest,
   EntitiesOutput,
-  type BreakdownRequest,
   type DraftIssue,
   type Job,
   type ShotDraft,
 } from '@storyscript/contracts';
 import {
-  BREAKDOWN_PROMPT_VERSION,
+  breakdownPromptVersion,
   breakdownRepairErrors,
   buildBreakdownMessages,
   buildEntitiesMessages,
@@ -31,6 +32,7 @@ import type { AppDeps } from '../deps.ts';
 import { AppError } from '../http/errors.ts';
 import type { JobRunResult } from '../jobs/queue.ts';
 import { availableTechniques, requireScene } from '../services/shots.ts';
+import { promptStyle, resolveStyle } from '../services/styles.ts';
 import { projectContext, resolveAi, type AiClient } from './runtime.ts';
 
 /**
@@ -45,13 +47,13 @@ export function usageRecord(u: StructuredUsage): Record<string, number> {
   return { prompt_tokens: u.prompt, completion_tokens: u.completion, total_tokens: u.total, unknown_calls: u.unknown_calls };
 }
 
-function errorIssue(res: StructuredCallResult<unknown>): DraftIssue[] {
+export function errorIssue(res: StructuredCallResult<unknown>): DraftIssue[] {
   return res.error && res.error.code !== 'CANCELLED'
     ? [{ level: 'error', code: res.error.code, message: res.error.message, item: null }]
     : [];
 }
 
-function outcome<T>(
+export function outcome<T>(
   db: DbPort,
   res: StructuredCallResult<T>,
   draft: Omit<ShotDraft, 'id' | 'raw_output' | 'parsed' | 'attempts' | 'usage' | 'status' | 'issues' | 'created_at'> & {
@@ -86,7 +88,7 @@ function outcome<T>(
   };
 }
 
-function callOptions(ai: AiClient) {
+export function callOptions(ai: AiClient) {
   return {
     client: ai.cfg,
     chat: ai.chat,
@@ -165,6 +167,7 @@ export interface BreakdownScope {
 }
 
 export function breakdownContext(db: DbPort, sceneId: string, request: BreakdownRequest) {
+  const style = resolveStyle(db, request.style_id);
   const scene = requireScene(db, sceneId);
   const latest = latestScriptVersion(db);
   if (!latest || latest.id !== scene.script_version_id) {
@@ -184,15 +187,16 @@ export function breakdownContext(db: DbPort, sceneId: string, request: Breakdown
     max_shots: request.max_shots,
     reference_note: request.reference_note,
   };
-  return { scene, version: latest, techniques, roster, paragraphs, vctx };
+  return { scene, version: latest, techniques, roster, paragraphs, vctx, style };
 }
 
-export function startBreakdown(deps: AppDeps, sceneId: string, request: BreakdownRequest): Job {
+export function startBreakdown(deps: AppDeps, sceneId: string, input: z.input<typeof BreakdownRequest>): Job {
+  const request = BreakdownRequest.parse(input);
   const { project, jobs } = projectContext(deps);
   const db = project.db;
   const ai = resolveAi(deps);
-  const { scene, version, techniques, roster, paragraphs, vctx } = breakdownContext(db, sceneId, request);
-  const messages = buildBreakdownMessages({
+  const { scene, version, techniques, roster, paragraphs, vctx, style } = breakdownContext(db, sceneId, request);
+  const promptInput = {
     scene: { display_no: scene.display_no, heading: scene.heading },
     paragraphs,
     roster,
@@ -202,13 +206,17 @@ export function startBreakdown(deps: AppDeps, sceneId: string, request: Breakdow
     frame_format: project.project().default_aspect,
     max_shots: request.max_shots,
     target_seconds: request.target_seconds,
-  });
+    style: promptStyle(style),
+    level: request.level,
+  };
+  const messages = buildBreakdownMessages(promptInput);
+  const promptVersion = breakdownPromptVersion(promptInput);
   const scope: BreakdownScope = { scene_id: scene.id, script_version_id: version.id, request };
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'breakdown_scene',
     idempotency_key: `breakdown:${scene.id}:${contentHash(request)}`,
-    input_hash: contentHash({ prompt_version: BREAKDOWN_PROMPT_VERSION, messages }),
+    input_hash: contentHash({ prompt_version: promptVersion, messages }),
     remote: ai.remote,
     lane: 'llm',
     run: async (ctx) => {
@@ -223,7 +231,7 @@ export function startBreakdown(deps: AppDeps, sceneId: string, request: Breakdow
           return { ok: v.error_count === 0, errors: breakdownRepairErrors(v) };
         },
         signal: ctx.signal,
-        meta: { prompt_version: BREAKDOWN_PROMPT_VERSION, replay_key: sceneReplayKey(scene.heading) },
+        meta: { prompt_version: promptVersion, replay_key: sceneReplayKey(scene.heading) },
         onAttempt: ctx.markSent,
       });
       const parsed = res.value ?? res.last_parsed ?? null;
@@ -232,7 +240,7 @@ export function startBreakdown(deps: AppDeps, sceneId: string, request: Breakdow
         kind: 'breakdown',
         scope: { ...scope },
         model: ai.cfg.model,
-        prompt_version: BREAKDOWN_PROMPT_VERSION,
+        prompt_version: promptVersion,
         parsed,
         issues: [...issues, ...errorIssue(res)],
       });

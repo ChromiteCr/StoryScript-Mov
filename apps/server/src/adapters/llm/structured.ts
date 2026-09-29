@@ -80,6 +80,12 @@ export interface StructuredCallOptions<T> {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** base backoff for 5xx / network errors, multiplied by the attempt number */
   backoffMs?: number;
+  /**
+   * provider-specific body fields (S3 web search). A 400/422 while they are
+   * sent drops them for the next attempt (still counted), unless the error is
+   * clearly about response_format.
+   */
+  extraBody?: Record<string, unknown> | null;
 }
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
@@ -91,6 +97,8 @@ const MAX_RAW_ECHO = 20_000;
 /** 400/422 bodies that mean "this response_format is not supported". */
 const FORMAT_UNSUPPORTED = /response_format|json_schema|json_object|structured output|schema|not supported|unsupported|unavailable|invalid.{0,20}(type|format)/i;
 /** 400 bodies that clearly mean something else (do not downgrade). */
+/** 400 bodies that are plainly about response_format (keep the extra body, downgrade the format). */
+const FORMAT_ONLY = /response_format|json_schema|json_object|structured output/i;
 const OTHER_BAD_REQUEST = /context length|context window|maximum context|too many tokens|max_tokens|model.{0,30}(not found|does not exist|not exist)|api key|authentication|quota|balance|insufficient/i;
 
 export function isFormatUnsupported(message: string): boolean {
@@ -138,6 +146,7 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
   let lastProblem = '';
   let last_parsed: T | undefined;
   let last_errors: string[] | undefined;
+  let extraBody = opts.extraBody && Object.keys(opts.extraBody).length ? opts.extraBody : null;
 
   const result = (extra: Partial<StructuredCallResult<T>>): StructuredCallResult<T> => ({
     attempts,
@@ -186,6 +195,7 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
         model: client.model,
         messages: [...base, ...repair],
         ...(response_format ? { response_format } : {}),
+        ...(extraBody ? { extra_body: extraBody } : {}),
         signal,
         meta: opts.meta,
       });
@@ -195,6 +205,11 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
       if (ce.kind === 'replay_miss') return fail('PROVIDER_ERROR', ce.message);
       if (ce.kind === 'http' && ce.status !== null) {
         const s = ce.status;
+        if ((s === 400 || s === 422) && extraBody && !FORMAT_ONLY.test(ce.message)) {
+          lastProblem = `服务不接受联网搜索参数（HTTP ${s}），已改为不联网`;
+          extraBody = null;
+          continue;
+        }
         if ((s === 400 || s === 422) && mode !== 'prompt_only' && isFormatUnsupported(ce.message)) {
           const next = nextMode(mode);
           lastProblem = `服务不支持 ${mode}（HTTP ${s}），已改用 ${next}`;

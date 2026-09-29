@@ -1,14 +1,20 @@
 import { useEffect, useId, useRef, useState, type FormEvent, type ReactNode } from 'react';
-import type { Scene, Shot } from '@storyscript/contracts';
+import type { Scene, Shot, StyleLevel } from '@storyscript/contracts';
 import { TECHNIQUES } from '@storyscript/core';
-import { FileSearch, LocateFixed, Sparkles } from 'lucide-react';
+import { FileSearch, LocateFixed, Palette, Sparkles } from 'lucide-react';
 import { breakdownSlot, JOB_STATUS_LABEL, trackJob, useTrackedJob } from '../../lib/jobs.ts';
 import { useJob, useRequestBreakdown, useUpdateScene } from '../../lib/queries.ts';
+import { useStyles } from '../../lib/queries-style.ts';
 import { pageHref } from '../../lib/stages.ts';
+import { effectiveLevel, effectiveStyleId, outgoingSentence } from '../../lib/style-form.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, Notice, SelectInput, TextArea, TextInput } from '../../components/ui.tsx';
 import { Inspector, InspectorGroup, InspectorRow } from '../../components/workspace.tsx';
 import { useWorkspace } from './context.ts';
+import { LevelRow, StyleSelectRow } from './StyleControls.tsx';
+
+/** 风格要求: free text the model gets as data (contract limit 800). */
+const STYLE_NOTE_MAX = 800;
 
 /** A labelled control row in the inspector's label/value grid (label wired to the control). */
 export function FormRow({ label, children, hint }: { label: string; children: (id: string) => ReactNode; hint?: ReactNode }) {
@@ -108,8 +114,12 @@ function BreakdownGroup({ scene, shots, autoFocus }: { scene: Scene; shots: read
   const request = useRequestBreakdown();
   const tracked = useTrackedJob(breakdownSlot(scene.id));
   const trackedJob = useJob(tracked?.jobId ?? null);
+  const styles = useStyles();
   const [technique, setTechnique] = useState('');
   const [reference, setReference] = useState('');
+  // null = not touched: the form follows the group's defaults once they load
+  const [styleChoice, setStyleChoice] = useState<string | null>(null);
+  const [levelChoice, setLevelChoice] = useState<StyleLevel | null>(null);
   const [maxShots, setMaxShots] = useState('12');
   const [target, setTarget] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -121,6 +131,9 @@ function BreakdownGroup({ scene, shots, autoFocus }: { scene: Scene; shots: read
   }, [autoFocus]);
 
   const chosen = TECHNIQUES.find((t) => t.id === technique) ?? null;
+  const styleId = effectiveStyleId(styleChoice, styles.data);
+  const level = effectiveLevel(levelChoice, styles.data);
+  const chosenStyle = styles.data?.cards.find((c) => c.id === styleId) ?? null;
   const locked = shots.filter((s) => s.locked).length;
   const pendingDraft = ws.pendingDraftByScene.get(scene.id) ?? null;
 
@@ -134,7 +147,14 @@ function BreakdownGroup({ scene, shots, autoFocus }: { scene: Scene; shots: read
     request.mutate(
       {
         sceneId: scene.id,
-        input: { technique_id: technique || null, reference_note: reference.trim() || null, max_shots: max, target_seconds: secs },
+        input: {
+          technique_id: technique || null,
+          reference_note: reference.trim() || null,
+          max_shots: max,
+          target_seconds: secs,
+          style_id: styleId || null,
+          level,
+        },
       },
       {
         onSuccess: ({ job_id }) => {
@@ -170,20 +190,32 @@ function BreakdownGroup({ scene, shots, autoFocus }: { scene: Scene; shots: read
             </SelectInput>
           )}
         </FormRow>
+        <StyleSelectRow cards={styles.data?.cards ?? []} value={styleId} onChange={setStyleChoice} hint={chosenStyle ? undefined : '不指定时，按剧本和上面的手法来拆。'} />
+        <LevelRow value={level} onChange={setLevelChoice} />
+        <div className="flex justify-end">
+          <Button variant="ghost" size="sm" onClick={ws.openStyles}>
+            <Palette aria-hidden className="size-3" />
+            管理风格…
+          </Button>
+        </div>
+        {styles.isError ? <ErrorNotice error={styles.error} /> : null}
         <div className="flex flex-col gap-1">
           <label htmlFor={refId} className="text-xs text-graphite-300">
-            参考说明
+            风格要求
           </label>
           <TextArea
             id={refId}
             value={reference}
             onChange={(e) => setReference(e.target.value)}
-            rows={2}
-            maxLength={500}
+            rows={3}
+            maxLength={STYLE_NOTE_MAX}
             placeholder="例如：节奏克制，多用静止的近景"
           />
           <p className="text-xs text-graphite-300">
-            仅作风格参考，输出为通用手法建议（未核实），不会引用具体影片的镜头。<span className="tabular-nums">{reference.length}/500</span>
+            作为数据发给模型，输出为通用手法建议（未核实），不会引用具体影片的镜头。
+            <span className="tabular-nums">
+              {reference.length}/{STYLE_NOTE_MAX}
+            </span>
           </p>
         </div>
         <FormRow label="镜头上限">
@@ -195,7 +227,7 @@ function BreakdownGroup({ scene, shots, autoFocus }: { scene: Scene; shots: read
           )}
         </FormRow>
         <p className="text-xs text-graphite-300">
-          将发送本场 {scene.paragraph_ids.length} 个段落和角色名单（{ws.characters.length} 人）到{' '}
+          {outgoingSentence({ paragraphs: scene.paragraph_ids.length, characters: ws.characters.length, styleName: chosenStyle?.name ?? null, hasStyleNote: reference.trim() !== '' })}{' '}
           <span className="text-graphite-100">{ws.providerHost ?? '你配置的地址'}</span>。结果先进草案，勾选后才写入镜头表；每步最多外发 3 次。
           {locked > 0 ? ` 本场 ${locked} 个锁定镜头不会被改动。` : shots.length > 0 ? ' 要保护的镜头可以先锁定。' : ''}
         </p>

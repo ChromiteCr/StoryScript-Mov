@@ -12,7 +12,7 @@ import type {
   Technique,
   UpdateShotInput,
 } from '@storyscript/contracts';
-import { shotContentHash, TECHNIQUES, validateShotFieldsBasic } from '@storyscript/core';
+import { cleanShotFields, shotContentHash, TECHNIQUES, validateShotFieldsBasic } from '@storyscript/core';
 import type { DbPort } from '../db/port.ts';
 import { characterRoster } from '../db/repos/entity.ts';
 import { getScene, getScriptVersion, type SceneRecord } from '../db/repos/script.ts';
@@ -90,7 +90,8 @@ function writeRevision(db: DbPort, shot: Shot, origin: Origin, reason: string | 
   insertShotRevision(db, { id: randomUUID(), shot_id: shot.id, revision: shot.revision, fields: shot.fields, origin, reason, at });
 }
 
-export function createShot(db: DbPort, input: Input<typeof CreateShotInput>, now = new Date().toISOString()): Shot {
+export function createShot(db: DbPort, raw: Input<typeof CreateShotInput>, now = new Date().toISOString()): Shot {
+  const input = { ...raw, fields: cleanShotFields(raw.fields) };
   return db.tx(() => {
     const scene = requireScene(db, input.scene_id);
     checkFields(db, input.fields);
@@ -120,7 +121,8 @@ export function createShot(db: DbPort, input: Input<typeof CreateShotInput>, now
   });
 }
 
-export function updateShot(db: DbPort, id: string, input: Input<typeof UpdateShotInput>, now = new Date().toISOString()): Shot {
+export function updateShot(db: DbPort, id: string, raw: Input<typeof UpdateShotInput>, now = new Date().toISOString()): Shot {
+  const input = raw.fields ? { ...raw, fields: cleanShotFields(raw.fields) } : raw;
   return db.tx(() => {
     const shot = requireShot(db, id);
     checkRevision(shot, input.expected_revision);

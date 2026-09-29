@@ -51,11 +51,70 @@ export function keyLast4(key: string | null): string | null {
   return key.length >= 8 ? key.slice(-4) : '****';
 }
 
+// ------------------------------------------------------------ S3 research --
+
+export type SearchSupport = 'dashscope' | 'openai';
+
+const hostOf = (url: string): string => {
+  try {
+    return new URL(url).hostname.toLowerCase();
+  } catch {
+    return '';
+  }
+};
+
+/** The web-search flag a service takes, from its address (null: none we know). */
+export function searchSupport(baseUrl: string): SearchSupport | null {
+  const host = hostOf(baseUrl);
+  if (host === 'dashscope.aliyuncs.com' || host.endsWith('.dashscope.aliyuncs.com') || host === 'dashscope-intl.aliyuncs.com') return 'dashscope';
+  if (host === 'api.openai.com') return 'openai';
+  return null;
+}
+
+/** Body fields that turn web search on for this service and model, or null. */
+export function searchBody(baseUrl: string, model: string): Record<string, unknown> | null {
+  const support = searchSupport(baseUrl);
+  if (support === 'dashscope') return { enable_search: true };
+  // OpenAI searches only with its search models (…-search-preview and the like)
+  if (support === 'openai' && /search/i.test(model)) return { web_search_options: {} };
+  return null;
+}
+
+export interface ResearchSettings {
+  /** null: the main model */
+  model: string | null;
+  search: boolean;
+}
+
+export function researchSettings(stateDir: string): ResearchSettings {
+  const stored = readCredentials(stateDir).llm ?? {};
+  return { model: clean(stored.research_model), search: stored.research_search === true };
+}
+
+/** Client and body for a style research call: the main service and key, maybe another model, maybe web search. */
+export function researchClientConfig(
+  stateDir: string,
+  main: TextClientConfig,
+): { cfg: TextClientConfig; extraBody: Record<string, unknown> | null } {
+  const r = researchSettings(stateDir);
+  const cfg = { ...main, model: r.model ?? main.model };
+  return { cfg, extraBody: r.search ? searchBody(cfg.base_url, cfg.model) : null };
+}
+
 /** What the settings page may see: never the key, only its last 4 characters. */
 export function textProviderView(stateDir: string, env: NodeJS.ProcessEnv): TextProviderView | null {
   const r = resolveTextProvider(stateDir, env);
   if (!r.base_url && !r.model && !r.api_key) return null;
-  return { base_url: r.base_url ?? '', model: r.model ?? '', key_last4: keyLast4(r.api_key), source: r.source };
+  const research = researchSettings(stateDir);
+  return {
+    base_url: r.base_url ?? '',
+    model: r.model ?? '',
+    key_last4: keyLast4(r.api_key),
+    source: r.source,
+    research_model: research.model,
+    research_search: research.search,
+    search_support: r.base_url ? searchSupport(r.base_url) : null,
+  };
 }
 
 /**
@@ -65,10 +124,15 @@ export function textProviderView(stateDir: string, env: NodeJS.ProcessEnv): Text
 export function saveTextProvider(stateDir: string, input: SaveTextProviderInput): void {
   const creds = readCredentials(stateDir);
   const prev = creds.llm ?? {};
-  const next: { base_url: string; model: string; api_key?: string } = {
+  const next: { base_url: string; model: string; api_key?: string; research_model?: string; research_search?: boolean } = {
     base_url: input.base_url.trim(),
     model: input.model.trim(),
   };
+  // S3 research settings: omitted keeps what is stored; null or "" = the main model
+  const researchModel = input.research_model === undefined ? prev.research_model : (input.research_model ?? '').trim();
+  if (researchModel) next.research_model = researchModel;
+  const search = input.research_search ?? prev.research_search;
+  if (search) next.research_search = true;
   if (input.api_key === undefined || input.api_key === null) {
     if (prev.api_key) next.api_key = prev.api_key;
   } else if (input.api_key.trim() !== '') {

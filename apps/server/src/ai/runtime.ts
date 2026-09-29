@@ -2,7 +2,7 @@ import type { ChatPort, TextClientConfig } from '../adapters/llm/chat.ts';
 import { OpenAIChat } from '../adapters/llm/openai-chat.ts';
 import { ReplayChat, resolveReplayDir } from '../adapters/llm/replay-chat.ts';
 import { FileCapabilityCache, MemoryCapabilityCache, type CapabilityCache } from '../config/capability-cache.ts';
-import { textClientConfig } from '../config/text-provider.ts';
+import { researchClientConfig, textClientConfig } from '../config/text-provider.ts';
 import type { AppDeps } from '../deps.ts';
 import { AppError } from '../http/errors.ts';
 import { jobQueueFor, type JobQueue } from '../jobs/queue.ts';
@@ -34,6 +34,8 @@ export interface AiClient {
   capabilityCache: CapabilityCache;
   /** true when requests leave the machine (paid, never auto-resent) */
   remote: boolean;
+  /** S3 style research: same service and key, maybe another model, maybe web search */
+  research: { cfg: TextClientConfig; chat: ChatPort; extraBody: Record<string, unknown> | null };
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   backoffMs?: number;
 }
@@ -58,7 +60,15 @@ export function resolveAi(deps: AppDeps): AiClient {
       chat = ReplayChat.fromDir(o.replayDir ?? resolveReplayDir());
       replayChats.set(deps, chat);
     }
-    return { cfg: DEMO_CLIENT, chat, capabilityCache: new MemoryCapabilityCache(), remote: false, sleep: o.sleep, backoffMs: o.backoffMs };
+    return {
+      cfg: DEMO_CLIENT,
+      chat,
+      capabilityCache: new MemoryCapabilityCache(),
+      remote: false,
+      research: { cfg: DEMO_CLIENT, chat, extraBody: null },
+      sleep: o.sleep,
+      backoffMs: o.backoffMs,
+    };
   }
   const cfg = textClientConfig(deps.stateDir, deps.env);
   if (!cfg) {
@@ -70,11 +80,15 @@ export function resolveAi(deps: AppDeps): AiClient {
     cache = new FileCapabilityCache(deps.stateDir);
     fileCaches.set(deps, cache);
   }
+  const makeChat = (c: TextClientConfig) => (o.chat ? o.chat(c) : new OpenAIChat(c, { fetch: deps.fetch }));
+  const chat = makeChat(cfg);
+  const research = researchClientConfig(deps.stateDir, cfg);
   return {
     cfg,
-    chat: o.chat ? o.chat(cfg) : new OpenAIChat(cfg, { fetch: deps.fetch }),
+    chat,
     capabilityCache: cache,
     remote: true,
+    research: { ...research, chat: research.cfg.model === cfg.model ? chat : makeChat(research.cfg) },
     sleep: o.sleep,
     backoffMs: o.backoffMs,
   };

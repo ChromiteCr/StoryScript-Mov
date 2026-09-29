@@ -67,6 +67,8 @@ export interface ScriptWorkspace {
   openDraft: (draftId: string) => void;
   openEntityDraft: (draftId: string) => void;
   openRevisions: (shot: Shot) => void;
+  /** open the style library drawer (S3) */
+  openStyles: () => void;
   askReason: (req: ReasonRequest) => void;
   notify: (message: string) => void;
   showTab: (tab: MainTab) => void;

@@ -315,6 +315,66 @@ function cameraMoveSvg(m: Movement | null, W: number, H: number): string {
       for (const cx of [x + 24, x + 80]) g.push(el('circle', { cx, cy: y, r: 9, fill: C.ink }));
       break;
     }
+    case 'orbit': {
+      // an elliptical ring around the subject's feet, arrowhead at one end
+      const cx = W / 2;
+      const cy = H * 0.84;
+      const rx = W * 0.3;
+      const ry = H * 0.075;
+      const pts: V2[] = [];
+      for (let i = 0; i <= 64; i++) {
+        const a = (150 + (300 * i) / 64) * DEG;
+        pts.push([cx + rx * Math.cos(a), cy + ry * Math.sin(a)]);
+      }
+      g.push(arrowSvg(pts, { width: w, head: 22 }));
+      break;
+    }
+    case 'aerial': {
+      // a small drone glyph (an X with a rotor at each end) and a short downward arrow
+      const cx = W - 96;
+      const cy = 74;
+      const k = 26;
+      const arms: V2[][] = [
+        [[cx - k, cy - k], [cx + k, cy + k]],
+        [[cx + k, cy - k], [cx - k, cy + k]],
+      ];
+      g.push(el('path', { d: linesPath(arms), fill: 'none', stroke: C.halo, 'stroke-width': 9, 'stroke-linecap': 'round' }));
+      g.push(el('path', { d: linesPath(arms), fill: 'none', stroke: C.ink, 'stroke-width': 3.5, 'stroke-linecap': 'round' }));
+      for (const [rx, ry] of [[-k, -k], [k, -k], [-k, k], [k, k]] as const) {
+        g.push(el('circle', { cx: cx + rx, cy: cy + ry, r: 10, fill: C.paper, stroke: C.halo, 'stroke-width': 8 }));
+        g.push(el('circle', { cx: cx + rx, cy: cy + ry, r: 10, fill: C.paper, stroke: C.ink, 'stroke-width': 3 }));
+      }
+      g.push(el('circle', { cx, cy, r: 7, fill: C.ink }));
+      g.push(arrowSvg([[cx, cy + 58], [cx, cy + 120]], { width: w, head: 20 }));
+      break;
+    }
+    case 'dolly_zoom': {
+      // corners point inward (dolly in) while the edge midpoints point outward (zoom out)
+      for (const [cx, cy, dx, dy] of [
+        [0, 0, 1, 1],
+        [W, 0, -1, 1],
+        [0, H, 1, -1],
+        [W, H, -1, -1],
+      ] as const) {
+        const u = Math.SQRT1_2;
+        g.push(arrowSvg([[cx + dx * u * 34, cy + dy * u * 34], [cx + dx * u * 118, cy + dy * u * 118]], { width: w }));
+      }
+      for (const [a, b] of [
+        [[W / 2, 80], [W / 2, 30]],
+        [[W / 2, H - 80], [W / 2, H - 30]],
+        [[80, H / 2], [30, H / 2]],
+        [[W - 80, H / 2], [W - 30, H / 2]],
+      ] as const) {
+        g.push(arrowSvg([a as V2, b as V2], { width: w, head: 18 }));
+      }
+      g.push(
+        text(
+          { x: 120, y: H - 30, 'font-family': FONT, 'font-size': 22, 'font-weight': 700, fill: C.ink, stroke: C.halo, 'stroke-width': 5, 'paint-order': 'stroke', 'letter-spacing': 3 },
+          ZH_BOARD.dollyZoom,
+        ),
+      );
+      break;
+    }
   }
   g.push('</g>');
   return g.join('');

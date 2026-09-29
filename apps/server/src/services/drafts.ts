@@ -3,13 +3,14 @@ import { z } from 'zod';
 import {
   BreakdownOutput,
   BreakdownRequest,
+  PolishOutput,
   type ApplyBreakdownInput,
   type ApplyBreakdownResult,
   type DraftDetail,
   type Shot,
   type ShotDraft,
 } from '@storyscript/contracts';
-import { breakdownClaimFlags, shotContentHash, validateBreakdown } from '@storyscript/core';
+import { breakdownClaimFlags, cleanShotFields, shotContentHash, validateBreakdown } from '@storyscript/core';
 import type { DbPort } from '../db/port.ts';
 import { getDraft, setDraftStatus } from '../db/repos/draft.ts';
 import { getScriptVersion, latestScriptVersion } from '../db/repos/script.ts';
@@ -23,6 +24,7 @@ import {
   updateShotRow,
 } from '../db/repos/shot.ts';
 import { AppError } from '../http/errors.ts';
+import { polishShots } from './polish.ts';
 import { fieldsContext, requireScene } from './shots.ts';
 
 /**
@@ -46,6 +48,14 @@ export function requireDraft(db: DbPort, id: string): ShotDraft {
 
 export function draftDetail(db: DbPort, id: string): DraftDetail {
   const draft = requireDraft(db, id);
+  if (draft.kind === 'polish') {
+    const parsed = PolishOutput.safeParse(draft.parsed);
+    return {
+      draft,
+      current_shots: polishShots(db, draft.scope),
+      claim_flags: parsed.success ? breakdownClaimFlags(parsed.data.shots.map((x) => x.fields)) : [],
+    };
+  }
   if (draft.kind !== 'breakdown') return { draft, current_shots: [], claim_flags: [] };
   const scope = BreakdownScope.safeParse(draft.scope);
   const parsed = BreakdownOutput.safeParse(draft.parsed);
@@ -143,7 +153,7 @@ export function applyBreakdown(db: DbPort, id: string, input: Input<typeof Apply
         },
         manual_note: null,
         origin: 'ai',
-        fields: item.fields,
+        fields: cleanShotFields(item.fields),
         locked: false,
         archived: false,
         required_status: 'required',

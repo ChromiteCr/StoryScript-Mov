@@ -28,6 +28,7 @@ export class OpenAIChat implements ChatPort {
     try {
       const res = await this.client.chat.completions.create(
         {
+          ...(req.extra_body ?? {}),
           model: req.model,
           messages: req.messages,
           ...(req.response_format ? { response_format: req.response_format } : {}),

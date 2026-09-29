@@ -10,6 +10,8 @@ import { Board, BoardRaster, BoardSpec } from './board.ts';
 import { ImageDialect } from './provider.ts';
 import { LinkCandidate, MediaAsset, ProbeNormalized, ShotMediaLink, SourceRoot, SourceRootKind } from './media.ts';
 import { Constraint, Plan, Resource, ResourceType, Setup, SetupDurations, TimeWindow, Violation } from './plan.ts';
+import { StyleCard, StyleCardInput, StyleDefaults, StyleLevel, StyleLibrary, StyleResearchInput } from './style.ts';
+import { CastApplyInput, CastSuggestion, CastSyncApplyInput, CastSyncPreview } from './cast.ts';
 import { Take, TakeRating } from './take.ts';
 
 /**
@@ -76,6 +78,12 @@ export const TextProviderView = z.object({
   /** last 4 characters of the key, or null when unset */
   key_last4: z.string().nullable(),
   source: SettingSource,
+  /** S3: model for style research (same service and key); null = the main model */
+  research_model: z.string().nullable(),
+  /** S3: ask the service to search the web during style research, where it supports that */
+  research_search: z.boolean(),
+  /** which web-search flag this service takes, or null when it has none we know */
+  search_support: z.enum(['dashscope', 'openai']).nullable(),
 });
 export type TextProviderView = z.infer<typeof TextProviderView>;
 
@@ -107,6 +115,10 @@ export const SaveTextProviderInput = z.object({
   model: z.string().min(1),
   /** omitted/null = keep the stored key; "" = clear it */
   api_key: z.string().nullable().optional(),
+  /** S3: omitted = keep; null or "" = use the main model */
+  research_model: z.string().trim().max(100).nullable().optional(),
+  /** S3: omitted = keep */
+  research_search: z.boolean().optional(),
 });
 export type SaveTextProviderInput = z.infer<typeof SaveTextProviderInput>;
 
@@ -218,11 +230,15 @@ export const CreateEntityInput = z.object({
   type: EntityType,
   name: z.string().min(1),
   aliases: z.array(z.string()),
+  /** S3b: characters only; "" or null = none */
+  actor_name: z.string().max(40).nullable().optional(),
 });
 export const UpdateEntityInput = z.object({
   name: z.string().min(1).optional(),
   aliases: z.array(z.string()).optional(),
   confirmed: z.boolean().optional(),
+  /** S3b: characters only; "" or null clears it */
+  actor_name: z.string().max(40).nullable().optional(),
 });
 
 export const EntityDraftSelection = z.object({
@@ -272,11 +288,57 @@ export const NarrativeOrderInput = z.object({
 
 export const BreakdownRequest = z.object({
   technique_id: z.string().nullable(),
-  reference_note: z.string().max(500).nullable(),
+  /** 风格要求: free text from the user, handed to the model as data */
+  reference_note: z.string().max(800).nullable(),
   max_shots: z.number().int().min(1).max(40),
   target_seconds: z.number().int().positive().nullable(),
+  /** S3: a built-in or group style card */
+  style_id: z.string().nullable().default(null),
+  /** S3: how ambitious the shots may be */
+  level: StyleLevel.default('steady'),
 });
 export type BreakdownRequest = z.infer<typeof BreakdownRequest>;
+
+// ------------------------------------------------------------- S3a polish --
+
+/** 细化 keeps the framing and adds detail; 优化 may change framing; 重写 redesigns the shot. */
+export const PolishMode = z.enum(['refine', 'improve', 'rewrite']);
+export type PolishMode = z.infer<typeof PolishMode>;
+
+export const POLISH_MAX_SHOTS = 12;
+
+export const PolishRequest = z.object({
+  shot_ids: z.array(Uuid).min(1).max(POLISH_MAX_SHOTS),
+  mode: PolishMode,
+  instruction: z.string().trim().max(500).nullable(),
+  style_id: z.string().nullable(),
+  level: StyleLevel,
+});
+export type PolishRequest = z.infer<typeof PolishRequest>;
+
+/** What the model may change: everything but the script source, which stays the shot's own. */
+export const PolishedShotFields = ShotFields.omit({ source: true });
+export type PolishedShotFields = z.infer<typeof PolishedShotFields>;
+
+/** LLM output of a polish call: one item per input shot, by its ref (s1, s2 …). */
+export const PolishOutput = z.object({
+  shots: z.array(z.object({ ref: z.string(), change_note: z.string(), fields: PolishedShotFields })),
+});
+export type PolishOutput = z.infer<typeof PolishOutput>;
+
+export const ApplyPolishInput = z.object({
+  /** indices into draft.parsed.shots */
+  selected: z.array(z.number().int().nonnegative()),
+  expected_revisions: z.record(z.string(), z.number().int().nonnegative()),
+});
+export type ApplyPolishInput = z.infer<typeof ApplyPolishInput>;
+
+export const ApplyPolishResult = z.object({
+  updated: z.array(Shot),
+  skipped_locked_ids: z.array(Uuid),
+  skipped_missing_ids: z.array(Uuid),
+});
+export type ApplyPolishResult = z.infer<typeof ApplyPolishResult>;
 
 /** Draft plus what the diff view needs about the scene's current shots. */
 export const DraftDetail = z.object({
@@ -666,6 +728,23 @@ export const Api = {
   getDraft: { method: 'GET', path: '/api/v1/drafts/:id', output: DraftDetail },
   applyBreakdown: { method: 'POST', path: '/api/v1/drafts/:id/apply', input: ApplyBreakdownInput, output: ApplyBreakdownResult },
   discardDraft: { method: 'POST', path: '/api/v1/drafts/:id/discard', output: ShotDraft },
+
+  // S3 — style cards and research
+  getStyles: { method: 'GET', path: '/api/v1/styles', output: StyleLibrary },
+  createStyle: { method: 'POST', path: '/api/v1/styles', input: StyleCardInput, output: StyleCard },
+  saveStyleDefaults: { method: 'PUT', path: '/api/v1/styles/defaults', input: StyleDefaults, output: StyleLibrary },
+  researchStyle: { method: 'POST', path: '/api/v1/styles/research', input: StyleResearchInput, output: JobAccepted },
+  updateStyle: { method: 'PUT', path: '/api/v1/styles/:id', input: StyleCardInput, output: StyleCard },
+  deleteStyle: { method: 'DELETE', path: '/api/v1/styles/:id', output: z.object({ id: z.string() }) },
+  saveResearchedStyle: { method: 'POST', path: '/api/v1/drafts/:id/save-style', input: StyleCardInput, output: StyleCard },
+  // S3a — polish
+  requestPolish: { method: 'POST', path: '/api/v1/shots/polish', input: PolishRequest, output: JobAccepted },
+  applyPolish: { method: 'POST', path: '/api/v1/drafts/:id/apply-polish', input: ApplyPolishInput, output: ApplyPolishResult },
+  // S3b — cast
+  castSuggestions: { method: 'GET', path: '/api/v1/entities/cast', output: z.array(CastSuggestion) },
+  applyCast: { method: 'POST', path: '/api/v1/entities/cast', input: CastApplyInput, output: z.array(Entity) },
+  castSyncPreview: { method: 'GET', path: '/api/v1/resources/cast-sync', output: CastSyncPreview },
+  applyCastSync: { method: 'POST', path: '/api/v1/resources/cast-sync', input: CastSyncApplyInput, output: z.array(Resource) },
 
   // M3 — jobs
   getJob: { method: 'GET', path: '/api/v1/jobs/:id', output: Job },

@@ -11,9 +11,10 @@ interface EntityRow {
   aliases_json: string;
   origin: string;
   confirmed: number;
+  actor_name: string | null;
 }
 
-const COLS = 'id, type, alias, name, aliases_json, origin, confirmed';
+const COLS = 'id, type, alias, name, aliases_json, origin, confirmed, actor_name';
 export const ALIAS_PREFIX: Record<EntityType, string> = { character: 'c', location: 'l', prop: 'o' };
 
 function fromRow(r: EntityRow): Entity {
@@ -59,7 +60,7 @@ export function nextAlias(db: DbPort, type: EntityType): string {
 export function insertEntity(db: DbPort, e: Entity): void {
   const x = Entity.parse(e);
   db.run(
-    `INSERT INTO entity (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO entity (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.type,
     x.alias,
@@ -67,12 +68,20 @@ export function insertEntity(db: DbPort, e: Entity): void {
     JSON.stringify(x.aliases),
     x.origin,
     x.confirmed ? 1 : 0,
+    x.actor_name,
   );
 }
 
 export function updateEntityRow(db: DbPort, e: Entity): void {
   const x = Entity.parse(e);
-  db.run('UPDATE entity SET name = ?, aliases_json = ?, confirmed = ? WHERE id = ?', x.name, JSON.stringify(x.aliases), x.confirmed ? 1 : 0, x.id);
+  db.run(
+    'UPDATE entity SET name = ?, aliases_json = ?, confirmed = ?, actor_name = ? WHERE id = ?',
+    x.name,
+    JSON.stringify(x.aliases),
+    x.confirmed ? 1 : 0,
+    x.actor_name,
+    x.id,
+  );
 }
 
 /** Character aliases (c1, c2 …) — the roster handed to the model. */

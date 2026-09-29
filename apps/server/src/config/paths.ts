@@ -88,7 +88,8 @@ const ProviderCredentials = z.object({
 });
 
 export const Credentials = z.looseObject({
-  llm: ProviderCredentials.optional(),
+  // S3: style research may use another model on the same service, with the service's web search
+  llm: ProviderCredentials.extend({ research_model: z.string().optional(), research_search: z.boolean().optional() }).optional(),
   image: ProviderCredentials.extend({ dialect_override: z.string().nullable().optional() }).optional(),
 });
 export type Credentials = z.infer<typeof Credentials>;

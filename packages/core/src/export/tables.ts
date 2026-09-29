@@ -150,6 +150,8 @@ export interface PlanLookup {
   resources: ReadonlyMap<string, Resource>;
   /** scene id → display number ("1", "12A") */
   sceneNos: ReadonlyMap<string, string>;
+  /** S3b: character entity id → name, so performers read "周远（饰 林川）" */
+  characters: ReadonlyMap<string, string>;
 }
 
 export function buildPlanLookup(input: {
@@ -159,6 +161,8 @@ export function buildPlanLookup(input: {
   shots: readonly Shot[];
   resources: readonly Resource[];
   scenes: readonly { id: string; display_no: string }[];
+  /** S3b: characters (id → name), optional */
+  characters?: readonly { id: string; name: string }[];
 }): PlanLookup {
   return {
     timezone: input.timezone,
@@ -167,6 +171,7 @@ export function buildPlanLookup(input: {
     shots: new Map(input.shots.map((s) => [s.id, s])),
     resources: new Map(input.resources.map((r) => [r.id, r])),
     sceneNos: new Map(input.scenes.map((s) => [s.id, s.display_no])),
+    characters: new Map((input.characters ?? []).map((c) => [c.id, c.name])),
   };
 }
 
@@ -217,13 +222,19 @@ export interface IdleRow {
 
 const byStart = (a: ScheduleBlock, b: ScheduleBlock) => Date.parse(a.start_utc) - Date.parse(b.start_utc) || (a.id < b.id ? -1 : 1);
 
+/** "周远（饰 林川）", or just the name when the characters are unknown. */
+export function performerLabel(r: Pick<Resource, 'name' | 'cast_character_ids'>, characters: ReadonlyMap<string, string>): string {
+  const parts = r.cast_character_ids.map((id) => characters.get(id)).filter((n): n is string => !!n);
+  return parts.length ? `${r.name}（饰 ${parts.join('、')}）` : r.name;
+}
+
 function blockRow(b: ScheduleBlock, l: PlanLookup): CallSheetRow {
   const setup = b.setup_id ? l.setups.get(b.setup_id) : undefined;
   const names = (type: Resource['type']) =>
     b.resource_ids
       .map((id) => l.resources.get(id))
       .filter((r): r is Resource => r !== undefined && r.type === type)
-      .map((r) => r.name)
+      .map((r) => (type === 'performer' ? performerLabel(r, l.characters) : r.name))
       .join('、');
   return {
     block_id: b.id,

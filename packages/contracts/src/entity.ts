@@ -16,6 +16,8 @@ export const Entity = z.object({
   aliases: z.array(z.string()),
   origin: Origin,
   confirmed: z.boolean(),
+  /** S3b: characters only — who plays the part (shown in the plan and call sheets, never sent to a model) */
+  actor_name: z.string().max(40).nullable(),
 });
 export type Entity = z.infer<typeof Entity>;
 

@@ -63,6 +63,9 @@ export const MOVEMENT_LABEL: Record<Movement, string> = {
   crane: '升降',
   handheld: '手持',
   vehicle: '车载',
+  orbit: '环绕',
+  aerial: '航拍',
+  dolly_zoom: '变焦推拉',
 };
 
 export const SCREEN_POS_LABEL: Record<ScreenPos, string> = {
@@ -192,6 +195,7 @@ export const SHOT_FIELD_LABEL: Record<keyof ShotFields, string> = {
   lens: '镜头',
   focal_mm: '焦段',
   movement: '运动',
+  camera_notes: '拍法说明',
   subjects: '人物',
   props: '道具',
   env: '环境',

@@ -32,6 +32,8 @@ export interface ChatRequest {
   model: string;
   messages: LlmMessage[];
   response_format?: ResponseFormat;
+  /** provider-specific body fields (S3: web search during style research) */
+  extra_body?: Record<string, unknown>;
   signal?: AbortSignal;
   meta?: ChatRequestMeta;
 }

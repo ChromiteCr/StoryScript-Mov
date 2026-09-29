@@ -123,7 +123,16 @@ describe('AT-14 CSV', () => {
     const d = await pageData();
     const names = new Map(d.entities.filter((e) => e.type === 'character').map((e) => [e.alias, e.name] as const));
     const plan = d.plans[0]!;
-    const lookup = buildPlanLookup({ timezone: plan.timezone, date: plan.date, setups: d.setups, shots: d.shots, resources: d.resources, scenes: d.script.scenes });
+    const lookup = buildPlanLookup({
+      timezone: plan.timezone,
+      date: plan.date,
+      setups: d.setups,
+      shots: d.shots,
+      resources: d.resources,
+      scenes: d.script.scenes,
+      // S3b: performers read "演员（饰 角色）" on the page and in the file alike
+      characters: d.entities.filter((e) => e.type === 'character'),
+    });
     const expected: Record<string, (bom: boolean) => string> = {
       shots: (bom) => shotListCsv({ refs: d.refs, characterNames: names }, { bom }),
       callsheet: (bom) => callSheetCsv(plan, lookup, bom),

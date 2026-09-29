@@ -55,6 +55,13 @@ import { useWorkspace } from './context.ts';
 
 /** Server business bounds (core validateShotFieldsBasic). */
 const EST_SECONDS_MAX = 120;
+const CAMERA_NOTES_MAX = 300;
+
+/** Old shots have no camera_notes key; null, '' and a missing key all mean "no notes". */
+function withoutEmptyNotes(fields: ShotFields): ShotFields {
+  const { camera_notes, ...rest } = fields;
+  return typeof camera_notes === 'string' && camera_notes.trim() !== '' ? { ...rest, camera_notes } : (rest as ShotFields);
+}
 
 // ------------------------------------------------------------ primitives ---
 
@@ -156,6 +163,8 @@ interface FormState {
   focal: string;
   est: string;
   dialogue: string;
+  /** ShotFields.camera_notes (missing/null → '') */
+  notes: string;
   assumptions: string;
   questions: string;
   /** '' = no source paragraph chosen (manual shots only) */
@@ -172,6 +181,7 @@ function toForm(fields: ShotFields, code: string, hasSource: boolean): FormState
     focal: fields.focal_mm === null ? '' : String(fields.focal_mm),
     est: String(fields.est_seconds),
     dialogue: fields.dialogue_quote ?? '',
+    notes: fields.camera_notes ?? '',
     assumptions: fields.assumptions.join('\n'),
     questions: fields.questions.join('\n'),
     sourcePid: hasSource ? fields.source.paragraph_id : '',
@@ -280,6 +290,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
       focal_mm: focal.value,
       est_seconds: est.value ?? form.fields.est_seconds,
       dialogue_quote: form.dialogue.trim() === '' ? null : form.dialogue.trim(),
+      camera_notes: form.notes.trim() === '' ? null : form.notes.trim(),
       narrative_purpose: form.fields.narrative_purpose.trim(),
       action: form.fields.action.trim(),
       assumptions: linesToList(form.assumptions),
@@ -293,7 +304,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
 
     if (base) {
       const code = form.code.trim();
-      const fieldsChanged = stableKey(parsed.data) !== stableKey(base.fields);
+      const fieldsChanged = stableKey(withoutEmptyNotes(parsed.data)) !== stableKey(withoutEmptyNotes(base.fields));
       const codeChanged = code !== '' && code !== base.code;
       if (!fieldsChanged && !codeChanged) {
         setForm(formFromShot(base));
@@ -454,6 +465,25 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
               )}
             </FormRow>
             <EnumRow label="运动" value={f.movement} options={Movement.options} labels={MOVEMENT_LABEL} onChange={(v) => v && setF('movement', v)} />
+            <Stacked
+              label="拍法说明"
+              hint={
+                <>
+                  走位、器材和节奏等枚举写不下的内容 · <span className="tabular-nums">{form.notes.length}/{CAMERA_NOTES_MAX}</span>
+                </>
+              }
+            >
+              {(id) => (
+                <TextArea
+                  id={id}
+                  value={form.notes}
+                  onChange={(e) => set('notes', e.target.value)}
+                  rows={3}
+                  maxLength={CAMERA_NOTES_MAX}
+                  placeholder="例如：摄影师倒退跟拍穿过走廊，转进楼梯间后升到俯拍"
+                />
+              )}
+            </Stacked>
           </Group>
 
           <Group title={`人物 ${f.subjects.length}`}>

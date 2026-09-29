@@ -11,6 +11,7 @@ import { matchQuote, normalizeForMatch, type QuoteLevel } from '../script/quote.
 export const EST_SECONDS_MAX = 120;
 export const MAX_PROPS = 4;
 export const MAX_SUBJECTS = 4;
+export const CAMERA_NOTES_MAX = 300;
 
 export interface ShotFieldsContext {
   /** character aliases of the roster (c1, c2 …) */
@@ -90,6 +91,9 @@ export function validateShotFieldsBasic(fields: ShotFields, ctx: ShotFieldsConte
   }
   if ((fields.template === 'two_shot' || fields.template === 'ots') && n < 2) {
     out.push(issue('warning', 'template_subjects', `${fields.template} 模板通常需要 2 个人物，当前 ${n} 个`, item));
+  }
+  if (typeof fields.camera_notes === 'string' && fields.camera_notes.length > CAMERA_NOTES_MAX) {
+    out.push(issue('warning', 'camera_notes_long', `拍法说明超过 ${CAMERA_NOTES_MAX} 字（当前 ${fields.camera_notes.length} 字）`, item));
   }
   if (!fields.narrative_purpose.trim()) out.push(issue('warning', 'empty_text', 'narrative_purpose 为空', item));
   if (!fields.action.trim()) out.push(issue('warning', 'empty_text', 'action 为空', item));

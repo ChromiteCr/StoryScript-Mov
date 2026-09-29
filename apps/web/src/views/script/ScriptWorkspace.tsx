@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentScript, Paragraph, Project, Shot, ShotDraft } from '@storyscript/contracts';
-import { ScrollText, Upload } from 'lucide-react';
+import { Palette, ScrollText, Upload } from 'lucide-react';
 import { draftSceneId } from '../../lib/drafts.ts';
 import { SCRIPT_FORMAT_LABEL } from '../../lib/labels.ts';
 import { useAiGate, useDrafts, useEntities, useProviders, useScriptVersions, useShots } from '../../lib/queries.ts';
@@ -20,6 +20,7 @@ import { RevisionsDialog } from './RevisionsDialog.tsx';
 import { ScenesPanel } from './ScenesPanel.tsx';
 import { ScriptPane } from './ScriptPane.tsx';
 import { ShotTable } from './ShotTable.tsx';
+import { StyleLibraryDialog } from './StyleLibraryDialog.tsx';
 import {
   reveal,
   sceneGroupDomId,
@@ -73,6 +74,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const [entityDraftId, setEntityDraftId] = useState<string | null>(null);
   const [revisionsOf, setRevisionsOf] = useState<Shot | null>(null);
   const [reason, setReason] = useState<ReasonRequest | null>(null);
+  const [stylesOpen, setStylesOpen] = useState(false);
   const [relinkOnly, setRelinkOnly] = useState(false);
   const seq = useRef(0);
   const dirty = useRef(false);
@@ -92,6 +94,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   );
 
   const showTab = useCallback((t: MainTab) => setTab(t), []);
+  const openStyles = useCallback(() => setStylesOpen(true), []);
 
   const locate = useCallback<WorkspaceValue['locate']>(
     (anchor, scroll = 'center') => {
@@ -221,6 +224,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       openDraft: setDraftId,
       openEntityDraft: setEntityDraftId,
       openRevisions: setRevisionsOf,
+      openStyles,
       askReason: setReason,
       notify: onNotice,
       showTab,
@@ -247,6 +251,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       pendingDraftByScene,
       onNotice,
       showTab,
+      openStyles,
     ],
   );
 
@@ -294,6 +299,10 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
               {relinkOnly ? '显示全部镜头' : `${relinkCount} 个待重新关联`}
             </Button>
           ) : null}
+          <Button onClick={openStyles} title="风格库：内置和本组的风格卡、研究新风格、默认难度">
+            <Palette aria-hidden className="size-3.5" />
+            风格
+          </Button>
           <Button onClick={onImportNew}>
             <Upload aria-hidden className="size-3.5" />
             导入新版本
@@ -381,6 +390,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       {entityDraftId ? <EntityDraftDialog draftId={entityDraftId} onClose={() => setEntityDraftId(null)} /> : null}
       {revisionsOf ? <RevisionsDialog shot={revisionsOf} onClose={() => setRevisionsOf(null)} /> : null}
       {reason ? <ReasonDialog request={reason} onClose={() => setReason(null)} /> : null}
+      {stylesOpen ? <StyleLibraryDialog onClose={() => setStylesOpen(false)} /> : null}
     </WorkspaceContext.Provider>
   );
 }

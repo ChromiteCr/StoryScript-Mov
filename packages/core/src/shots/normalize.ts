@@ -66,6 +66,9 @@ const MOVEMENT = table({
   crane: ['jib', 'boom', 'crane shot', '升降', '摇臂'],
   handheld: ['hand held', 'hand-held', '手持'],
   vehicle: ['car mount', 'car_mount', 'vehicle mount', '车载'],
+  orbit: ['环绕', '环拍', '绕拍', 'arc', 'arc shot', '360'],
+  aerial: ['航拍', '无人机', 'drone', 'aerial shot'],
+  dolly_zoom: ['变焦推拉', '滑动变焦', 'dolly zoom', 'vertigo', 'zolly'],
 });
 
 const TEMPLATE = table({
@@ -202,6 +205,10 @@ export function normalizeShotFieldsJson(shot: Json): Json {
   out.technique_id = nullish(shot.technique_id);
   out.est_seconds = toNumber(shot.est_seconds);
   out.dialogue_quote = nullish(shot.dialogue_quote);
+  // camera_notes is optional: absent stays absent; blank text becomes null.
+  if (shot.camera_notes !== undefined) {
+    out.camera_notes = typeof shot.camera_notes === 'string' ? (shot.camera_notes.trim() === '' ? null : shot.camera_notes.trim()) : shot.camera_notes;
+  }
   out.assumptions = arr(shot.assumptions);
   out.questions = arr(shot.questions);
   if (isRec(shot.source) && typeof shot.source.paragraph_id === 'string') {

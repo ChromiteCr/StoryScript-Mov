@@ -295,6 +295,11 @@ export const ShotRow = memo(function ShotRow({
         >
           {f.action || <span className="text-graphite-300">{summary}</span>}
         </button>
+        {typeof f.camera_notes === 'string' && f.camera_notes.trim() !== '' ? (
+          <p data-shot-camera-notes="" className="mt-0.5 truncate text-xs text-graphite-300" title={f.camera_notes}>
+            拍法：{f.camera_notes}
+          </p>
+        ) : null}
         <div className="mt-1 flex min-w-0 items-center gap-1">
           {shot.origin === 'ai' ? <Tag>AI</Tag> : null}
           {shot.required_status !== 'required' ? (

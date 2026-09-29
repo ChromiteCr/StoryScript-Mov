@@ -1,10 +1,11 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { Api, CreateResourceInput, Resource, UpdateResourceInput, Uuid } from '@storyscript/contracts';
+import { Api, CastSyncApplyInput, CastSyncPreview, CreateResourceInput, Resource, UpdateResourceInput, Uuid } from '@storyscript/contracts';
 import type { AppDeps } from '../deps.ts';
 import { listResources } from '../db/repos/resource.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
+import { applyCastSync, castSyncPreview } from '../services/cast.ts';
 import { createResource, deleteResource, updateResource } from '../services/plan/resources.ts';
 
 /** Resources (FR-06): performers, locations, equipment with UTC availability windows. */
@@ -12,6 +13,13 @@ export function registerResourceRoutes(app: Hono, deps: AppDeps): void {
   const db = () => deps.projectSession.require().db;
 
   app.get(Api.listResources.path, (c) => respond(c, z.array(Resource), listResources(db())));
+
+  // S3b: performers and locations from the script (static path before /resources/:id)
+  app.get(Api.castSyncPreview.path, (c) => respond(c, CastSyncPreview, castSyncPreview(db())));
+  app.post(Api.applyCastSync.path, async (c) => {
+    const input = await parseBody(c, CastSyncApplyInput);
+    return respond(c, z.array(Resource), applyCastSync(db(), input));
+  });
 
   app.post(Api.createResource.path, async (c) => {
     const input = await parseBody(c, CreateResourceInput);

@@ -33,6 +33,8 @@ const EXPECTED_TABLES = [
   'coverage_decision',
   'job',
   'kv',
+  // S3
+  'style',
 ];
 
 let root: string;

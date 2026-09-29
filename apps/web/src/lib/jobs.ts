@@ -18,6 +18,8 @@ export const JOB_KIND_LABEL: Record<JobKind, string> = {
   hash_asset: '计算校验值',
   poster_asset: '生成海报帧',
   image_redraw: 'AI 铅笔重绘',
+  research_style: '风格研究',
+  polish_shots: 'AI 润色',
 };
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {
@@ -136,3 +138,5 @@ export function useTrackedJob(slot: string): TrackedJob | null {
 
 export const breakdownSlot = (sceneId: string) => `breakdown:${sceneId}`;
 export const ENTITIES_SLOT = 'entities';
+/** the style library's research job (S3) */
+export const STYLE_RESEARCH_SLOT = 'style-research';

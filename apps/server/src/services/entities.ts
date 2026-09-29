@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import {
+  ACTOR_NAME_MAX,
   EntitiesOutput,
   type CreateEntityInput,
   type Entity,
@@ -14,6 +15,15 @@ import { cleanAliases, findEntityByName, getEntity, insertEntity, nextAlias, upd
 import { AppError } from '../http/errors.ts';
 
 type Input<S extends z.ZodType> = z.infer<S>;
+
+/** S3b: who plays a character — trimmed, "" → none; other entity types never carry one. */
+export function cleanActorName(type: EntityType, name: string | null | undefined): string | null {
+  if (type !== 'character') return null;
+  const t = (name ?? '').trim().replace(/\s+/g, ' ');
+  if (!t) return null;
+  if ([...t].length > ACTOR_NAME_MAX) throw new AppError('VALIDATION_ERROR', `演员姓名最多 ${ACTOR_NAME_MAX} 个字`, 400);
+  return t;
+}
 
 const KIND_TYPE: Record<'characters' | 'locations' | 'props', EntityType> = {
   characters: 'character',
@@ -33,6 +43,7 @@ export function createEntity(db: DbPort, input: Input<typeof CreateEntityInput>)
       aliases: cleanAliases(input.aliases, name),
       origin: 'manual',
       confirmed: true,
+      actor_name: cleanActorName(input.type, input.actor_name),
     };
     insertEntity(db, e);
     return e;
@@ -50,6 +61,7 @@ export function updateEntity(db: DbPort, id: string, input: Input<typeof UpdateE
       name,
       aliases: cleanAliases(input.aliases ?? e.aliases, name),
       confirmed: input.confirmed ?? e.confirmed,
+      actor_name: input.actor_name !== undefined ? cleanActorName(e.type, input.actor_name) : e.actor_name,
     };
     updateEntityRow(db, next);
     return next;
@@ -90,6 +102,7 @@ export function applyEntityDraft(db: DbPort, draftId: string, input: Input<typeo
           aliases: cleanAliases(item.aliases, name),
           origin: 'ai',
           confirmed: false,
+          actor_name: null,
         };
         insertEntity(db, e);
         out.set(e.id, e);

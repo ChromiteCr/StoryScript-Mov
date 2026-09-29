@@ -28,7 +28,7 @@ export function requireResource(db: DbPort, id: string): Resource {
   return r;
 }
 
-function cleanWindows(windows: readonly TimeWindow[]): TimeWindow[] {
+export function cleanWindows(windows: readonly TimeWindow[]): TimeWindow[] {
   const out: TimeWindow[] = [];
   windows.forEach((w, i) => {
     const start = Date.parse(w.start_utc);

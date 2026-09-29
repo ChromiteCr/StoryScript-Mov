@@ -14,6 +14,7 @@ import { publicOnlyFetch } from './security/egress.ts';
 import { authGuard, headersMiddleware, hostGuard, originGuard, type ServerMode } from './security/guards.ts';
 import { SessionStore } from './security/sessions.ts';
 import { registerDraftRoutes } from './routes/drafts.ts';
+import { registerStyleRoutes } from './routes/styles.ts';
 import { registerEntityRoutes } from './routes/entities.ts';
 import { registerJobRoutes } from './routes/jobs.ts';
 import { registerScriptRoutes } from './routes/scripts.ts';
@@ -129,6 +130,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerEntityRoutes(app, deps);
   registerShotRoutes(app, deps);
   registerDraftRoutes(app, deps);
+  registerStyleRoutes(app, deps);
   registerJobRoutes(app, deps);
   registerResourceRoutes(app, deps);
   registerSetupRoutes(app, deps);

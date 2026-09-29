@@ -21,6 +21,8 @@ export const JobKind = z.enum([
   'hash_asset',
   'poster_asset',
   'image_redraw',
+  'research_style',
+  'polish_shots',
 ]);
 export type JobKind = z.infer<typeof JobKind>;
 

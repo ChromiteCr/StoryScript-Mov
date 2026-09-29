@@ -26,6 +26,10 @@ export const Movement = z.enum([
   'crane',
   'handheld',
   'vehicle',
+  // S3: moves a braver crew attempts
+  'orbit',
+  'aerial',
+  'dolly_zoom',
 ]);
 export type Movement = z.infer<typeof Movement>;
 
@@ -116,6 +120,12 @@ export const ShotFields = z.object({
   source: SourceRef,
   assumptions: z.array(z.string()),
   questions: z.array(z.string()),
+  /**
+   * S3 拍法说明: blocking, rig and timing the enums cannot say (an orbit
+   * around two actors, a one-take through a corridor). Optional so shots
+   * written before S3 keep their content hash; empty is stored as absent.
+   */
+  camera_notes: z.string().nullable().optional(),
 });
 export type ShotFields = z.infer<typeof ShotFields>;
 
@@ -189,7 +199,7 @@ export const DraftIssue = z.object({
 });
 export type DraftIssue = z.infer<typeof DraftIssue>;
 
-export const DraftKind = z.enum(['entities', 'breakdown', 'order']);
+export const DraftKind = z.enum(['entities', 'breakdown', 'order', 'style', 'polish']);
 export type DraftKind = z.infer<typeof DraftKind>;
 
 export const DraftStatus = z.enum(['pending', 'applied', 'discarded', 'failed']);

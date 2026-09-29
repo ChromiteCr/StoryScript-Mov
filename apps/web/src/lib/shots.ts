@@ -144,8 +144,10 @@ export function emptySubject(alias: string): ShotSubject {
 /** Names of ShotFields keys that differ between two revisions. */
 export function changedFieldLabels(prev: ShotFields | null, next: ShotFields): string[] {
   if (!prev) return [];
+  // camera_notes: a missing key, null and '' all mean "no notes"
+  const val = (f: ShotFields, k: keyof ShotFields): unknown => (k === 'camera_notes' ? f.camera_notes?.trim() || null : f[k]);
   return (Object.keys(SHOT_FIELD_LABEL) as (keyof ShotFields)[])
-    .filter((k) => stableKey(prev[k]) !== stableKey(next[k]))
+    .filter((k) => stableKey(val(prev, k)) !== stableKey(val(next, k)))
     .map((k) => SHOT_FIELD_LABEL[k]);
 }
 

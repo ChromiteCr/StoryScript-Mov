@@ -29,7 +29,7 @@ describe('settings: text provider', () => {
     app = await makeM3App({ openProject: false });
     const saved = await app.put<ProvidersView>('/api/v1/settings/providers/text', { base_url: fake.url, model: 'fake-model', api_key: TEST_KEY });
     expect(saved.status, saved.text).toBe(200);
-    expect(saved.data).toEqual({ text: { base_url: fake.url, model: 'fake-model', key_last4: TEST_KEY.slice(-4), source: 'file' }, image: null });
+    expect(saved.data).toEqual({ text: { base_url: fake.url, model: 'fake-model', key_last4: TEST_KEY.slice(-4), source: 'file', research_model: null, research_search: false, search_support: null }, image: null });
     expect(saved.text).not.toContain(TEST_KEY);
     expect(saved.body.notice).toBeUndefined();
 
@@ -50,7 +50,7 @@ describe('settings: text provider', () => {
   test('environment variables win: source=env and a notice on save', async () => {
     app = await makeM3App({ openProject: false, env: llmEnv(fake.url) });
     const view = await app.get<ProvidersView>('/api/v1/settings/providers');
-    expect(view.data.text).toEqual({ base_url: fake.url, model: 'fake-model', key_last4: TEST_KEY.slice(-4), source: 'env' });
+    expect(view.data.text).toEqual({ base_url: fake.url, model: 'fake-model', key_last4: TEST_KEY.slice(-4), source: 'env', research_model: null, research_search: false, search_support: null });
     const saved = await app.put<ProvidersView>('/api/v1/settings/providers/text', {
       base_url: 'https://api.example.com/v1',
       model: 'file-model',

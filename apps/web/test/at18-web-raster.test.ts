@@ -164,7 +164,7 @@ describe('confirmation preview', () => {
     named.scene.subjects[1]!.entity_id = id(202);
     named.scene.subjects[1]!.label = '林晓';
     const entity = (n: number, name: string, aliases: string[]): Entity => ({
-      id: id(n), type: 'character', alias: `c${n - 200}`, name, aliases, origin: 'manual', confirmed: true,
+      id: id(n), type: 'character', alias: `c${n - 200}`, name, aliases, origin: 'manual', confirmed: true, actor_name: null,
     });
     const entities = [entity(201, '周明远', ['老周']), entity(202, '林晓', []), entity(203, '沈映秋', ['外婆'])];
     const fields = { ...STANDARD_SHOTS.find((s) => s.key === '10-depth-two')!.fields, action: '老周把外婆的信递给林晓' };

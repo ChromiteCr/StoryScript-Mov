@@ -26,7 +26,11 @@ export function registerScriptRoutes(app: Hono, deps: AppDeps): void {
 
   app.post(Api.previewScript.path, async (c) => {
     const input = await parseBody(c, ScriptInput);
-    return respond(c, ScriptPreview, parseScript(input.text, input.format, input.heading_overrides));
+    return respond(
+      c,
+      ScriptPreview,
+      parseScript(input.text, input.format, input.heading_overrides, { shotOverrides: input.shot_overrides, untitledScene: input.source_name }),
+    );
   });
 
   app.post(Api.importScript.path, async (c) => {

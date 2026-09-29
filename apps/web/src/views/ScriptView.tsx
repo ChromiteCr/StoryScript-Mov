@@ -10,7 +10,8 @@ import { ImportView } from './script/ImportView.tsx';
 import { ScriptWorkspace } from './script/ScriptWorkspace.tsx';
 
 function importNotice(r: ScriptImportResult): string {
-  const base = `已导入「${r.version.source_name}」：${r.scenes.length} 个场景、${r.version.paragraphs.length} 个段落。`;
+  const made = r.created_shot_ids.length > 0 ? `，按分镜脚本新建 ${r.created_shot_ids.length} 个镜头` : '';
+  const base = `已导入「${r.version.source_name}」：${r.scenes.length} 场、${r.version.paragraphs.length} 个段落${made}。`;
   const n = r.needs_relink_shot_ids.length;
   return n > 0 ? `${base}${n} 个镜头的引用在新版本里找不到逐字相同的原文，已标为"待重新关联"，不会自动连接。` : base;
 }

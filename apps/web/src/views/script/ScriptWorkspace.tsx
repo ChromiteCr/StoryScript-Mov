@@ -44,7 +44,7 @@ export interface ScriptWorkspaceProps {
 const TABS: { id: MainTab; label: string }[] = [
   { id: 'shots', label: '镜头表' },
   { id: 'script', label: '剧本原文' },
-  { id: 'roster', label: '场景与角色' },
+  { id: 'roster', label: '角色、地点与道具' },
 ];
 
 /**

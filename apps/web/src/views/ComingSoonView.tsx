@@ -16,7 +16,7 @@ const COPY: Record<ProjectView, Copy> = {
   script: {
     icon: ScrollText,
     points: [
-      '粘贴剧本，或导入 .txt、.md、.fountain 文件，按场景标题自动切场',
+      '粘贴剧本，或导入 .txt、.md、.fountain 文件，按场次标题自动切场，分镜脚本逐行导入为镜头',
       '每个镜头都引用剧本原文；改了剧本，能看出哪些镜头需要重新对应',
       '模型按场拆镜，结果先进草案，逐条勾选后才写入；锁定的镜头不会被改动',
       '没有配置模型时，照样可以手工建镜头',

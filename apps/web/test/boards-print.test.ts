@@ -127,7 +127,7 @@ describe('board PDF pages', () => {
     expect(c.grammar).toBe(`中近景 · ${Math.round(base.camera.focal_mm)}mm · 推`);
     const bare = boardCaption(board(2, SCENE_A), undefined);
     expect(bare).toMatchObject({ action: '—', dialogue: null, duration: '—' });
-    expect(sceneLabel(undefined)).toBe('其他场景');
+    expect(sceneLabel(undefined)).toBe('其他场次');
   });
 
   it('PNG file names are filesystem-safe', () => {

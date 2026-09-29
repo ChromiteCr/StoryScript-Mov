@@ -169,9 +169,9 @@ export async function createProject(page: Page, dir: string, name: string): Prom
  */
 export async function importAndBreakdownBookshop(page: Page, base: string): Promise<void> {
   await page.goto(`${base}/#/script`);
-  await page.getByRole('button', { name: /识别场景/ }).waitFor();
+  await page.getByRole('button', { name: /识别场次/ }).waitFor();
   await page.locator('input[type="file"]').setInputFiles(BOOKSHOP);
-  await page.getByRole('region', { name: '场景预览' }).waitFor();
+  await page.getByRole('region', { name: '逐行预览', exact: true }).waitFor();
   await page.getByRole('button', { name: '导入为新版本' }).click();
   await page.getByRole('region', { name: /镜头表/ }).waitFor();
 

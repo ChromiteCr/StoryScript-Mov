@@ -233,7 +233,7 @@ function ResourceDialog({ data, resource, refDate, onClose }: { data: PlanData; 
             <legend className="mb-1 text-xs font-medium text-graphite-100">{type === 'performer' ? '饰演的角色' : '对应的地点'}</legend>
             {castable.length === 0 ? (
               <p className="text-sm text-graphite-300">
-                {type === 'performer' ? '还没有角色：先在剧本页建立角色，再回来选角。' : '还没有地点实体：先在剧本页建立地点，并把它设为场景的地点。'}
+                {type === 'performer' ? '还没有角色：先在剧本页建立角色，再回来选角。' : '还没有地点实体：先在剧本页建立地点，并把它设为场次的地点。'}
               </p>
             ) : (
               <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">

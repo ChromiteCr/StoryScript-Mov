@@ -576,7 +576,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
               {(id) => (
                 <SelectInput id={id} value={form.sourcePid} onChange={(e) => set('sourcePid', e.target.value)}>
                   {!base || form.sourcePid === '' || base.origin === 'manual' ? <option value="">不关联段落</option> : null}
-                  {staleSource ? <option value={form.sourcePid}>{form.sourcePid}（不在当前场景）</option> : null}
+                  {staleSource ? <option value={form.sourcePid}>{form.sourcePid}（不在当前场次）</option> : null}
                   {paragraphOptions.map((p) => (
                     <option key={p.id} value={p.id}>
                       {p.id} · {p.text.length > 16 ? `${p.text.slice(0, 16)}…` : p.text}

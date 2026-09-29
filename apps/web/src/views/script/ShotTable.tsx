@@ -68,7 +68,7 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
           type="button"
           onClick={() => ws.selectScene(scene, { open: true })}
           className="flex min-w-0 flex-1 items-baseline gap-2 rounded-control text-left"
-          title="在检查器里查看场景设置与 AI 拆镜"
+          title="在检查器里查看场次设置与 AI 拆镜"
         >
           <span className="shrink-0 text-xs text-graphite-300 tabular-nums">{scene.display_no}</span>
           <h3 id={`${sceneGroupDomId(scene.id)}-title`} className="min-w-0 truncate text-sm font-medium text-graphite-100">
@@ -96,7 +96,7 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
             <span className="max-md:sr-only">AI 拆镜</span>
           </Button>
           <IconButton icon={Plus} label={`在第 ${scene.display_no} 场新建手工镜头`} onClick={() => ws.openCreate(scene)} />
-          <IconButton icon={SlidersHorizontal} label={`第 ${scene.display_no} 场设置`} title="场景设置：左右站位、地点" onClick={() => ws.selectScene(scene, { focus: 'setup' })} />
+          <IconButton icon={SlidersHorizontal} label={`第 ${scene.display_no} 场设置`} title="场次设置：左右站位、地点" onClick={() => ws.selectScene(scene, { focus: 'setup' })} />
         </div>
       </header>
 
@@ -189,7 +189,7 @@ export function ShotTable({ shotsQuery, relinkOnly, notice, onDismissNotice }: S
           <Button onClick={() => void shotsQuery.refetch()}>重试</Button>
         </div>
       ) : ws.script.scenes.length === 0 ? (
-        <EmptyState title="当前版本没有场景。" description="导入新版本时，在预览里把场景标题行标出来。" />
+        <EmptyState title="当前版本没有场次。" description="导入新版本时，在预览里把场次标题行标为「场」。" />
       ) : (
         <>
           {ws.script.scenes.map((scene) => (
@@ -197,8 +197,8 @@ export function ShotTable({ shotsQuery, relinkOnly, notice, onDismissNotice }: S
           ))}
           {orphans.length > 0 ? (
             <div className="p-3">
-              <Notice tone="warn" title={`${orphans.length} 个镜头不在当前版本的场景里`}>
-                它们所属的场景在新版本中没有对应（{orphans.map((s) => s.code).join('、')}），这里暂不显示，数据仍然保留。
+              <Notice tone="warn" title={`${orphans.length} 个镜头不在当前版本的场次里`}>
+                它们所属的场次在新版本中没有对应（{orphans.map((s) => s.code).join('、')}），这里暂不显示，数据仍然保留。
               </Notice>
             </div>
           ) : null}

@@ -59,7 +59,7 @@ export interface PrintPage {
 }
 
 export function sceneLabel(scene: Pick<Scene, 'display_no' | 'heading'> | undefined): string {
-  if (!scene) return '其他场景';
+  if (!scene) return '其他场次';
   const no = scene.display_no.trim();
   return no ? `第 ${no} 场 · ${scene.heading}` : scene.heading;
 }

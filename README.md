@@ -1,6 +1,6 @@
 # StoryScript-Mov
 
-![version](https://img.shields.io/badge/version-S2b-blue)
+![version](https://img.shields.io/badge/version-S2c-blue)
 ![last commit](https://img.shields.io/github/last-commit/ChromiteCr/StoryScript-Mov)
 ![commit activity](https://img.shields.io/github/commit-activity/m/ChromiteCr/StoryScript-Mov)
 ![stars](https://img.shields.io/github/stars/ChromiteCr/StoryScript-Mov)
@@ -18,7 +18,7 @@
 ## 它能做什么
 
 - **剧本进，镜头出**
-  - 支持粘贴或导入 `.txt`、`.md`、`.fountain`，按场景标题规则切场，每个段落都有锚点。
+  - 支持粘贴或导入 `.txt`、`.md`、`.fountain`，按场次标题规则切场，每个段落都有锚点。分镜脚本（每行一个镜头，或从表格复制的镜号、景别、画面）按场次导入为镜头。
   - AI 按场拆镜，先生成草案，你逐条勾选后才写入；每个镜头都回链剧本原文，引用对不上的条目不能应用。
   - 锁定的镜头，AI 永远不改。
   - 没有 key 时，可以全程手工建镜头。
@@ -163,6 +163,7 @@ npm run readme:media  # 从演示项目重新生成 README 的截图和动图（
 
 | 版本 | 日期 | 变更内容 | 类型 |
 |------|------|----------|------|
+| S2c | 2026-09-29 | 修复导入时的场次识别：分镜脚本（每行一个镜头，或从 Word/Excel 复制的镜号、景别、画面表格）不再被切成一镜一场，而是按场次导入为镜头，景别、角度、运镜、时长、台词自动填好，没写的字段注明默认值；识别更多场次标题写法（场景一、一、、S1、【教室·日·内】、教室（日））；「1-1 内景 客厅 日」这类集-场编号仍算场次；导入预览每行可以在正文、场、镜之间切换，并列出每场会导入的镜头；界面统一叫法：场次、镜头、地点 | fix |
 | S2b | 2026-09-28 | 服务器版每组自带模型（npm 0.4.0）：小组在「设置 → 模型」里填自己的 base_url、模型名和 key（文本和图像都可以），存在服务器上本组的状态目录，只用于转发本组请求、其他小组看不到；服务器环境变量里的模型 key 在服务器版不再使用；所有发往模型服务的请求改走受保护的出站通道：只连公网 https，连接时逐个检查解析出的地址、每次跳转重新检查并在换站时去掉 key，本机、内网和云元数据地址一律拒绝，保存设置时也会提前提示 | feat |
 | S2a | 2026-09-28 | 服务器版改为邮箱账号（npm 0.3.0）：注册要填活动邀请码和邮箱里的 6 位验证码（经 Resend 发送，注册和登录两封邮件单独设计，验证码放在 2.39 画幅框里），登录用密码或邮箱验证码（可顺便设新密码）；学生自己建小组、用链接或组码加入，组长管理组员、换组码，只剩一人时可解散；账号、小组、会话存在 site.db（密码 scrypt，会话和验证码只存哈希），发信、输错和查询都按地址与邮箱限速，全站每天邮件上限默认 100 封；新的管理命令 invite set、user list/remove、team list/remove、mail test；取消队伍口令登录；npm run mail:preview 预览邮件；部署指南按实际部署重写 | feat |
 | S2 | 2026-09-28 | 服务器版与项目文件夹（npm 0.2.0）：一台服务器给多个队伍用，口令或邀请链接登录，每队一个项目、互相隔离、有调用上限；队员在浏览器里打开本机项目文件夹，视频不上传，只传素材信息和海报小图，本机直接播放；单机版和服务器版都以「打开项目文件夹」为中心，项目数据在 .storyscript-mov；部署指南见 docs/SERVER.md。单机版 npx 用法不变 | milestone |

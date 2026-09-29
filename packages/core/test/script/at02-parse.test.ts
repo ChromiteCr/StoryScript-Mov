@@ -123,7 +123,8 @@ describe('AT-02 Chinese heading rules', () => {
     ['内景·旧书店·夜', null, '内景·旧书店·夜', '夜', '旧书店'],
     ['## 3. 内景 客厅 夜', '3', '内景 客厅 夜', '夜', '客厅'],
   ])('%s', (line, no, heading, time, loc) => {
-    expect(detectHeading(line)).toEqual({ display_no: no, heading, time_label: time, location_label: loc });
+    const { explicit: _explicit, ...info } = detectHeading(line) ?? { explicit: false };
+    expect(info).toEqual({ display_no: no, heading, time_label: time, location_label: loc });
   });
 
   test.each([

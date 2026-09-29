@@ -1,10 +1,12 @@
 import { randomUUID } from 'node:crypto';
+import type { z } from 'zod';
 import type { Scene, ScriptImportResult, ScriptInput, ScriptVersion } from '@storyscript/contracts';
-import { contentHash, normalizeForMatch, parseScript, relinkShots } from '@storyscript/core';
+import { contentHash, normalizeForMatch, parseScript, relinkShots, shotFieldsFromLine } from '@storyscript/core';
 import type { DbPort } from '../db/port.ts';
 import { listEntities } from '../db/repos/entity.ts';
 import { insertScene, insertScriptVersion, latestScriptVersion, listScenes, getScene, stripSort, type SceneRecord } from '../db/repos/script.ts';
 import { listActiveShots, updateShotRow } from '../db/repos/shot.ts';
+import { createShot } from './shots.ts';
 
 /**
  * Import = new immutable script_version + its scenes, and carry the existing
@@ -43,8 +45,12 @@ function mapScenes(oldScenes: readonly SceneRecord[], newScenes: readonly Scene[
   return map;
 }
 
-export function importScript(db: DbPort, input: ScriptInput, now = new Date().toISOString()): ScriptImportResult {
-  const parsed = parseScript(input.text, input.format, input.heading_overrides);
+/** `shot_overrides` may be left out (callers other than the API: demo seed, tests). */
+export function importScript(db: DbPort, input: z.input<typeof ScriptInput>, now = new Date().toISOString()): ScriptImportResult {
+  const parsed = parseScript(input.text, input.format, input.heading_overrides, {
+    shotOverrides: input.shot_overrides ?? [],
+    untitledScene: input.source_name,
+  });
   return db.tx(() => {
     const previous = latestScriptVersion(db);
     const version: ScriptVersion = {
@@ -127,10 +133,31 @@ export function importScript(db: DbPort, input: ScriptInput, now = new Date().to
       }
     }
 
+    // S2c: a shot line becomes a manual shot anchored to its own paragraph, unless a kept shot already sits there
+    const anchored = new Set(kept.values());
+    const created: string[] = [];
+    const byParagraph = new Map(parsed.paragraphs.map((p) => [p.id, p.text]));
+    for (const line of parsed.shot_lines) {
+      if (line.scene_idx === null || anchored.has(line.paragraph_id)) continue;
+      const quote = byParagraph.get(line.paragraph_id) ?? '';
+      const code = line.info.code ? `（原镜号 ${line.info.code}）` : '';
+      const shot = createShot(
+        db,
+        {
+          scene_id: scenes[line.scene_idx]!.id,
+          fields: shotFieldsFromLine(line.info, { paragraph_id: line.paragraph_id, quote }),
+          manual_note: `来自分镜脚本第 ${line.line} 行${code}`,
+        },
+        now,
+      );
+      created.push(shot.id);
+    }
+
     return {
       version,
       scenes: listScenes(db, version.id).map(stripSort),
       needs_relink_shot_ids: relink.needs_relink,
+      created_shot_ids: created,
     };
   });
 }

@@ -74,7 +74,7 @@ export const DELIVER_ITEM: Record<DeliverItemId, DeliverItemCopy> = {
   'project-json': {
     title: '项目 JSON',
     formats: ['JSON'],
-    contains: '剧本各版本、场景、角色、镜头与修订、分镜各版本、AI 图记录、资源、setup、约束、计划、场记、素材元数据与关联、覆盖决定。',
+    contains: '剧本各版本、场次、角色、镜头与修订、分镜各版本、AI 图记录、资源、setup、约束、计划、场记、素材元数据与关联、覆盖决定。',
   },
 };
 

@@ -1,4 +1,4 @@
-import type { HeadingOverride, ScriptFormat } from '@storyscript/contracts';
+import type { HeadingOverride, ScriptFormat, ShotOverride } from '@storyscript/contracts';
 
 /**
  * Pure helpers for the script import panel (FR-02). No DOM.
@@ -62,6 +62,64 @@ export function toggleHeadingOverride(
   const rest = overrides.filter((o) => o.line !== line);
   if (next !== detectedHere) rest.push({ line, is_heading: next });
   return rest.sort((a, b) => a.line - b.line);
+}
+
+// ---- S2c: a line is plain text, a scene heading (场) or a shot (镜) ----
+
+export type LineRole = 'text' | 'heading' | 'shot';
+
+export interface LineOverrides {
+  heading: readonly HeadingOverride[];
+  shot: readonly ShotOverride[];
+}
+
+export interface Detected {
+  headings: LineSet;
+  shots: LineSet;
+}
+
+function ruleRole(line: number, detected: Detected): LineRole {
+  if (has(detected.headings, line)) return 'heading';
+  if (has(detected.shots, line)) return 'shot';
+  return 'text';
+}
+
+/** What a line is after the user's overrides, applied the way the server applies them (heading wins). */
+export function lineRole(line: number, detected: Detected, ov: LineOverrides): LineRole {
+  let role = ruleRole(line, detected);
+  const s = ov.shot.find((o) => o.line === line);
+  if (s?.is_shot === true) role = 'shot';
+  else if (s?.is_shot === false && role === 'shot') role = 'text';
+  const h = ov.heading.find((o) => o.line === line);
+  if (h?.is_heading === true) role = 'heading';
+  else if (h?.is_heading === false && role === 'heading') role = 'text';
+  return role;
+}
+
+const NEXT_ROLE: Record<LineRole, LineRole> = { text: 'heading', heading: 'shot', shot: 'text' };
+
+/**
+ * Click on a line's tag: 正文 → 场 → 镜 → 正文. Returns the smallest set of
+ * overrides that gives the line its next role (none when that is what the
+ * rules said), sorted by line.
+ */
+export function cycleLineRole(line: number, detected: Detected, ov: LineOverrides): { heading: HeadingOverride[]; shot: ShotOverride[] } {
+  const target = NEXT_ROLE[lineRole(line, detected, ov)];
+  const base = ruleRole(line, detected);
+  const heading = ov.heading.filter((o) => o.line !== line);
+  const shot = ov.shot.filter((o) => o.line !== line);
+  if (target !== base) {
+    if (target === 'heading') heading.push({ line, is_heading: true });
+    if (target === 'shot') {
+      shot.push({ line, is_shot: true });
+      if (base === 'heading') heading.push({ line, is_heading: false });
+    }
+    if (target === 'text') {
+      if (base === 'heading') heading.push({ line, is_heading: false });
+      if (base === 'shot') shot.push({ line, is_shot: false });
+    }
+  }
+  return { heading: heading.sort((a, b) => a.line - b.line), shot: shot.sort((a, b) => a.line - b.line) };
 }
 
 /** Drop overrides that point past the end of the text or at blank lines. */

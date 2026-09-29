@@ -118,9 +118,9 @@ test('no-key full chain: script → boards → plan → set → media → covera
   // ------------------------------------------------------------ script
   await test.step('import the script, add characters, a location and four shots by hand', async () => {
     await page.goto(`${app.base}/#/script`);
-    await page.getByRole('button', { name: /识别场景/ }).waitFor();
+    await page.getByRole('button', { name: /识别场次/ }).waitFor();
     await page.locator('input[type="file"]').setInputFiles(BOOKSHOP);
-    await page.getByRole('region', { name: '场景预览' }).waitFor();
+    await page.getByRole('region', { name: '逐行预览', exact: true }).waitFor();
     await page.getByRole('button', { name: '导入为新版本' }).click();
     await page.getByRole('region', { name: /镜头表/ }).waitFor();
 

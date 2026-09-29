@@ -16,6 +16,7 @@ export { buildCandidates, compileUserRegex, type BuildCandidatesInput, type Buil
 export * from './board/index.ts';
 export * from './i18n/index.ts';
 export * from './script/parse.ts';
+export * from './script/shot-line.ts';
 export * from './script/quote.ts';
 export * from './script/relink.ts';
 export * from './shots/normalize.ts';

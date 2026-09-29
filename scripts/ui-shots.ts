@@ -137,10 +137,10 @@ async function waitForDraftDialog(page: Page, name: RegExp) {
 /** Desktop: the whole script workflow against the demo replay. */
 async function scriptFlowDesktop(page: Page, base: string, out: string, size: Size, list: string[]): Promise<void> {
   await go(page, base, '#/script');
-  await page.getByRole('button', { name: /识别场景/ }).waitFor();
+  await page.getByRole('button', { name: /识别场次/ }).waitFor();
   await page.locator('input[type="file"]').setInputFiles(BOOKSHOP);
-  await page.getByRole('region', { name: /识别出的场景 2/ }).waitFor();
-  await page.getByRole('region', { name: '场景预览' }).waitFor();
+  await page.getByRole('region', { name: /^场次 2/ }).waitFor();
+  await page.getByRole('region', { name: '逐行预览', exact: true }).waitFor();
   await shot(page, out, size, '60-script-import-preview', list);
 
   await page.getByRole('button', { name: '导入为新版本' }).click();
@@ -195,7 +195,7 @@ async function scriptFlowPhone(page: Page, base: string, out: string, size: Size
   await shot(page, out, size, '60-script-shots', list);
   await page.getByRole('tab', { name: '剧本原文' }).click();
   await shot(page, out, size, '61-script-text', list);
-  await page.getByRole('tab', { name: '场景与角色' }).click();
+  await page.getByRole('tab', { name: '角色、地点与道具' }).click();
   await shot(page, out, size, '62-script-roster', list);
 
   await page.getByRole('tab', { name: '镜头表' }).click();

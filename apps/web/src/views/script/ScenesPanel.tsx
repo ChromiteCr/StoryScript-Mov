@@ -16,9 +16,9 @@ export function ScenesPanel({ shots }: { shots: readonly Shot[] }) {
   const selectedScene = !t ? null : t.kind === 'shot' ? (shots.find((s) => s.id === t.shotId)?.scene_id ?? null) : t.sceneId;
 
   return (
-    <Panel title={`场景 ${ws.script.scenes.length}`} padded={false}>
+    <Panel title={`场次 ${ws.script.scenes.length}`} padded={false}>
       {ws.script.scenes.length === 0 ? (
-        <EmptyState quiet title="当前版本没有场景。" description="导入新版本时，在预览里把场景标题行标出来。" />
+        <EmptyState quiet title="当前版本没有场次。" description="导入新版本时，在预览里把场次标题行标为「场」。" />
       ) : (
         <ol className="py-1">
           {ws.script.scenes.map((scene) => {

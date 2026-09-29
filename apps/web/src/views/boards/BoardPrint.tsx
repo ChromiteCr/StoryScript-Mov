@@ -159,12 +159,12 @@ export function BoardPrint({ kind, project, boards, shots, scenes, scriptVersion
         </Button>
         <h1 className="text-sm font-medium text-graphite-100">{title}打印预览</h1>
         <SelectInput aria-label="打印范围" className="h-6 w-auto max-w-[240px] text-xs" value={sceneId ?? ''} onChange={(e) => onScene(e.target.value || null)}>
-          <option value="">全部场景</option>
+          <option value="">全部场次</option>
           {sceneIds.map((id) => {
             const s = scenes.find((x) => x.id === id);
             return (
               <option key={id} value={id}>
-                {s ? `第 ${s.display_no} 场 · ${s.heading}` : '其他场景'}
+                {s ? `第 ${s.display_no} 场 · ${s.heading}` : '其他场次'}
               </option>
             );
           })}

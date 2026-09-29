@@ -3,8 +3,8 @@ import { JobAccepted, Uuid } from './common.ts';
 import { Entity, EntityType } from './entity.ts';
 import { Job } from './job.ts';
 import { CreateProjectInput, Project, RecentProject } from './project.ts';
-import { ParsedScript, Scene, ScreenSides, ScriptFormat, ScriptVersion } from './script.ts';
-import { RequiredStatus, Shot, ShotDraft, ShotFields, ShotRevision } from './shot.ts';
+import { ParagraphId, ParsedScript, Scene, ScreenSides, ScriptFormat, ScriptVersion } from './script.ts';
+import { CameraAngle, Movement, RequiredStatus, Shot, ShotDraft, ShotFields, ShotRevision, ShotSize } from './shot.ts';
 import { CoverageDecision, CoverageDecisionKind, CoverageResult } from './coverage.ts';
 import { Board, BoardRaster, BoardSpec } from './board.ts';
 import { ImageDialect } from './provider.ts';
@@ -127,17 +127,61 @@ export const HeadingOverride = z.object({
 });
 export type HeadingOverride = z.infer<typeof HeadingOverride>;
 
+/** S2c: force a line to be (or not be) a shot line */
+export const ShotOverride = z.object({
+  /** 1-based raw line number */
+  line: z.number().int().positive(),
+  is_shot: z.boolean(),
+});
+export type ShotOverride = z.infer<typeof ShotOverride>;
+
 export const ScriptInput = z.object({
   text: z.string().min(1).max(2_000_000),
   source_name: z.string().min(1),
   format: ScriptFormat,
   heading_overrides: z.array(HeadingOverride),
+  shot_overrides: z.array(ShotOverride).default([]),
 });
 export type ScriptInput = z.infer<typeof ScriptInput>;
+
+/** screenplay: scenes by headings; shot_list: one shot per line (or a 镜号/景别/画面 table), imported as shots */
+export const ScriptKind = z.enum(['screenplay', 'shot_list']);
+export type ScriptKind = z.infer<typeof ScriptKind>;
+
+/** What a shot line says; null = not written (the import states its default). */
+export const ShotLineInfo = z.object({
+  /** the writer's own shot number */
+  code: z.string().nullable(),
+  shot_size: ShotSize.nullable(),
+  angle: CameraAngle.nullable(),
+  movement: Movement.nullable(),
+  ots: z.boolean(),
+  pov: z.boolean(),
+  est_seconds: z.number().nullable(),
+  dialogue: z.string().nullable(),
+  action: z.string(),
+  location: z.string().nullable(),
+  time_label: z.string().nullable(),
+  scene_key: z.string().nullable(),
+});
+export type ShotLineInfo = z.infer<typeof ShotLineInfo>;
+
+export const ShotLinePreview = z.object({
+  line: z.number().int().positive(),
+  paragraph_id: ParagraphId,
+  /** null: before any scene (not imported as a shot) */
+  scene_idx: z.number().int().nonnegative().nullable(),
+  info: ShotLineInfo,
+});
+export type ShotLinePreview = z.infer<typeof ShotLinePreview>;
 
 export const ScriptPreview = ParsedScript.extend({
   /** 1-based line numbers the rules detected as scene headings */
   detected_heading_lines: z.array(z.number().int().positive()),
+  /** 1-based line numbers the rules detected as shot lines */
+  detected_shot_lines: z.array(z.number().int().positive()),
+  kind: ScriptKind,
+  shot_lines: z.array(ShotLinePreview),
 });
 export type ScriptPreview = z.infer<typeof ScriptPreview>;
 
@@ -146,6 +190,8 @@ export const ScriptImportResult = z.object({
   scenes: z.array(Scene),
   /** shots whose quote could not be re-found verbatim in the new version */
   needs_relink_shot_ids: z.array(Uuid),
+  /** S2c: shots made from shot lines (lines already covered by a kept shot are skipped) */
+  created_shot_ids: z.array(Uuid),
 });
 export type ScriptImportResult = z.infer<typeof ScriptImportResult>;
 

@@ -37,6 +37,23 @@ function spec(key: string, run: JobSpec['run'], remote = false): JobSpec {
 }
 
 describe('JobQueue', () => {
+  test('a result that cannot be saved ends the job as failed, not running forever', async () => {
+    const q = new JobQueue(db);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    const job = q.enqueue(
+      spec('commit-fails', async () => ({
+        ...OK,
+        commit: () => {
+          throw new Error('CHECK constraint failed');
+        },
+      })),
+    );
+    await q.idle();
+    expect(q.get(job.id)).toMatchObject({ status: 'failed', result_ref: null, error: { code: 'INTERNAL', message: '结果没能保存：CHECK constraint failed' } });
+    expect(q.listActive()).toEqual([]);
+    errors.mockRestore();
+  });
+
   test('same idempotency key while unfinished returns the existing job (double click)', async () => {
     const q = new JobQueue(db);
     const gate = deferred();

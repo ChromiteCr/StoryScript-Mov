@@ -10,6 +10,7 @@ import {
   type ShotDraft,
 } from '@storyscript/contracts';
 import {
+  BREAKDOWN_PROMPT_VERSION,
   breakdownPromptVersion,
   breakdownRepairErrors,
   buildBreakdownMessages,
@@ -211,6 +212,9 @@ export function startBreakdown(deps: AppDeps, sceneId: string, input: z.input<ty
   };
   const messages = buildBreakdownMessages(promptInput);
   const promptVersion = breakdownPromptVersion(promptInput);
+  if (deps.demo && promptVersion !== BREAKDOWN_PROMPT_VERSION) {
+    throw new AppError('VALIDATION_ERROR', '演示模式只回放录好的拆镜：请把风格设为「不指定」、难度设为「稳妥」。', 409);
+  }
   const scope: BreakdownScope = { scene_id: scene.id, script_version_id: version.id, request };
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({

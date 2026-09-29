@@ -252,3 +252,22 @@ describe('web-search body in structuredCall', () => {
     expect(chat.requests[1]!.response_format?.type).toBe('json_object');
   });
 });
+
+describe('demo mode', () => {
+  test('styled breakdowns, polish and research are refused with a clear message; plain breakdown replays', async () => {
+    const demo = await makeM3App({ demo: true });
+    try {
+      const imported = await importFixture(demo, '01-bookshop.txt', 'txt');
+      const id = imported.scenes[0]!.id;
+      const styled = await demo.post(`/api/v1/scenes/${id}/breakdown`, { technique_id: null, reference_note: null, max_shots: 8, target_seconds: null, style_id: 'style.oner', level: 'steady' });
+      expect(styled.status).toBe(409);
+      expect(styled.text).toContain('演示模式只回放录好的拆镜');
+      const research = await demo.post('/api/v1/styles/research', { reference: '某个参考', notes: null });
+      expect(research.status).toBe(409);
+      const plain = await demo.post(`/api/v1/scenes/${id}/breakdown`, { technique_id: null, reference_note: null, max_shots: 8, target_seconds: null });
+      expect(plain.status).toBe(202);
+    } finally {
+      demo.close();
+    }
+  });
+});

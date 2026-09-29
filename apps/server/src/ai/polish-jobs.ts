@@ -71,6 +71,7 @@ function sceneSort(db: DbPort, sceneId: string): number {
 }
 
 export function startPolish(deps: AppDeps, request: PolishRequest): Job {
+  if (deps.demo) throw new AppError('VALIDATION_ERROR', '演示模式不连接模型，只回放录好的拆镜，不能润色镜头。', 409);
   const { project, jobs } = projectContext(deps);
   const db = project.db;
   const ai = resolveAi(deps);

@@ -374,7 +374,26 @@ export class JobQueue {
         });
       }
     } catch (err) {
-      console.error('[storyscript-mov] 任务结果写入失败：', redactSecrets(err instanceof Error ? err.message : String(err)));
+      const message = redactSecrets(err instanceof Error ? err.message : String(err));
+      console.error('[storyscript-mov] 任务结果写入失败：', message);
+      // never leave the row "running": the page would wait for it forever
+      try {
+        updateJobRow(
+          this.db,
+          entry.id,
+          {
+            status: status === 'succeeded' ? 'failed' : status,
+            attempts: Math.max(result.attempts, entry.sent),
+            usage: result.usage,
+            error: { code: 'INTERNAL', message: `结果没能保存：${message}` },
+            result_ref: null,
+            progress: 1,
+          },
+          this.now(),
+        );
+      } catch {
+        // the database is gone (project closed); startup recovery handles the row
+      }
     } finally {
       this.finish(entry);
       this.pump(entry.lane);

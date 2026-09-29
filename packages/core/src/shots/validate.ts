@@ -163,7 +163,7 @@ export function validateBreakdown(parsed: BreakdownOutput, ctx: BreakdownValidat
       issue(
         'warning',
         'reference_unverified',
-        '通用手法建议（未核实）：参考说明只用于从手法库中选择手法，输出不代表任何具体影片的真实做法',
+        '通用手法建议（未核实）：风格要求只作为风格方向，输出不代表任何具体影片的真实做法',
         null,
       ),
     );

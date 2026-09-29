@@ -24,6 +24,8 @@ export const HostedLimits = z.object({
   emails_per_day: z.number().int().min(0).default(100),
   max_teams: z.number().int().min(1).default(60),
   max_team_members: z.number().int().min(1).default(12),
+  /** groups one account may be in at the same time (its own included) */
+  max_groups_per_account: z.number().int().min(1).default(2),
 });
 export type HostedLimits = z.infer<typeof HostedLimits>;
 

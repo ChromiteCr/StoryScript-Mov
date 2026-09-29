@@ -91,6 +91,21 @@ test('register, start a group, a teammate joins from the link; both work in one 
   const seen = (await (await p2.request.get(`${app.base}/api/v1/entities`)).json()) as { data: { name: string }[] };
   expect(seen.data.map((e) => e.name)).toContain('店主');
 
+  // S2d: a second group of one's own from the 项目 page; at two groups the page says so; a tile switches back
+  await p2.getByRole('button', { name: '切换项目' }).click();
+  await expect(p2.getByRole('heading', { name: '项目', level: 1 })).toBeVisible();
+  await expect(p2.getByRole('heading', { name: /我的小组\s*1\/2/ })).toBeVisible();
+  await p2.getByLabel('组名').fill('周末组');
+  await p2.getByRole('button', { name: '创建小组' }).click();
+  await expect(p2.getByRole('banner').getByText('周末组：小周')).toBeVisible();
+  await p2.getByRole('button', { name: '切换项目' }).click();
+  await expect(p2.getByRole('heading', { name: /我的小组\s*2\/2/ })).toBeVisible();
+  await expect(p2.getByText('你已经在 2 个小组里了')).toBeVisible();
+  await p2.waitForTimeout(500); // let the page fade in before the picture
+  await p2.screenshot({ path: test.info().outputPath('projects-page.png') });
+  await p2.getByRole('button', { name: '切换到「雨夜组」的项目' }).click();
+  await expect(p2.getByRole('banner').getByText('雨夜组：小周')).toBeVisible();
+
   // sign out, then back in with the password
   await p2.getByRole('button', { name: '账号' }).click();
   await p2.getByRole('menuitem', { name: '退出登录' }).click();

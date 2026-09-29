@@ -39,7 +39,7 @@ export const SERVER_HELP = `storyscript-mov server — 服务器版（邮箱注�
   公开地址只写协议和域名，例如 https://story.example.com（不支持子路径）。
   发信：环境变量 STORYSCRIPT_RESEND_API_KEY（Resend 的 API key）；发件地址的域名要先在 Resend 验证。
   模型 key：环境变量 STORYSCRIPT_LLM_* / STORYSCRIPT_IMAGE_*。
-  上限在 server.json 的 limits 里：每组 24 小时文本 200 次、图像 20 次；全站每天邮件 100 封；小组 60 个，每组 12 人。`;
+  上限在 server.json 的 limits 里：每组 24 小时文本 200 次、图像 20 次；全站每天邮件 100 封；小组 60 个，每组 12 人；每人最多同时在 2 个小组。`;
 
 function fail(message: string): number {
   console.error(message);
@@ -201,8 +201,10 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
         const accounts = site.listAccounts();
         if (accounts.length === 0) console.log('还没有账号。');
         for (const a of accounts) {
-          const team = a.team_slug ? site.team(a.team_slug) : null;
-          console.log(`${a.email}\t${a.name}\t${team ? `${team.name}（${a.team_role === 'leader' ? '组长' : '组员'}）` : '未加入小组'}\t注册于 ${a.created_at.slice(0, 10)}`);
+          const groups = site
+            .memberships(a.id)
+            .map((m) => `${site.team(m.team_slug)?.name ?? m.team_slug}（${m.role === 'leader' ? '组长' : '组员'}）`);
+          console.log(`${a.email}\t${a.name}\t${groups.length ? groups.join('、') : '未加入小组'}\t注册于 ${a.created_at.slice(0, 10)}`);
         }
         return 0;
       }
@@ -211,9 +213,11 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
       const account = email.success ? site.accountByEmail(email.data) : null;
       if (!account) return fail(`没有这个账号：${arg ?? ''}`);
       site.db.tx(() => {
-        if (account.team_slug && account.team_role === 'leader') {
-          const next = site.members(account.team_slug).find((m) => m.id !== account.id);
-          if (next) site.setRole(next.id, 'leader');
+        // the lead of each group passes to its earliest other member
+        for (const m of site.memberships(account.id)) {
+          if (m.role !== 'leader') continue;
+          const next = site.members(m.team_slug).find((x) => x.id !== account.id);
+          if (next) site.setRole(next.id, m.team_slug, 'leader');
         }
         site.deleteAccount(account.id);
       });
@@ -232,7 +236,7 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
         if (teams.length === 0) console.log('还没有小组。');
         for (const t of teams) {
           const members = site.members(t.slug);
-          const leader = members.find((m) => m.team_role === 'leader');
+          const leader = members.find((m) => m.role === 'leader');
           console.log(`${t.slug}\t${t.name}\t${members.length} 人${leader ? `，组长 ${leader.name}` : ''}\t组码 ${showJoinCode(t.join_code)}\t${teamDir(dataDir, t.slug)}`);
         }
         return 0;

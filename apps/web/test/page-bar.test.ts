@@ -33,8 +33,9 @@ describe('workflow stages', () => {
 });
 
 describe('hash routes', () => {
-  it('routes every stage and settings, including #/set and #/deliver', () => {
-    expect(VIEWS).toEqual(['script', 'boards', 'plan', 'set', 'media', 'deliver', 'settings']);
+  it('routes every stage, settings and (hosted) projects, including #/set and #/deliver', () => {
+    expect(VIEWS).toEqual(['script', 'boards', 'plan', 'set', 'media', 'deliver', 'settings', 'projects']);
+    expect(parseView('#/projects')).toBe('projects');
     expect(parseView('#/set')).toBe('set');
     expect(parseView('#/deliver/')).toBe('deliver');
   });

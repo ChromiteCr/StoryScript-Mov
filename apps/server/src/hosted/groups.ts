@@ -3,15 +3,17 @@ import type { GroupPreview, GroupView } from '@storyscript/contracts';
 import { AppError } from '../http/errors.ts';
 import { generateJoinCode, normalizeJoinCode, showJoinCode, type HostedConfig } from './config.ts';
 import { LoginLimiter } from './limiter.ts';
-import type { Account, SiteDb } from './site-db.ts';
+import type { Account, Membership, SiteDb } from './site-db.ts';
 import type { TeamRuntime } from './teams.ts';
 
 /**
  * Groups on a hosted server. Anyone signed in can start one (and leads it)
- * or join one with its code; a group shares one project. Each account is in
- * at most one group. The leader removes members and replaces the code; when
- * the leader leaves, the earliest-joined member leads; a leader alone can
- * disband the group, which deletes its project.
+ * or join one with its code; a group shares one project. An account may be
+ * in up to `limits.max_groups_per_account` groups at once (S2d; 2 by
+ * default, its own included) and switches between them on the 项目 page.
+ * The leader removes members and replaces the code; when the leader leaves,
+ * the earliest-joined member leads; a leader alone can disband the group,
+ * which deletes its project.
  */
 
 const SLUG_ALPHABET = 'abcdefghjkmnpqrstuvwxyz23456789';
@@ -26,41 +28,63 @@ export class Groups {
     this.wrongCodes = new LoginLimiter(10, 10_000, 15 * 60_000, d.now ?? Date.now);
   }
 
-  view(account: Account): GroupView | null {
+  get maxGroups(): number {
+    return this.d.config.limits.max_groups_per_account;
+  }
+
+  private viewOf(account: Account, m: Membership): GroupView | null {
     const { site, config } = this.d;
-    if (!account.team_slug) return null;
-    const team = site.team(account.team_slug);
+    const team = site.team(m.team_slug);
     if (!team) return null;
     return {
       slug: team.slug,
       name: team.name,
       join_code: showJoinCode(team.join_code),
-      role: account.team_role ?? 'member',
-      members: site.members(team.slug).map((m) => ({
-        id: m.id,
-        name: m.name,
-        role: m.team_role ?? 'member',
-        joined_at: m.joined_at ?? m.created_at,
-        you: m.id === account.id,
-      })),
+      role: m.role,
+      members: site.members(team.slug).map((x) => ({ id: x.id, name: x.name, role: x.role, joined_at: x.joined_at, you: x.id === account.id })),
       max_members: config.limits.max_team_members,
     };
   }
 
-  private fresh(account: Account): Account {
-    return this.d.site.accountById(account.id) ?? account;
+  /** Every group of the account, earliest joined first. */
+  list(account: Account): GroupView[] {
+    return this.d.site
+      .memberships(account.id)
+      .map((m) => this.viewOf(account, m))
+      .filter((v): v is GroupView => v !== null);
   }
 
-  private mustView(account: Account): GroupView {
-    const v = this.view(this.fresh(account));
-    if (!v) throw new AppError('NO_TEAM', '你还没有加入小组。', 409);
+  view(account: Account, slug: string | null): GroupView | null {
+    if (!slug) return null;
+    const m = this.d.site.membership(account.id, slug);
+    return m ? this.viewOf(account, m) : null;
+  }
+
+  /** The group a browser should work in: the one it chose if still a member, else the earliest joined. */
+  resolveCurrent(account: Account, wanted: string | null): string | null {
+    const all = this.d.site.memberships(account.id);
+    if (wanted && all.some((m) => m.team_slug === wanted)) return wanted;
+    return all[0]?.team_slug ?? null;
+  }
+
+  private mustView(account: Account, slug: string): GroupView {
+    const v = this.view(account, slug);
+    if (!v) throw new AppError('NOT_FOUND', '你不在这个小组里。', 404);
     return v;
   }
 
-  private mustLead(account: Account): GroupView {
-    const v = this.mustView(account);
+  private mustLead(account: Account, slug: string): GroupView {
+    const v = this.mustView(account, slug);
     if (v.role !== 'leader') throw new AppError('FORBIDDEN', '只有组长可以这样做。', 403);
     return v;
+  }
+
+  private assertRoom(account: Account): void {
+    if (this.d.site.memberships(account.id).length >= this.maxGroups) {
+      throw new AppError('QUOTA_EXCEEDED', `每人最多同时在 ${this.maxGroups} 个小组里（包括自己建的）。先退出一个，再建新组或加入别的组。`, 409, {
+        limit: this.maxGroups,
+      });
+    }
   }
 
   private newSlug(): string {
@@ -80,7 +104,7 @@ export class Groups {
 
   async create(account: Account, name: string): Promise<GroupView> {
     const { site, runtime, config } = this.d;
-    if (this.fresh(account).team_slug) throw new AppError('VALIDATION_ERROR', '你已经在一个小组里了。要新建小组，先退出现在的小组。', 409);
+    this.assertRoom(account);
     if (site.listTeams().length >= config.limits.max_teams) {
       throw new AppError('QUOTA_EXCEEDED', `网站的小组数已经到上限（${config.limits.max_teams} 个），请加入已有的小组，或联系管理员。`, 409);
     }
@@ -92,8 +116,8 @@ export class Groups {
       runtime.remove(team.slug);
       throw err;
     }
-    site.setMembership(account.id, team.slug, 'leader');
-    return this.mustView(account);
+    site.addMembership(account.id, team.slug, 'leader');
+    return this.mustView(account, team.slug);
   }
 
   private findByCode(account: Account, code: string) {
@@ -111,58 +135,62 @@ export class Groups {
 
   preview(account: Account, code: string): GroupPreview {
     const team = this.findByCode(account, code);
-    const members = this.d.site.members(team.slug).length;
-    return { name: team.name, members, full: members >= this.d.config.limits.max_team_members };
+    const members = this.d.site.members(team.slug);
+    return {
+      slug: team.slug,
+      name: team.name,
+      members: members.length,
+      full: members.length >= this.d.config.limits.max_team_members,
+      joined: members.some((m) => m.id === account.id),
+    };
   }
 
-  /** Join by code; someone already in another group leaves it first. */
+  /** Join by code (already a member: nothing changes). */
   join(account: Account, code: string): GroupView {
     const { site, config } = this.d;
     const team = this.findByCode(account, code);
-    const me = this.fresh(account);
-    if (me.team_slug === team.slug) return this.mustView(me);
+    if (site.membership(account.id, team.slug)) return this.mustView(account, team.slug);
+    this.assertRoom(account);
     if (site.members(team.slug).length >= config.limits.max_team_members) {
       throw new AppError('QUOTA_EXCEEDED', `「${team.name}」已经满员（${config.limits.max_team_members} 人）。`, 409);
     }
-    if (me.team_slug) this.leave(me);
-    site.setMembership(me.id, team.slug, 'member');
-    return this.mustView(me);
+    site.addMembership(account.id, team.slug, 'member');
+    return this.mustView(account, team.slug);
   }
 
-  leave(account: Account): void {
+  leave(account: Account, slug: string): void {
     const { site } = this.d;
-    const v = this.mustView(account);
-    const others = site.members(v.slug).filter((m) => m.id !== account.id);
+    const v = this.mustView(account, slug);
+    const others = site.members(slug).filter((m) => m.id !== account.id);
     if (others.length === 0) {
       throw new AppError('VALIDATION_ERROR', '你是这个小组的最后一个人。不再需要的话，请解散小组。', 409);
     }
     site.db.tx(() => {
-      site.setMembership(account.id, null, null);
-      if (v.role === 'leader') site.setRole(others[0]!.id, 'leader');
+      site.removeMembership(account.id, slug);
+      if (v.role === 'leader') site.setRole(others[0]!.id, slug, 'leader');
     });
   }
 
-  resetCode(account: Account): GroupView {
-    const v = this.mustLead(account);
-    this.d.site.setJoinCode(v.slug, this.newJoinCode());
-    return this.mustView(account);
+  resetCode(account: Account, slug: string): GroupView {
+    this.mustLead(account, slug);
+    this.d.site.setJoinCode(slug, this.newJoinCode());
+    return this.mustView(account, slug);
   }
 
-  removeMember(account: Account, memberId: string): GroupView {
+  removeMember(account: Account, slug: string, memberId: string): GroupView {
     const { site } = this.d;
-    const v = this.mustLead(account);
+    this.mustLead(account, slug);
     if (memberId === account.id) throw new AppError('VALIDATION_ERROR', '不能移除自己；要离开请用"退出小组"。', 409);
-    const m = site.accountById(memberId);
-    if (!m || m.team_slug !== v.slug) throw new AppError('NOT_FOUND', '这个人已经不在小组里了。', 404);
-    site.setMembership(m.id, null, null);
-    return this.mustView(account);
+    if (!site.membership(memberId, slug)) throw new AppError('NOT_FOUND', '这个人已经不在小组里了。', 404);
+    site.removeMembership(memberId, slug);
+    return this.mustView(account, slug);
   }
 
-  disband(account: Account): void {
+  disband(account: Account, slug: string): void {
     const { site, runtime } = this.d;
-    const v = this.mustLead(account);
+    const v = this.mustLead(account, slug);
     if (v.members.length > 1) throw new AppError('VALIDATION_ERROR', '小组里还有其他人，不能解散。先移除他们，或退出小组把组长交给别人。', 409);
-    site.deleteTeam(v.slug);
-    runtime.remove(v.slug);
+    site.deleteTeam(slug);
+    runtime.remove(slug);
   }
 }

@@ -95,12 +95,24 @@ export function createGateway(o: GatewayOptions): Hono {
       maxAge: Math.floor(SESSION_TTL_MS / 1000),
     });
   };
-  const accountOf = (c: Context): Account => {
-    const account = site.sessionAccount(getCookie(c, SESSION_COOKIE));
-    if (!account) throw new AppError('UNAUTHORIZED', NOT_SIGNED_IN, 401);
-    return account;
+  /** The signed-in account and the group this browser works in (re-checked on every request). */
+  const who = (c: Context): { account: Account; sessionId: string; current: string | null } => {
+    const sessionId = getCookie(c, SESSION_COOKIE) ?? '';
+    const s = site.session(sessionId);
+    if (!s) throw new AppError('UNAUTHORIZED', NOT_SIGNED_IN, 401);
+    const current = groups.resolveCurrent(s.account, s.current_team);
+    if (current !== s.current_team) site.setSessionTeam(sessionId, current);
+    return { account: s.account, sessionId, current };
   };
-  const me = (account: Account): AccountMe => ({ email: account.email, name: account.name, group: groups.view(account) });
+  const accountOf = (c: Context): Account => who(c).account;
+  const slugOf = (c: Context) => c.req.param('slug') ?? '';
+  const me = (account: Account, current: string | null): AccountMe => ({
+    email: account.email,
+    name: account.name,
+    group: groups.view(account, current),
+    groups: groups.list(account),
+    max_groups: groups.maxGroups,
+  });
 
   const gw = new Hono();
   gw.onError(onError);
@@ -149,7 +161,10 @@ export function createGateway(o: GatewayOptions): Hono {
     signIn(c, r.session);
     return c.body(null, 204);
   });
-  gw.get(Api.me.path, (c) => c.json({ data: me(accountOf(c)) }));
+  gw.get(Api.me.path, (c) => {
+    const w = who(c);
+    return c.json({ data: me(w.account, w.current) });
+  });
   gw.post(Api.changePassword.path, async (c) => {
     const account = accountOf(c);
     const input = await parseBody(c, ChangePasswordInput);
@@ -159,10 +174,13 @@ export function createGateway(o: GatewayOptions): Hono {
 
   // ---- groups ----
 
+  // creating, joining or switching makes that group this browser's current one
   gw.post(Api.createGroup.path, async (c) => {
-    const account = accountOf(c);
+    const w = who(c);
     const input = await parseBody(c, CreateGroupInput);
-    return c.json({ data: await groups.create(account, input.name) }, 201);
+    const g = await groups.create(w.account, input.name);
+    site.setSessionTeam(w.sessionId, g.slug);
+    return c.json({ data: g }, 201);
   });
   gw.post(Api.previewGroup.path, async (c) => {
     const account = accountOf(c);
@@ -170,28 +188,38 @@ export function createGateway(o: GatewayOptions): Hono {
     return c.json({ data: groups.preview(account, input.code) });
   });
   gw.post(Api.joinGroup.path, async (c) => {
-    const account = accountOf(c);
+    const w = who(c);
     const input = await parseBody(c, JoinGroupInput);
-    return c.json({ data: groups.join(account, input.code) });
+    const g = groups.join(w.account, input.code);
+    site.setSessionTeam(w.sessionId, g.slug);
+    return c.json({ data: g });
   });
+  gw.post(Api.switchGroup.path, (c) => {
+    const w = who(c);
+    const g = groups.view(w.account, slugOf(c));
+    if (!g) throw new AppError('NOT_FOUND', '你不在这个小组里。', 404);
+    site.setSessionTeam(w.sessionId, g.slug);
+    return c.json({ data: g });
+  });
+  // leaving or disbanding the current group: the next request falls back to another group (resolveCurrent)
   gw.post(Api.leaveGroup.path, (c) => {
-    groups.leave(accountOf(c));
+    groups.leave(accountOf(c), slugOf(c));
     return c.body(null, 204);
   });
-  gw.post(Api.resetGroupCode.path, (c) => c.json({ data: groups.resetCode(accountOf(c)) }));
-  gw.delete(Api.removeGroupMember.path, (c) => c.json({ data: groups.removeMember(accountOf(c), c.req.param('id') ?? '') }));
+  gw.post(Api.resetGroupCode.path, (c) => c.json({ data: groups.resetCode(accountOf(c), slugOf(c)) }));
+  gw.delete(Api.removeGroupMember.path, (c) => c.json({ data: groups.removeMember(accountOf(c), slugOf(c), c.req.param('id') ?? '') }));
   gw.post(Api.disbandGroup.path, async (c) => {
     const account = accountOf(c);
     await parseBody(c, DisbandGroupInput);
-    groups.disband(account);
+    groups.disband(account, slugOf(c));
     return c.body(null, 204);
   });
 
   // ---- everything else: the account's group instance ----
 
   const forward = async (c: Context) => {
-    const account = accountOf(c);
-    const team = account.team_slug ? runtime.get(account.team_slug) : undefined;
+    const { current } = who(c);
+    const team = current ? runtime.get(current) : undefined;
     if (!team) return c.json(errorBody('NO_TEAM', '你还没有加入小组：创建一个，或用组长发的链接加入。'), 409);
     return team.fetch(c.req.raw, c.env);
   };

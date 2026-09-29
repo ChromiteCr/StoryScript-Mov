@@ -38,7 +38,7 @@ const ASPECT_BOX: Record<Aspect, string> = {
 // -------------------------------------------------------------------- tiles
 
 /** A 2.39 frame with the dashed 1.43 centre-safe guides the boards also use. */
-function FrameThumb({ kind }: { kind: 'project' | 'new' }) {
+export function FrameThumb({ kind }: { kind: 'project' | 'new' }) {
   if (kind === 'new') {
     return (
       <span className="flex aspect-[2.39/1] w-full items-center justify-center rounded-control border border-dashed border-graphite-500 text-graphite-300 group-hover:border-graphite-300 group-hover:text-graphite-100">

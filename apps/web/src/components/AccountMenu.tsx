@@ -1,9 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import type { GroupPreview, GroupView } from '@storyscript/contracts';
-import { Check, Copy, KeyRound, LogOut, Trash2, Users } from 'lucide-react';
+import type { AccountMe, GroupPreview, GroupView } from '@storyscript/contracts';
+import { ArrowLeftRight, Check, Copy, KeyRound, LogOut, Trash2, Users } from 'lucide-react';
 import { api } from '../lib/api.ts';
 import { pendingJoin, setPendingJoin } from '../lib/join.ts';
+import { navigate } from '../lib/route.ts';
 import { markSessionExpired } from '../lib/session.ts';
 import { Dialog } from './Dialog.tsx';
 import { ErrorNotice } from './ErrorNotice.tsx';
@@ -11,14 +12,15 @@ import { Menu } from './Menu.tsx';
 import { Button, Field, Tag, TextInput } from './ui.tsx';
 
 /**
- * Hosted server: who is signed in and in which group, in the title bar. The
- * menu opens the group panel (invite link, members, leave/disband), the
- * password form and sign-out. A join link opened while already in a group
- * asks before switching. `onGroupChanged` reloads the workbench, since the
- * project changes with the group.
+ * Hosted server: who is signed in and which group this browser works in, in
+ * the title bar, with 切换项目 (the 项目 page lists all of one's groups).
+ * The menu opens the group panel (invite link, members, leave/disband), the
+ * password form and sign-out. A join link opened while signed in asks
+ * before joining. `onGroupChanged` reloads the workbench, since the project
+ * changes with the group.
  */
 
-const meKey = ['me'] as const;
+export const meKey = ['me'] as const;
 
 export function useMe() {
   return useQuery({ queryKey: meKey, queryFn: ({ signal }) => api.call('me', undefined, { signal }) });
@@ -42,6 +44,10 @@ export function AccountMenu({ onGroupChanged }: { onGroupChanged: () => void }) 
   const group = me.data?.group ?? null;
   return (
     <div className="flex min-w-0 items-center gap-1.5">
+      <Button variant="ghost" size="sm" onClick={() => navigate('projects')} title="查看你所在的小组，在它们的项目之间切换">
+        <ArrowLeftRight aria-hidden className="size-3.5" />
+        <span className="max-md:sr-only">切换项目</span>
+      </Button>
       <button
         type="button"
         onClick={() => setOpen('group')}
@@ -54,18 +60,19 @@ export function AccountMenu({ onGroupChanged }: { onGroupChanged: () => void }) 
       <Menu
         label="账号"
         items={[
+          { key: 'projects', label: '项目（我的小组）', icon: <ArrowLeftRight className="size-3.5" />, onSelect: () => navigate('projects') },
           { key: 'group', label: '小组和组员…', icon: <Users className="size-3.5" />, onSelect: () => setOpen('group') },
           { key: 'password', label: '修改密码…', icon: <KeyRound className="size-3.5" />, onSelect: () => setOpen('password') },
           'separator',
           { key: 'out', label: '退出登录', icon: <LogOut className="size-3.5" />, onSelect: signOut },
         ]}
       />
-      {open === 'group' && group ? <GroupDialog group={group} onClose={() => setOpen(null)} onGroupChanged={onGroupChanged} /> : null}
+      {open === 'group' && group ? <GroupDialog group={group} current onClose={() => setOpen(null)} onGroupChanged={onGroupChanged} /> : null}
       {open === 'password' ? <PasswordDialog onClose={() => setOpen(null)} /> : null}
-      {switchTo && group ? (
-        <SwitchGroupDialog
+      {switchTo && me.data && group ? (
+        <JoinLinkDialog
           code={switchTo}
-          current={group}
+          me={me.data}
           onClose={() => {
             setPendingJoin(null);
             setSwitchTo(null);
@@ -102,7 +109,18 @@ function CopyLine({ label, value }: { label: string; value: string }) {
   );
 }
 
-function GroupDialog({ group, onClose, onGroupChanged }: { group: GroupView; onClose: () => void; onGroupChanged: () => void }) {
+/** One group's panel. `current`: this browser works in it (leaving or disbanding it reloads the workbench). */
+export function GroupDialog({
+  group,
+  current,
+  onClose,
+  onGroupChanged,
+}: {
+  group: GroupView;
+  current: boolean;
+  onClose: () => void;
+  onGroupChanged: () => void;
+}) {
   const qc = useQueryClient();
   const [confirm, setConfirm] = useState<'code' | 'leave' | 'disband' | { remove: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -117,8 +135,11 @@ function GroupDialog({ group, onClose, onGroupChanged }: { group: GroupView; onC
     try {
       await fn();
       setConfirm(null);
-      if (changesGroup) onGroupChanged();
-      else await qc.invalidateQueries({ queryKey: meKey });
+      if (changesGroup && current) onGroupChanged();
+      else {
+        await qc.invalidateQueries({ queryKey: meKey });
+        if (changesGroup) onClose();
+      }
     } catch (e) {
       setError(e);
     } finally {
@@ -127,26 +148,31 @@ function GroupDialog({ group, onClose, onGroupChanged }: { group: GroupView; onC
   };
 
   let confirmBox = null;
+  const params = { slug: group.slug };
   if (confirm === 'code') {
-    confirmBox = { text: '换一个组码？旧的链接和组码马上失效；已经在组里的人不受影响。', action: '换组码', run: () => act(() => api.call('resetGroupCode'), false) };
+    confirmBox = {
+      text: '换一个组码？旧的链接和组码马上失效；已经在组里的人不受影响。',
+      action: '换组码',
+      run: () => act(() => api.call('resetGroupCode', undefined, { params }), false),
+    };
   } else if (confirm === 'leave') {
     confirmBox = {
       text: leader ? '退出小组？组长会交给最早加入的组员。项目留在小组里。' : '退出小组？项目留在小组里，你之后可以用组码重新加入。',
       action: '退出小组',
-      run: () => act(() => api.call('leaveGroup'), true),
+      run: () => act(() => api.call('leaveGroup', undefined, { params }), true),
     };
   } else if (confirm === 'disband') {
     confirmBox = {
       text: `解散「${group.name}」？小组的项目（剧本、分镜、计划、场记和素材记录）会从服务器上删除，不能恢复。你电脑上的视频素材不受影响。`,
       action: '解散并删除项目',
-      run: () => act(() => api.call('disbandGroup', { confirm: true }), true),
+      run: () => act(() => api.call('disbandGroup', { confirm: true }, { params }), true),
     };
   } else if (confirm) {
     const { remove, name } = confirm;
     confirmBox = {
       text: `把 ${name} 移出小组？他之后需要新的组码才能回来；换一个组码可以防止他用旧组码重新加入。`,
       action: '移出小组',
-      run: () => act(() => api.call('removeGroupMember', undefined, { params: { id: remove } }), false),
+      run: () => act(() => api.call('removeGroupMember', undefined, { params: { ...params, id: remove } }), false),
     };
   }
 
@@ -286,7 +312,11 @@ function PasswordDialog({ onClose }: { onClose: () => void }) {
   );
 }
 
-function SwitchGroupDialog({ code, current, onClose, onGroupChanged }: { code: string; current: GroupView; onClose: () => void; onGroupChanged: () => void }) {
+/**
+ * A join link opened while signed in: already in that group → switch to it;
+ * room for another group → join it too; at the cap → say which to leave first.
+ */
+function JoinLinkDialog({ code, me, onClose, onGroupChanged }: { code: string; me: AccountMe; onClose: () => void; onGroupChanged: () => void }) {
   const preview = useQuery({
     queryKey: ['group-preview', code],
     queryFn: () => api.call('previewGroup', { code }),
@@ -295,13 +325,14 @@ function SwitchGroupDialog({ code, current, onClose, onGroupChanged }: { code: s
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
   const target: GroupPreview | undefined = preview.data;
-  const same = target?.name === current.name && current.join_code.replace('-', '') === code.replace('-', '');
+  const atCap = me.groups.length >= me.max_groups;
+  const names = me.groups.map((g) => `「${g.name}」`).join('和');
 
-  const join = async () => {
+  const run = async (fn: () => Promise<unknown>) => {
     setBusy(true);
     setError(null);
     try {
-      await api.call('joinGroup', { code });
+      await fn();
       setPendingJoin(null);
       onGroupChanged();
     } catch (e) {
@@ -314,20 +345,43 @@ function SwitchGroupDialog({ code, current, onClose, onGroupChanged }: { code: s
     <Dialog title="加入小组" onClose={onClose} busy={busy}>
       {preview.isPending ? <p className="text-sm text-graphite-300">正在查找小组…</p> : null}
       {preview.isError ? <ErrorNotice error={preview.error} context="account" /> : null}
-      {target && same ? <p className="text-sm leading-6">你已经在「{current.name}」里了。</p> : null}
-      {target && !same ? (
+      {target ? (
         <div className="flex flex-col items-start gap-3">
-          <p className="text-sm leading-6">
-            要离开「{current.name}」，加入「{target.name}」（{target.members} 人）吗？「{current.name}」的项目留在原组里。
-          </p>
-          {target.full ? <p className="text-xs text-graphite-300">这个小组已经满员了。</p> : null}
+          {target.joined ? (
+            <p className="text-sm leading-6">你已经在「{target.name}」里了。</p>
+          ) : atCap ? (
+            <p className="text-sm leading-6">
+              你已经在 {names} 里。每人最多同时在 {me.max_groups} 个小组，要加入「{target.name}」，先在「切换项目」页退出一个小组。
+            </p>
+          ) : (
+            <p className="text-sm leading-6">
+              加入「{target.name}」（{target.members} 人）？{me.groups.length > 0 ? `你还会留在${names}，在「切换项目」页可以随时切换。` : ''}
+            </p>
+          )}
+          {target.full && !target.joined ? <p className="text-xs text-graphite-300">这个小组已经满员了。</p> : null}
           {error ? <ErrorNotice error={error} context="account" /> : null}
           <div className="flex gap-2">
-            <Button variant="primary" busy={busy} disabled={target.full} onClick={() => void join()}>
-              加入「{target.name}」
-            </Button>
+            {target.joined ? (
+              <Button variant="primary" busy={busy} onClick={() => void run(() => api.call('switchGroup', undefined, { params: { slug: target.slug } }))}>
+                打开「{target.name}」的项目
+              </Button>
+            ) : atCap ? (
+              <Button
+                variant="primary"
+                onClick={() => {
+                  onClose();
+                  navigate('projects');
+                }}
+              >
+                去切换项目页
+              </Button>
+            ) : (
+              <Button variant="primary" busy={busy} disabled={target.full} onClick={() => void run(() => api.call('joinGroup', { code }))}>
+                加入「{target.name}」
+              </Button>
+            )}
             <Button variant="ghost" disabled={busy} onClick={onClose}>
-              留在「{current.name}」
+              取消
             </Button>
           </div>
         </div>

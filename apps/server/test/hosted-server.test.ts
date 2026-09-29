@@ -103,13 +103,13 @@ async function register(email: string, name = '同学', password = 'password-1',
 }
 
 async function createGroup(cookie: string, name: string): Promise<{ join_code: string; slug: string }> {
-  const r = await call('POST', '/api/v1/group', { cookie, body: { name } });
+  const r = await call('POST', '/api/v1/groups', { cookie, body: { name } });
   expect(r.status, r.body).toBe(201);
   return r.json().data;
 }
 
 async function joinGroup(cookie: string, code: string): Promise<Res> {
-  return call('POST', '/api/v1/group/join', { cookie, body: { code } });
+  return call('POST', '/api/v1/groups/join', { cookie, body: { code } });
 }
 
 beforeEach(() => {
@@ -156,7 +156,7 @@ describe('hosted server: registering', () => {
     expect(cookie).toMatch(/SameSite=Strict/);
     expect(cookie).toMatch(/Max-Age=2592000/);
     const me = (await call('GET', '/api/v1/account', { cookie: cookieOf(r) })).json().data;
-    expect(me).toEqual({ email: 'a@school.test', name: '小林', group: null });
+    expect(me).toEqual({ email: 'a@school.test', name: '小林', group: null, groups: [], max_groups: 2 });
 
     // the same address cannot register twice
     clock += 61_000;
@@ -312,8 +312,8 @@ describe('hosted server: groups', () => {
     const c = await register('n@school.test', '别组');
     const g = await createGroup(a, '一组');
     await createGroup(c, '二组');
-    const preview = await call('POST', '/api/v1/group/preview', { cookie: b, body: { code: g.join_code.toLowerCase() } });
-    expect(preview.json().data).toEqual({ name: '一组', members: 1, full: false });
+    const preview = await call('POST', '/api/v1/groups/preview', { cookie: b, body: { code: g.join_code.toLowerCase() } });
+    expect(preview.json().data).toEqual({ slug: g.slug, name: '一组', members: 1, full: false, joined: false });
     const joined = await joinGroup(b, `${PUBLIC}/#join=${g.join_code}`);
     expect(joined.status, joined.body).toBe(200);
     expect(joined.json().data.members.map((m: { name: string }) => m.name)).toEqual(['组长', '组员']);
@@ -341,53 +341,116 @@ describe('hosted server: groups', () => {
     await joinGroup(b, g.join_code);
     await joinGroup(c, g.join_code);
 
-    const notLeader = await call('POST', '/api/v1/group/code', { cookie: b });
+    const notLeader = await call('POST', `/api/v1/groups/${g.slug}/code`, { cookie: b });
     expect(notLeader.status).toBe(403);
-    const reset = (await call('POST', '/api/v1/group/code', { cookie: a })).json().data;
+    const reset = (await call('POST', `/api/v1/groups/${g.slug}/code`, { cookie: a })).json().data;
     expect(reset.join_code).not.toBe(g.join_code);
     expect((await joinGroup(await register('s@school.test'), g.join_code)).status).toBe(404);
 
     const cId = reset.members.find((m: { name: string }) => m.name === '丙').id;
-    const removed = await call('DELETE', `/api/v1/group/members/${cId}`, { cookie: a });
+    const removed = await call('DELETE', `/api/v1/groups/${g.slug}/members/${cId}`, { cookie: a });
     expect(removed.json().data.members.map((m: { name: string }) => m.name)).toEqual(['甲', '乙']);
     expect((await call('GET', '/api/v1/health', { cookie: c })).json().error.code).toBe('NO_TEAM');
 
-    expect((await call('POST', '/api/v1/group/leave', { cookie: a })).status).toBe(204);
+    expect((await call('POST', `/api/v1/groups/${g.slug}/leave`, { cookie: a })).status).toBe(204);
     const me = (await call('GET', '/api/v1/account', { cookie: b })).json().data;
     expect(me.group.role).toBe('leader');
     expect(me.group.members).toHaveLength(1);
     // the last one cannot just leave
-    expect((await call('POST', '/api/v1/group/leave', { cookie: b })).status).toBe(409);
+    expect((await call('POST', `/api/v1/groups/${g.slug}/leave`, { cookie: b })).status).toBe(409);
   });
 
-  test('joining another group leaves the current one (not when alone in it); disbanding needs to be alone and deletes the project', async () => {
+  test('up to two groups per account: join a second one, switch between them, a third is refused', async () => {
     await start();
     const a = await register('t@school.test', '甲');
     const b = await register('u@school.test', '乙');
+    const c = await register('c2@school.test', '丙');
     const g1 = await createGroup(a, '四组');
     const g2 = await createGroup(b, '五组');
-    const alone = await joinGroup(a, g2.join_code);
-    expect(alone.status).toBe(409);
-    expect(alone.json().error.message).toContain('解散');
-
-    expect((await call('POST', '/api/v1/group/disband', { cookie: a, body: { confirm: true } })).status).toBe(204);
-    expect(existsSync(teamDir(data, g1.slug))).toBe(false);
-    expect((await joinGroup(a, g2.join_code)).status).toBe(200);
-    expect((await call('GET', '/api/v1/account', { cookie: a })).json().data.group.name).toBe('五组');
-
-    const busy = await call('POST', '/api/v1/group/disband', { cookie: b, body: { confirm: true } });
-    expect(busy.status).toBe(409);
-    expect((await call('POST', '/api/v1/group/disband', { cookie: a, body: { confirm: true } })).status).toBe(403); // not the leader
-
-    // switching groups from a group with others in it just leaves it
-    const c = await register('c2@school.test', '丙');
     const g3 = await createGroup(c, '六组');
+
+    const second = await joinGroup(a, g2.join_code);
+    expect(second.status, second.body).toBe(200);
+    let me = (await call('GET', '/api/v1/account', { cookie: a })).json().data;
+    expect(me.max_groups).toBe(2);
+    expect(me.groups.map((g: { name: string; role: string }) => [g.name, g.role])).toEqual([
+      ['四组', 'leader'],
+      ['五组', 'member'],
+    ]);
+    expect(me.group.name).toBe('五组'); // joining makes it this browser's group
+    expect((await call('GET', '/api/v1/project', { cookie: a })).json().data.name).toBe('五组');
+
+    const third = await joinGroup(a, g3.join_code);
+    expect(third.status).toBe(409);
+    expect(third.json().error).toMatchObject({ code: 'QUOTA_EXCEEDED', message: expect.stringContaining('最多同时在 2 个小组') });
+    expect((await call('POST', '/api/v1/groups', { cookie: a, body: { name: '七组' } })).status).toBe(409);
+    // joining a group one is already in just works
+    expect((await joinGroup(a, g2.join_code)).status).toBe(200);
+
+    // switching is per browser: another browser of the same account keeps its own group
+    const other = cookieOf(await call('POST', '/api/v1/account/login', { body: { email: 't@school.test', password: 'password-1' } }));
+    expect((await call('POST', `/api/v1/groups/${g1.slug}/switch`, { cookie: a })).status).toBe(200);
+    expect((await call('GET', '/api/v1/project', { cookie: a })).json().data.name).toBe('四组');
+    expect((await call('POST', `/api/v1/groups/${g2.slug}/switch`, { cookie: other })).status).toBe(200);
+    expect((await call('GET', '/api/v1/project', { cookie: other })).json().data.name).toBe('五组');
+    expect((await call('GET', '/api/v1/project', { cookie: a })).json().data.name).toBe('四组');
+    expect((await call('POST', `/api/v1/groups/${g3.slug}/switch`, { cookie: a })).status).toBe(404);
+
+    // leaving the group a browser works in falls back to the other one
+    expect((await call('POST', `/api/v1/groups/${g2.slug}/leave`, { cookie: other })).status).toBe(204);
+    expect((await call('GET', '/api/v1/project', { cookie: other })).json().data.name).toBe('四组');
+    me = (await call('GET', '/api/v1/account', { cookie: a })).json().data;
+    expect(me.groups).toHaveLength(1);
     expect((await joinGroup(a, g3.join_code)).status).toBe(200);
-    expect((await call('GET', '/api/v1/account', { cookie: b })).json().data.group.members).toHaveLength(1);
-    expect(existsSync(teamDir(data, g2.slug))).toBe(true);
-    expect((await call('POST', '/api/v1/group/disband', { cookie: b, body: { confirm: true } })).status).toBe(204);
+  });
+
+  test('disbanding needs to be alone, deletes the project, and browsers in it fall back', async () => {
+    await start();
+    const a = await register('d1@school.test', '甲');
+    const b = await register('d2@school.test', '乙');
+    const g1 = await createGroup(a, '八组');
+    const g2 = await createGroup(b, '九组');
+    await joinGroup(a, g2.join_code);
+    const busy = await call('POST', `/api/v1/groups/${g2.slug}/disband`, { cookie: b, body: { confirm: true } });
+    expect(busy.status).toBe(409);
+    expect((await call('POST', `/api/v1/groups/${g2.slug}/disband`, { cookie: a, body: { confirm: true } })).status).toBe(403); // not the leader
+    expect((await call('POST', `/api/v1/groups/${g1.slug}/disband`, { cookie: b, body: { confirm: true } })).status).toBe(404); // not in it
+
+    expect((await call('POST', `/api/v1/groups/${g2.slug}/leave`, { cookie: a })).status).toBe(204);
+    expect((await call('POST', `/api/v1/groups/${g2.slug}/disband`, { cookie: b, body: { confirm: true } })).status).toBe(204);
     expect(existsSync(teamDir(data, g2.slug))).toBe(false);
-    expect((await call('GET', '/api/v1/account', { cookie: b })).json().data.group).toBeNull();
+    expect((await call('GET', '/api/v1/account', { cookie: b })).json().data).toMatchObject({ group: null, groups: [] });
+    expect((await call('GET', '/api/v1/health', { cookie: b })).json().error.code).toBe('NO_TEAM');
+    expect(existsSync(teamDir(data, g1.slug))).toBe(true);
+  });
+
+  test('a site.db from S2a (one group per account) is migrated: memberships and signed-in browsers carry over', async () => {
+    // build a version-1 database by hand, the way S2a left it
+    const { DatabaseSync } = await import('node:sqlite');
+    const legacy = new DatabaseSync(join(data, 'site.db'));
+    legacy.exec(`
+      CREATE TABLE teams (slug TEXT PRIMARY KEY, name TEXT NOT NULL, join_code TEXT NOT NULL UNIQUE, created_at TEXT NOT NULL);
+      CREATE TABLE accounts (id TEXT PRIMARY KEY, email TEXT NOT NULL UNIQUE, name TEXT NOT NULL, password_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+        team_slug TEXT REFERENCES teams(slug) ON DELETE SET NULL, team_role TEXT CHECK (team_role IN ('leader', 'member')), joined_at TEXT, joined_seq INTEGER);
+      CREATE INDEX accounts_team ON accounts(team_slug);
+      CREATE TABLE sessions (id_hash TEXT PRIMARY KEY, account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE, created_at INTEGER NOT NULL, expires_at INTEGER NOT NULL);
+      INSERT INTO teams VALUES ('goldgrp1', '老组', 'ABCD2345', '2026-09-28T00:00:00.000Z');
+      INSERT INTO accounts VALUES ('acc-1', 'old@school.test', '老张', 'x', '2026-09-28T00:00:00.000Z', 'goldgrp1', 'leader', '2026-09-28T00:00:00.000Z', 1);
+      INSERT INTO accounts VALUES ('acc-2', 'new@school.test', '小新', 'x', '2026-09-28T00:00:00.000Z', NULL, NULL, NULL, NULL);
+      PRAGMA user_version = 1;
+    `);
+    legacy.close();
+    const site = SiteDb.open(data, now);
+    try {
+      expect(site.memberships('acc-1')).toMatchObject([{ team_slug: 'goldgrp1', role: 'leader' }]);
+      expect(site.memberships('acc-2')).toEqual([]);
+      expect(site.members('goldgrp1').map((m) => [m.name, m.role])).toEqual([['老张', 'leader']]);
+      expect(site.db.get<{ user_version: number }>('PRAGMA user_version')?.user_version).toBe(2);
+      const cookie = site.createSession('acc-1', 'goldgrp1');
+      expect(site.session(cookie)).toMatchObject({ current_team: 'goldgrp1', account: { email: 'old@school.test' } });
+    } finally {
+      site.close();
+    }
   });
 
   test('group and member caps', async () => {
@@ -397,7 +460,7 @@ describe('hosted server: groups', () => {
     const b = await register('w@school.test');
     const c = await register('x@school.test');
     const g = await createGroup(a, '唯一组');
-    const second = await call('POST', '/api/v1/group', { cookie: b, body: { name: '第二组' } });
+    const second = await call('POST', '/api/v1/groups', { cookie: b, body: { name: '第二组' } });
     expect(second.status).toBe(409);
     expect(second.json().error.code).toBe('QUOTA_EXCEEDED');
     expect((await joinGroup(b, g.join_code)).status).toBe(200);
@@ -502,7 +565,7 @@ describe('hosted server: admin commands', () => {
       expect(await runServerCli([...base, '--invite', 'first-code', '--mail-from', 'noreply@story.example.test'])).toBe(0);
       const saved = readHostedConfig(dir)!;
       expect(saved).toMatchObject({ version: 2, public_origin: 'https://story.example.test', mail: { from: 'StoryScript-Mov <noreply@story.example.test>' } });
-      expect(saved.limits).toEqual({ llm_jobs_per_day: 200, image_jobs_per_day: 20, emails_per_day: 100, max_teams: 60, max_team_members: 12 });
+      expect(saved.limits).toEqual({ llm_jobs_per_day: 200, image_jobs_per_day: 20, emails_per_day: 100, max_teams: 60, max_team_members: 12, max_groups_per_account: 2 });
       expect(JSON.stringify(saved)).not.toContain('first-code');
       expect(await runServerCli(['init', '--data', dir, '--origin', 'https://x.test/sub', '--invite', 'abcd', '--mail-from', 'a@b.test'])).toBe(2);
 

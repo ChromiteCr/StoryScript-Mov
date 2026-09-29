@@ -61,7 +61,7 @@ const routeKey = (r: RouteDef) => `${r.method} ${r.path}`;
 const fill = (path: string, id: () => string = randomUUID) => path.replace(/:[A-Za-z_]\w*/g, () => id());
 
 /** Accounts and groups exist only on the hosted server's gateway (hosted-server.test.ts calls each of them). */
-const HOSTED_ONLY = /^\/api\/v1\/(account|group)(\/|$)/;
+const HOSTED_ONLY = /^\/api\/v1\/(account|groups)(\/|$)/;
 const contractRoutes = (): RouteDef[] =>
   Object.values(Api)
     .filter((r) => !HOSTED_ONLY.test(r.path))

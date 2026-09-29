@@ -5,17 +5,23 @@ import type { GroupRole } from '@storyscript/contracts';
 import { openDb, type DbPort } from '../db/port.ts';
 
 /**
- * The hosted server's own records, in <data>/site.db: accounts, groups,
- * signed-in browsers, emailed codes and a log of sent mail (for limits).
- * Group projects stay in teams/<slug>/ as before. Session ids and codes are
- * stored hashed; passwords as scrypt hashes (passwords.ts).
+ * The hosted server's own records, in <data>/site.db: accounts, groups and
+ * who is in which (an account may be in a few groups, S2d), signed-in
+ * browsers (each remembers the group it is working in), emailed codes and a
+ * log of sent mail (for limits). Group projects stay in teams/<slug>/.
+ * Session ids and codes are stored hashed; passwords as scrypt hashes.
+ *
+ * Schema versions (PRAGMA user_version): 1 = one group per account (columns
+ * on accounts, S2a); 2 = memberships table + sessions.current_team. The old
+ * account columns stay, unused (SQLite cannot drop a foreign-key column).
  */
 
 export const SESSION_TTL_MS = 30 * 24 * 3600 * 1000;
 const MAX_SESSIONS_PER_ACCOUNT = 20;
 const MAIL_LOG_KEEP_MS = 7 * 24 * 3600 * 1000;
 
-const SCHEMA = `
+/** version-1 tables (kept as the base: CREATE IF NOT EXISTS, then migrated) */
+const BASE_SCHEMA = `
 CREATE TABLE IF NOT EXISTS teams (
   slug TEXT PRIMARY KEY,
   name TEXT NOT NULL,
@@ -31,7 +37,6 @@ CREATE TABLE IF NOT EXISTS accounts (
   team_slug TEXT REFERENCES teams(slug) ON DELETE SET NULL,
   team_role TEXT CHECK (team_role IN ('leader', 'member')),
   joined_at TEXT,
-  /** increasing join order: who joined first leads next, even within one millisecond */
   joined_seq INTEGER
 );
 CREATE INDEX IF NOT EXISTS accounts_team ON accounts(team_slug);
@@ -58,8 +63,30 @@ CREATE TABLE IF NOT EXISTS mail_log (
   sent_at INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS mail_log_sent ON mail_log(sent_at);
-PRAGMA user_version = 1;
 `;
+
+/** v1 → v2: memberships (several groups per account) and the group each browser works in */
+const MIGRATE_2 = `
+CREATE TABLE memberships (
+  account_id TEXT NOT NULL REFERENCES accounts(id) ON DELETE CASCADE,
+  team_slug TEXT NOT NULL REFERENCES teams(slug) ON DELETE CASCADE,
+  role TEXT NOT NULL CHECK (role IN ('leader', 'member')),
+  joined_at TEXT NOT NULL,
+  /* increasing join order: who joined first leads next, even within one millisecond */
+  joined_seq INTEGER NOT NULL,
+  PRIMARY KEY (account_id, team_slug)
+);
+CREATE INDEX memberships_team ON memberships(team_slug, joined_seq);
+INSERT INTO memberships (account_id, team_slug, role, joined_at, joined_seq)
+  SELECT id, team_slug, COALESCE(team_role, 'member'), COALESCE(joined_at, created_at), COALESCE(joined_seq, rowid)
+  FROM accounts WHERE team_slug IS NOT NULL AND team_slug IN (SELECT slug FROM teams);
+UPDATE accounts SET team_slug = NULL, team_role = NULL, joined_at = NULL, joined_seq = NULL;
+ALTER TABLE sessions ADD COLUMN current_team TEXT;
+UPDATE sessions SET current_team =
+  (SELECT m.team_slug FROM memberships m WHERE m.account_id = sessions.account_id ORDER BY m.joined_seq LIMIT 1);
+PRAGMA user_version = 2;
+`;
+export const SITE_SCHEMA_VERSION = 2;
 
 export interface Account {
   id: string;
@@ -67,9 +94,26 @@ export interface Account {
   name: string;
   password_hash: string;
   created_at: string;
-  team_slug: string | null;
-  team_role: GroupRole | null;
-  joined_at: string | null;
+}
+
+export interface Membership {
+  account_id: string;
+  team_slug: string;
+  role: GroupRole;
+  joined_at: string;
+  joined_seq: number;
+}
+
+/** A group member: the account plus its role there. */
+export interface Member extends Account {
+  role: GroupRole;
+  joined_at: string;
+}
+
+/** A signed-in browser: its account and the group it is working in (may be stale; the gateway checks). */
+export interface SessionInfo {
+  account: Account;
+  current_team: string | null;
 }
 
 export interface Team {
@@ -87,12 +131,18 @@ const sha256 = (s: string) => createHash('sha256').update(s, 'utf8').digest('hex
 
 export const siteDbPath = (dataDir: string) => join(dataDir, 'site.db');
 
+const ACCOUNT_COLS = 'id, email, name, password_hash, created_at';
+const ACCOUNT_COLS_A = 'a.id, a.email, a.name, a.password_hash, a.created_at';
+
 export class SiteDb {
   constructor(
     readonly db: DbPort,
     private readonly now: () => number = Date.now,
   ) {
-    db.exec(SCHEMA);
+    const version = db.get<{ user_version: number }>('PRAGMA user_version')?.user_version ?? 0;
+    if (version > SITE_SCHEMA_VERSION) throw new Error(`site.db 的版本 ${version} 比这个程序新，请升级 storyscript-mov`);
+    db.exec(BASE_SCHEMA);
+    if (version < 2) db.tx(() => db.exec(MIGRATE_2));
   }
 
   static open(dataDir: string, now?: () => number): SiteDb {
@@ -114,7 +164,7 @@ export class SiteDb {
   // ---- accounts ----
 
   createAccount(a: { email: string; name: string; password_hash: string }): Account {
-    const row: Account = { id: randomUUID(), ...a, created_at: this.iso(), team_slug: null, team_role: null, joined_at: null };
+    const row: Account = { id: randomUUID(), ...a, created_at: this.iso() };
     this.db.run(
       'INSERT INTO accounts (id, email, name, password_hash, created_at) VALUES (?, ?, ?, ?, ?)',
       row.id,
@@ -127,15 +177,15 @@ export class SiteDb {
   }
 
   accountByEmail(email: string): Account | null {
-    return this.db.get<Account>('SELECT * FROM accounts WHERE email = ?', email) ?? null;
+    return this.db.get<Account>(`SELECT ${ACCOUNT_COLS} FROM accounts WHERE email = ?`, email) ?? null;
   }
 
   accountById(id: string): Account | null {
-    return this.db.get<Account>('SELECT * FROM accounts WHERE id = ?', id) ?? null;
+    return this.db.get<Account>(`SELECT ${ACCOUNT_COLS} FROM accounts WHERE id = ?`, id) ?? null;
   }
 
   listAccounts(): Account[] {
-    return this.db.all<Account>('SELECT * FROM accounts ORDER BY created_at, email');
+    return this.db.all<Account>(`SELECT ${ACCOUNT_COLS} FROM accounts ORDER BY created_at, email`);
   }
 
   deleteAccount(id: string): void {
@@ -146,21 +196,34 @@ export class SiteDb {
     this.db.run('UPDATE accounts SET password_hash = ? WHERE id = ?', passwordHash, id);
   }
 
-  setMembership(id: string, slug: string | null, role: GroupRole | null): void {
+  // ---- memberships ----
+
+  /** The groups an account is in, earliest joined first. */
+  memberships(accountId: string): Membership[] {
+    return this.db.all<Membership>('SELECT * FROM memberships WHERE account_id = ? ORDER BY joined_seq', accountId);
+  }
+
+  membership(accountId: string, slug: string): Membership | null {
+    return this.db.get<Membership>('SELECT * FROM memberships WHERE account_id = ? AND team_slug = ?', accountId, slug) ?? null;
+  }
+
+  addMembership(accountId: string, slug: string, role: GroupRole): void {
     this.db.run(
-      `UPDATE accounts SET team_slug = ?, team_role = ?, joined_at = ?,
-         joined_seq = CASE WHEN ? IS NULL THEN NULL ELSE (SELECT COALESCE(MAX(joined_seq), 0) + 1 FROM accounts) END
-       WHERE id = ?`,
+      `INSERT INTO memberships (account_id, team_slug, role, joined_at, joined_seq)
+       VALUES (?, ?, ?, ?, (SELECT COALESCE(MAX(joined_seq), 0) + 1 FROM memberships))`,
+      accountId,
       slug,
       role,
-      slug ? this.iso() : null,
-      slug,
-      id,
+      this.iso(),
     );
   }
 
-  setRole(id: string, role: GroupRole): void {
-    this.db.run('UPDATE accounts SET team_role = ? WHERE id = ?', role, id);
+  removeMembership(accountId: string, slug: string): void {
+    this.db.run('DELETE FROM memberships WHERE account_id = ? AND team_slug = ?', accountId, slug);
+  }
+
+  setRole(accountId: string, slug: string, role: GroupRole): void {
+    this.db.run('UPDATE memberships SET role = ? WHERE account_id = ? AND team_slug = ?', role, accountId, slug);
   }
 
   // ---- groups ----
@@ -187,28 +250,40 @@ export class SiteDb {
     this.db.run('UPDATE teams SET join_code = ? WHERE slug = ?', code, slug);
   }
 
-  /** Removes the group; its members are left without one. */
+  /** Removes the group and everyone's membership of it; browsers working in it fall back to another group. */
   deleteTeam(slug: string): void {
     this.db.tx(() => {
-      this.db.run('UPDATE accounts SET team_slug = NULL, team_role = NULL, joined_at = NULL, joined_seq = NULL WHERE team_slug = ?', slug);
+      this.db.run('DELETE FROM memberships WHERE team_slug = ?', slug);
+      this.db.run('UPDATE sessions SET current_team = NULL WHERE current_team = ?', slug);
       this.db.run('DELETE FROM teams WHERE slug = ?', slug);
     });
   }
 
   /** Earliest joined first (that order also decides who leads next). */
-  members(slug: string): Account[] {
-    return this.db.all<Account>('SELECT * FROM accounts WHERE team_slug = ? ORDER BY joined_seq', slug);
+  members(slug: string): Member[] {
+    return this.db.all<Member>(
+      `SELECT ${ACCOUNT_COLS_A}, m.role, m.joined_at FROM memberships m JOIN accounts a ON a.id = m.account_id
+       WHERE m.team_slug = ? ORDER BY m.joined_seq`,
+      slug,
+    );
   }
 
   // ---- sessions ----
 
   /** New signed-in browser for an account; returns the cookie value (only its hash is stored). */
-  createSession(accountId: string): string {
+  createSession(accountId: string, currentTeam: string | null = null): string {
     const id = randomBytes(32).toString('base64url');
     const t = this.now();
     this.db.tx(() => {
       this.db.run('DELETE FROM sessions WHERE expires_at <= ?', t);
-      this.db.run('INSERT INTO sessions (id_hash, account_id, created_at, expires_at) VALUES (?, ?, ?, ?)', sha256(id), accountId, t, t + SESSION_TTL_MS);
+      this.db.run(
+        'INSERT INTO sessions (id_hash, account_id, created_at, expires_at, current_team) VALUES (?, ?, ?, ?, ?)',
+        sha256(id),
+        accountId,
+        t,
+        t + SESSION_TTL_MS,
+        currentTeam,
+      );
       this.db.run(
         `DELETE FROM sessions WHERE account_id = ? AND id_hash NOT IN
            (SELECT id_hash FROM sessions WHERE account_id = ? ORDER BY created_at DESC LIMIT ${MAX_SESSIONS_PER_ACCOUNT})`,
@@ -219,11 +294,11 @@ export class SiteDb {
     return id;
   }
 
-  /** The account behind a cookie value, or null (unknown, expired or account gone). */
-  sessionAccount(id: string | undefined): Account | null {
+  /** The account behind a cookie value and the group that browser works in, or null (unknown, expired or account gone). */
+  session(id: string | undefined): SessionInfo | null {
     if (typeof id !== 'string' || id.length === 0 || id.length > 200) return null;
-    const row = this.db.get<Account & { expires_at: number }>(
-      'SELECT a.*, s.expires_at FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.id_hash = ?',
+    const row = this.db.get<Account & { expires_at: number; current_team: string | null }>(
+      `SELECT ${ACCOUNT_COLS_A}, s.expires_at, s.current_team FROM sessions s JOIN accounts a ON a.id = s.account_id WHERE s.id_hash = ?`,
       sha256(id),
     );
     if (!row) return null;
@@ -231,8 +306,16 @@ export class SiteDb {
       this.db.run('DELETE FROM sessions WHERE id_hash = ?', sha256(id));
       return null;
     }
-    const { expires_at: _, ...account } = row;
-    return account;
+    const { expires_at: _, current_team, ...account } = row;
+    return { account, current_team };
+  }
+
+  sessionAccount(id: string | undefined): Account | null {
+    return this.session(id)?.account ?? null;
+  }
+
+  setSessionTeam(id: string, slug: string | null): void {
+    this.db.run('UPDATE sessions SET current_team = ? WHERE id_hash = ?', slug, sha256(id));
   }
 
   revokeSession(id: string | undefined): void {

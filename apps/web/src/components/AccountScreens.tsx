@@ -387,8 +387,8 @@ function RegisterForm({ email, setEmail, onSignedIn }: FormProps) {
 
 // ---- signed in, no group -----------------------------------------------------
 
-export function GroupScreen({ onJoined }: { onJoined: () => void }) {
-  const me = useQuery({ queryKey: ['me'], queryFn: ({ signal }) => api.call('me', undefined, { signal }) });
+/** Join a group by code or link, or start one (you lead it). `onDone` after either. */
+export function GroupForms({ onDone, className = '' }: { onDone: () => void; className?: string }) {
   const [code, setCode] = useState(() => pendingJoin() ?? '');
   const [name, setName] = useState('');
   const [checks, setChecks] = useState<Record<string, string | null>>({});
@@ -403,7 +403,7 @@ export function GroupScreen({ onJoined }: { onJoined: () => void }) {
     void join.run('join', async () => {
       await api.call('joinGroup', { code: code.trim() });
       setPendingJoin(null);
-      onJoined();
+      onDone();
     });
   };
   const doCreate = (ev: FormEvent) => {
@@ -414,26 +414,12 @@ export function GroupScreen({ onJoined }: { onJoined: () => void }) {
     void create.run('create', async () => {
       await api.call('createGroup', { name: name.trim() });
       setPendingJoin(null);
-      onJoined();
+      onDone();
     });
   };
 
-  if (me.isPending) {
-    return (
-      <main className="flex min-h-dvh items-center justify-center bg-graphite-950">
-        <Spinner label="正在读取账号…" />
-      </main>
-    );
-  }
-
   return (
-    <Shell wide>
-      <AppGlyph className="text-graphite-300" />
-      <h1 className="mt-3 text-lg font-medium">{me.data ? `${me.data.name}，你好` : '加入小组'}</h1>
-      <p className="mt-1.5 text-sm leading-6 text-graphite-300">
-        一个小组共用一个项目：剧本、分镜、拍摄计划和素材记录。加入组长发来的小组，或者自己建一个，把链接发给组员。
-      </p>
-      <div className="mt-5 grid gap-3 md:grid-cols-2">
+      <div className={`grid gap-3 md:grid-cols-2 ${className}`}>
         <form onSubmit={doJoin} className="flex flex-col gap-3 rounded-panel border border-graphite-800 bg-graphite-950 p-4" noValidate>
           <h2 className="flex items-center gap-2 text-sm font-medium">
             <Users aria-hidden className="size-4 text-graphite-300" />
@@ -483,6 +469,28 @@ export function GroupScreen({ onJoined }: { onJoined: () => void }) {
           </Button>
         </form>
       </div>
+  );
+}
+
+export function GroupScreen({ onJoined }: { onJoined: () => void }) {
+  const me = useQuery({ queryKey: ['me'], queryFn: ({ signal }) => api.call('me', undefined, { signal }) });
+
+  if (me.isPending) {
+    return (
+      <main className="flex min-h-dvh items-center justify-center bg-graphite-950">
+        <Spinner label="正在读取账号…" />
+      </main>
+    );
+  }
+
+  return (
+    <Shell wide>
+      <AppGlyph className="text-graphite-300" />
+      <h1 className="mt-3 text-lg font-medium">{me.data ? `${me.data.name}，你好` : '加入小组'}</h1>
+      <p className="mt-1.5 text-sm leading-6 text-graphite-300">
+        一个小组共用一个项目：剧本、分镜、拍摄计划和素材记录。加入组长发来的小组，或者自己建一个，把链接发给组员。
+      </p>
+      <GroupForms onDone={onJoined} className="mt-5" />
       <div className="mt-5 flex flex-wrap items-center justify-between gap-2 text-xs text-graphite-300">
         <span className="min-w-0 truncate">已登录：{me.data?.email}</span>
         <Button variant="ghost" size="sm" onClick={() => void api.call('logout').finally(() => markSessionExpired())}>

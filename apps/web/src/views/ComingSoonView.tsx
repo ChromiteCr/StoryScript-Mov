@@ -4,7 +4,7 @@ import { stageDef } from '../lib/stages.ts';
 import { Tag } from '../components/ui.tsx';
 import { Panel, PageHeader, Workspace } from '../components/workspace.tsx';
 
-type ProjectView = Exclude<View, 'settings'>;
+type ProjectView = Exclude<View, 'settings' | 'projects'>;
 
 interface Copy {
   icon: LucideIcon;

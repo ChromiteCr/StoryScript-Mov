@@ -572,13 +572,29 @@ export const GroupView = z.object({
   max_members: z.number().int().positive(),
 });
 export type GroupView = z.infer<typeof GroupView>;
-export const AccountMe = z.object({ email: z.string(), name: z.string(), group: GroupView.nullable() });
+export const AccountMe = z.object({
+  email: z.string(),
+  name: z.string(),
+  /** the group this browser works in (its project is the one open) */
+  group: GroupView.nullable(),
+  /** S2d: every group of the account, earliest joined first */
+  groups: z.array(GroupView),
+  /** how many groups one account may be in at the same time */
+  max_groups: z.number().int().positive(),
+});
 export type AccountMe = z.infer<typeof AccountMe>;
 
 export const CreateGroupInput = z.object({ name: DisplayName });
 /** the code, or the whole …/#join=<code> link pasted */
 export const JoinGroupInput = z.object({ code: z.string().trim().min(4).max(300) });
-export const GroupPreview = z.object({ name: z.string(), members: z.number().int().nonnegative(), full: z.boolean() });
+export const GroupPreview = z.object({
+  slug: z.string(),
+  name: z.string(),
+  members: z.number().int().nonnegative(),
+  full: z.boolean(),
+  /** the asking account is already in it */
+  joined: z.boolean(),
+});
 export type GroupPreview = z.infer<typeof GroupPreview>;
 export const DisbandGroupInput = z.object({ confirm: z.literal(true) });
 
@@ -600,13 +616,15 @@ export const Api = {
   codeLogin: { method: 'POST', path: '/api/v1/account/login/verify', input: CodeLoginInput },
   me: { method: 'GET', path: '/api/v1/account', output: AccountMe },
   changePassword: { method: 'POST', path: '/api/v1/account/password', input: ChangePasswordInput },
-  createGroup: { method: 'POST', path: '/api/v1/group', input: CreateGroupInput, output: GroupView },
-  previewGroup: { method: 'POST', path: '/api/v1/group/preview', input: JoinGroupInput, output: GroupPreview },
-  joinGroup: { method: 'POST', path: '/api/v1/group/join', input: JoinGroupInput, output: GroupView },
-  leaveGroup: { method: 'POST', path: '/api/v1/group/leave' },
-  resetGroupCode: { method: 'POST', path: '/api/v1/group/code', output: GroupView },
-  removeGroupMember: { method: 'DELETE', path: '/api/v1/group/members/:id', output: GroupView },
-  disbandGroup: { method: 'POST', path: '/api/v1/group/disband', input: DisbandGroupInput },
+  createGroup: { method: 'POST', path: '/api/v1/groups', input: CreateGroupInput, output: GroupView },
+  previewGroup: { method: 'POST', path: '/api/v1/groups/preview', input: JoinGroupInput, output: GroupPreview },
+  joinGroup: { method: 'POST', path: '/api/v1/groups/join', input: JoinGroupInput, output: GroupView },
+  /** S2d: work in another of one's groups (this browser only) */
+  switchGroup: { method: 'POST', path: '/api/v1/groups/:slug/switch', output: GroupView },
+  leaveGroup: { method: 'POST', path: '/api/v1/groups/:slug/leave' },
+  resetGroupCode: { method: 'POST', path: '/api/v1/groups/:slug/code', output: GroupView },
+  removeGroupMember: { method: 'DELETE', path: '/api/v1/groups/:slug/members/:id', output: GroupView },
+  disbandGroup: { method: 'POST', path: '/api/v1/groups/:slug/disband', input: DisbandGroupInput },
   recentProjects: { method: 'GET', path: '/api/v1/projects/recent', output: z.array(RecentProject) },
   createProject: { method: 'POST', path: '/api/v1/projects', input: CreateProjectInput, output: Project },
   openProject: { method: 'POST', path: '/api/v1/projects/open', input: OpenProjectInput, output: Project },

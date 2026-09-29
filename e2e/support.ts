@@ -271,5 +271,5 @@ export async function signUpHosted(page: Page, app: HostedApp, email: string, na
   };
   await post('/api/v1/account/register/code', { email, invite: HOSTED_INVITE });
   await post('/api/v1/account/register', { email, code: await app.codeFor(email), name, password: 'password-1' });
-  if (group) await post('/api/v1/group', { name: group });
+  if (group) await post('/api/v1/groups', { name: group });
 }

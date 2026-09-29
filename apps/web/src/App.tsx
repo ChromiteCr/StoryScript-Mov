@@ -28,6 +28,7 @@ import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
 import { HomeView } from './views/HomeView.tsx';
 import { SettingsView } from './views/SettingsView.tsx';
+import { HostedProjectsView } from './views/HostedProjectsView.tsx';
 import { PlanView } from './views/plan/PlanView.tsx';
 
 // The script workspace is the heaviest page; it loads as its own chunk.
@@ -144,6 +145,10 @@ function Workbench({ onGroupChanged }: { onGroupChanged: () => void }) {
   if (view === 'settings') {
     page = 'settings';
     body = <SettingsView />;
+  } else if (view === 'projects' && health.data?.hosted) {
+    // hosted: the groups one is in, one project each
+    page = 'projects';
+    body = <HostedProjectsView onGroupChanged={onGroupChanged} />;
   } else if (project.isPending) {
     page = 'loading';
     body = (

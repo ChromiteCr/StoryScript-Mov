@@ -128,3 +128,18 @@ describe('plan sync', () => {
     expect(res.status).toBe(400);
   });
 });
+
+describe('review fixes (server)', () => {
+  test('two cast lines for one character keep both actors; "/" alone is no actor', async () => {
+    const lin = (await entities()).find((e) => e.name === '林川')!;
+    const res = await app.post<Entity[]>('/api/v1/entities/cast', {
+      items: [
+        { entity_id: lin.id, actor_name: '孙晴', split_alias: null, new_character_name: null },
+        { entity_id: lin.id, actor_name: '周远', split_alias: null, new_character_name: null },
+      ],
+    });
+    expect(res.data.find((e) => e.id === lin.id)!.actor_name).toBe('孙晴、周远');
+    const slash = await app.patch<Entity>(`/api/v1/entities/${lin.id}`, { actor_name: ' / ' });
+    expect(slash.data.actor_name).toBeNull();
+  });
+});

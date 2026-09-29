@@ -154,3 +154,44 @@ describe('call sheet performer label', () => {
     expect(performerLabel({ name: '周远', cast_character_ids: [] }, names)).toBe('周远');
   });
 });
+
+describe('review fixes', () => {
+  test('a long crafted header-like line is skipped in linear time', () => {
+    const t0 = performance.now();
+    expect(castBlockLines(['人物：', `人物${' '.repeat(200_000)}x`, '周远：林川'])).toEqual(['周远：林川']);
+    expect(performance.now() - t0).toBeLessThan(200);
+  });
+
+  test('numbered and bulleted lists: the marker is not part of the actor', () => {
+    const s = readCastList(['人物：', '1、周远：裴明远', '- 孙晴：林川', '(3) 陈一：苏禾', '剧本：'], chars);
+    expect(s.map((x) => [x.actor_name, x.character_label])).toEqual([
+      ['周远', '裴明远'],
+      ['孙晴', '林川'],
+      ['陈一', '苏禾'],
+    ]);
+  });
+
+  test('descriptions after a character are not actors', () => {
+    expect(readCastList(['人物：', '林川：高二学生', '苏禾：林川的同桌', '裴明远：男主', '校医：17岁'], chars)).toEqual([]);
+  });
+
+  test('饰 inside a description does not break the line; a bracketed note on the label still matches', () => {
+    const s = readCastList(['人物：', '周远：林川：服饰讲究的少年', '孙晴：苏禾（主角）', '陈一：校医（男，40岁）'], chars);
+    expect(s.map((x) => [x.actor_name, x.entity_name, x.match])).toEqual([
+      ['周远', '林川', 'exact'],
+      ['孙晴', '苏禾', 'exact'],
+      ['陈一', '校医', 'exact'],
+    ]);
+  });
+
+  test('a double cast is current once both actors are recorded', () => {
+    const cast = chars.map((c) => (c.name === '林川' ? { ...c, aliases: [], actor_name: '周远、孙晴' } : c));
+    const s = readCastList(['人物：', '周远：林川', '孙晴：林川'], cast);
+    expect(s.every((x) => x.current)).toBe(true);
+  });
+
+  test('separator-only actor names are no actor for the plan sync', () => {
+    const r = { id: ID(11), type: 'performer' as const, name: '旧演员', windows: [], cast_character_ids: [ID(1)], confirmed: true };
+    expect(planCastSync({ characters: [{ id: ID(1), name: '林川', actor_name: '/' }], locations: [], resources: [r] })).toEqual([]);
+  });
+});

@@ -26,6 +26,8 @@ export function planCastSync(input: CastSyncInput): CastSyncChange[] {
   for (const c of input.characters) {
     if (!c.actor_name) continue;
     const actors = splitActorNames(c.actor_name);
+    // "/" or "、" alone names nobody: treat as no actor
+    if (actors.length === 0) continue;
     const wanted = new Set(actors.map(norm));
     // performers the script no longer gives this character to
     const owners = performers.filter((r) => r.cast_character_ids.includes(c.id) && !wanted.has(norm(r.name)));

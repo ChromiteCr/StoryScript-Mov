@@ -21,15 +21,23 @@ export interface CastCharacter {
   actor_name: string | null;
 }
 
-const HEADER =
-  /^\s*[【[（(]?\s*(?:主要)?(?:出场)?(?:人物(?:表|介绍|小传)?|角色(?:表|介绍)?|演员(?:表)?|演职人员(?:表)?|主演|cast(?: list)?)\s*[】\]）)]?\s*[：:]?\s*$/i;
+// no two adjacent \s* runs: this runs on whatever a user pastes (linear time on long lines)
+const HEADER = /^[\s【[（(]*(?:主要)?(?:出场)?(?:人物(?:表|介绍|小传)?|角色(?:表|介绍)?|演员(?:表)?|演职人员(?:表)?|主演|cast(?: list)?)[\s】\]）)]*(?:[：:]\s*)?$/i;
 /** the end of the cast block: the script body or a scene starts */
 const END = /^\s*[【[]?\s*(?:剧本|正文|故事|剧情|梗概|大纲|简介|第.{1,4}[场幕集]|场景?\s*[一二三四五六七八九十百0-9])/;
 const MAX_BLOCK = 60;
+/** cast lines are short; longer lines are skipped before any pattern runs on them */
+const MAX_LINE = 200;
+/** "1、" "1." "(1)" "①" "一、" "- " "• " in front of a cast line */
+const LIST_MARKER = /^(?:[-*+•·●▪◦–]|[①-⑳]|[（(]\s*(?:\d{1,3}|[一二三四五六七八九十]{1,3})\s*[）)]|(?:\d{1,3}|[一二三四五六七八九十]{1,3})\s*[.、．,，)）])\s*/;
 
 /** Lines of the cast block among the paragraphs before the first scene (header found), else the lines that say 饰. */
 export function castBlockLines(preScene: readonly string[]): string[] {
-  const lines = preScene.flatMap((p) => p.split(/\r?\n/)).map((l) => l.trim());
+  const lines = preScene
+    .flatMap((p) => p.split(/\r?\n/))
+    .map((l) => l.trim())
+    .filter((l) => l.length <= MAX_LINE)
+    .map((l) => l.replace(LIST_MARKER, ''));
   const start = lines.findIndex((l) => HEADER.test(l));
   if (start >= 0) {
     const out: string[] = [];
@@ -60,6 +68,12 @@ function actorLike(s: string): boolean {
   return t.length > 0 && [...t].length <= 16 && !SENTENCE.test(t);
 }
 
+/** a description, not a name: "高二学生" "林川的同桌" "17岁" "男主" */
+const DESCRIPTION = /[的0-9０-９]|(?:学生|同学|同桌|主角|男主|女主|配角|岁)$/;
+function nameLike(s: string): boolean {
+  return actorLike(s) && !DESCRIPTION.test(s.trim());
+}
+
 /** Kinship and similar words: 父亲/母亲 differ by one character but are different people. */
 const DISTINCT = new Set([...'父母男女兄弟姐妹哥爷奶叔姨舅婶伯公婆夫妻儿孙老少大小前后甲乙丙丁一二三四']);
 
@@ -81,6 +95,12 @@ interface Hit {
 function matchOne(label: string, chars: readonly CastCharacter[]): Hit | null {
   const t = label.trim();
   if (!t) return null;
+  // "林川（主角）" / "林川（男，17岁）": a trailing note in brackets is not part of the name
+  const bare = t.replace(/\s*[（(][^（）()]*[）)]\s*$/, '');
+  if (bare && bare !== t) {
+    const h = matchOne(bare, chars);
+    if (h) return h;
+  }
   const exact = chars.find((c) => c.name === t);
   if (exact) return { c: exact, match: 'exact', alias: null };
   const alias = chars.find((c) => c.aliases.includes(t));
@@ -119,13 +139,14 @@ function cleanActor(s: string): string {
 function readLine(line: string, chars: readonly CastCharacter[], orientation: Orientation | null): Raw | null {
   // 角色（演员 饰） / 角色（饰演：演员）
   let m = /^(.+?)\s*[（(]\s*(?:饰演?[：:]?\s*)?([^（）()]+?)\s*(?:饰演?)?\s*[）)]\s*.*$/.exec(line);
-  if (m && /[（(][^（）()]*饰[^（）()]*[）)]/.test(line)) {
+  if (m && /[（(]\s*(?:饰演?[：:]?\s*)?[^（）()]*?\s*饰演?\s*[）)]|[（(]\s*饰演?[：:]?/.test(line)) {
     const [, label, actor] = m;
     return actorLike(actor!) ? { line, actor: cleanActor(actor!), labels: matchLabels(label!, chars) } : null;
   }
   // 演员 饰 角色（简介）
   m = /^(.+?)\s*饰演?\s*[：:]?\s*([^：:，,（(]+).*$/.exec(line);
-  if (m) {
+  // a colon or dash before 饰 means the colon format ("周远：林川：服饰讲究"), not "演员 饰 角色"
+  if (m && !/[：:]|——|—|--|－/.test(cleanActor(m[1]!))) {
     const [, actor, label] = m;
     return actorLike(actor!) ? { line, actor: cleanActor(actor!), labels: matchLabels(label!, chars) } : null;
   }
@@ -141,12 +162,12 @@ function readLine(line: string, chars: readonly CastCharacter[], orientation: Or
   const hit0 = m0.some((x) => x.hit);
   const hit1 = m1.some((x) => x.hit);
   if (hit1 && !hit0 && actorLike(p0)) return { line, actor: p0, labels: m1 };
-  if (hit0 && !hit1 && actorLike(p1)) return { line, actor: p1, labels: m0 };
+  if (hit0 && !hit1 && nameLike(p1)) return { line, actor: p1, labels: m0 };
   if (!hit0 && !hit1 && actorLike(p0) && actorLike(p1)) {
     // nothing known: follow the rest of the list (演员：角色 by default when a description follows)
     const first = orientation ?? (parts.length >= 3 ? 'actor_first' : null);
     if (first === 'actor_first') return { line, actor: p0, labels: m1 };
-    if (first === 'character_first') return { line, actor: p1, labels: m0 };
+    if (first === 'character_first' && nameLike(p1)) return { line, actor: p1, labels: m0 };
   }
   return null;
 }
@@ -199,7 +220,7 @@ export function readCastList(preScene: readonly string[], characters: readonly C
         entity_name: hit ? hit.c.name : null,
         match: hit ? hit.match : 'none',
         split_alias: split,
-        current: !!hit && !split && hit.c.actor_name === r.actor,
+        current: !!hit && !split && splitActorNames(hit.c.actor_name ?? '').includes(r.actor),
       });
     }
   }

@@ -58,7 +58,7 @@ test('S3b cast: cast list → 填入演员 → plan 同步 → performers with t
     await roster.getByRole('button', { name: '填入演员…' }).click();
 
     const dialog = page.getByRole('dialog', { name: '填入演员' });
-    await expect(dialog.getByText('演员姓名只用于计划和通告单，不会发给 AI。')).toBeVisible();
+    await expect(dialog.getByText('拆镜和润色不会把它发给 AI', { exact: false })).toBeVisible();
     await expect(dialog.getByRole('checkbox', { name: '填入：周远：裴明远：主角' })).toBeChecked();
     await expect(dialog.getByRole('checkbox', { name: '填入：孙晴：林川：小孩子' })).toBeChecked();
     await expect(dialog.getByRole('textbox', { name: /^演员（周远：裴明远/ })).toHaveValue('周远');

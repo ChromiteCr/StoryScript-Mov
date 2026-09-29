@@ -38,7 +38,8 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
     .filter((s) => s.required_status !== 'waived')
     .reduce((sum, s) => sum + (Number.isFinite(s.fields.est_seconds) ? s.fields.est_seconds : 0), 0);
   const pendingDraft = ws.pendingDraftByScene.get(scene.id) ?? null;
-  const pick = sceneSelection(shots, ws.selected);
+  // only what is on screen: the 待重新关联 filter may hide some shots
+  const pick = sceneSelection(visible, ws.selected);
 
   const move = (from: number, to: number) => {
     const ids = moveId(

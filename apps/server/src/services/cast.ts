@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { CastApplyInput, CastSuggestion, CastSyncApplyInput, CastSyncPreview, Entity, Resource } from '@storyscript/contracts';
-import { castSyncHash, planCastSync, readCastList } from '@storyscript/core';
+import { castSyncHash, planCastSync, readCastList, splitActorNames } from '@storyscript/core';
 import type { DbPort } from '../db/port.ts';
 import { cleanAliases, getEntity, insertEntity, listEntities, nextAlias, updateEntityRow } from '../db/repos/entity.ts';
 import { getResource, insertResource, listResources, updateResourceRow } from '../db/repos/resource.ts';
@@ -34,6 +34,7 @@ export function castSuggestions(db: DbPort): CastSuggestion[] {
 export function applyCast(db: DbPort, input: CastApplyInput): Entity[] {
   return db.tx(() => {
     const out = new Map<string, Entity>();
+    const actorsOf = new Map<string, string[]>();
     const create = (name: string, actor: string): Entity => {
       const existing = listEntities(db).find((e) => e.type === 'character' && e.name === name);
       if (existing) {
@@ -73,7 +74,11 @@ export function applyCast(db: DbPort, input: CastApplyInput): Entity[] {
         out.set(e.id, e);
         continue;
       }
-      const next = { ...(out.get(entity.id) ?? entity), actor_name: cleanActorName('character', item.actor_name) };
+      // two lines for one character (a double cast) keep both actors: "周远、孙晴"
+      const names = actorsOf.get(entity.id) ?? [];
+      for (const n of splitActorNames(item.actor_name)) if (!names.includes(n)) names.push(n);
+      actorsOf.set(entity.id, names);
+      const next = { ...(out.get(entity.id) ?? entity), actor_name: cleanActorName('character', names.join('、')) };
       updateEntityRow(db, next);
       out.set(next.id, next);
     }

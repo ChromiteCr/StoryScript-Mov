@@ -12,6 +12,7 @@ import {
 import type { DbPort } from '../db/port.ts';
 import { getDraft, setDraftStatus } from '../db/repos/draft.ts';
 import { cleanAliases, findEntityByName, getEntity, insertEntity, nextAlias, updateEntityRow } from '../db/repos/entity.ts';
+import { splitActorNames } from '@storyscript/core';
 import { AppError } from '../http/errors.ts';
 
 type Input<S extends z.ZodType> = z.infer<S>;
@@ -20,7 +21,8 @@ type Input<S extends z.ZodType> = z.infer<S>;
 export function cleanActorName(type: EntityType, name: string | null | undefined): string | null {
   if (type !== 'character') return null;
   const t = (name ?? '').trim().replace(/\s+/g, ' ');
-  if (!t) return null;
+  // "/" or "、" alone names nobody
+  if (!t || splitActorNames(t).length === 0) return null;
   if ([...t].length > ACTOR_NAME_MAX) throw new AppError('VALIDATION_ERROR', `演员姓名最多 ${ACTOR_NAME_MAX} 个字`, 400);
   return t;
 }

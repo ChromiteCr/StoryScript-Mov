@@ -44,7 +44,7 @@ export function CastDialog({ suggestions, onClose }: { suggestions: CastSuggesti
       variant="drawer"
       busy={apply.isPending}
       title="填入演员"
-      description="从剧本开头的人物表读出来的，勾选后写进角色的「演员」。演员姓名只用于计划和通告单，不会发给 AI。"
+      description="从剧本开头的人物表读出来的，勾选后写进角色的「演员」。「演员」只用于计划和通告单，拆镜和润色不会把它发给 AI（AI 抽取角色时读的是剧本全文，其中也包括这张人物表）。"
       footer={
         <div className="flex flex-wrap items-center justify-end gap-2">
           <Button variant="ghost" onClick={onClose} disabled={apply.isPending}>

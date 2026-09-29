@@ -30,8 +30,17 @@ export function defaultCastRows(list: readonly CastSuggestion[]): CastRowState[]
 }
 
 /** Lines that still need filling in (the banner counts these). */
+/**
+ * Characters the dialog can still fill in: lines with no matching character
+ * (crew, a role the script lacks) are not counted, and a character counts once.
+ */
 export function pendingCastCount(list: readonly CastSuggestion[]): number {
-  return list.filter((s) => !s.current).length;
+  const open = new Set<string>();
+  for (const s of list) {
+    if (s.current || s.match === 'none') continue;
+    open.add(castTargetName(s));
+  }
+  return open.size;
 }
 
 /** The character the actor goes to: a split alias becomes its own character. */

@@ -56,8 +56,9 @@ describe('cast list rows', () => {
     expect(rows[2]).toEqual({ checked: false, actor: '沈乐', newName: '林川的母亲' });
   });
 
-  it('count the lines that still need filling in', () => {
-    expect(pendingCastCount(LIST)).toBe(4);
+  it('count the characters that can still be filled in (not lines; no-character lines excluded)', () => {
+    // 裴明远 (two lines, counted once) and 林川长大后; the 林川的母亲 line has no character
+    expect(pendingCastCount(LIST)).toBe(2);
     expect(pendingCastCount([LIST[4]!])).toBe(0);
     expect(pendingCastCount([])).toBe(0);
   });

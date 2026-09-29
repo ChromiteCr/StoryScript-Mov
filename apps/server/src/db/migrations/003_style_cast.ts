@@ -5,7 +5,8 @@
  *   entity.actor_name who plays a character. Back-filled from the plan's
  *                     performer resources where exactly one performer plays
  *                     the character (two performers, e.g. a child and an
- *                     adult, stay for the user to decide).
+ *                     adult, stay for the user to decide; so does a name
+ *                     longer than the 40-character actor field).
  *   shot_draft        rebuilt: its kind CHECK gains 'style' and 'polish'
  *                     (SQLite cannot alter a CHECK in place)
  */
@@ -48,8 +49,8 @@ CREATE INDEX idx_shot_draft_kind_status ON shot_draft(kind, status, created_at);
 
 ALTER TABLE entity ADD COLUMN actor_name TEXT;
 UPDATE entity SET actor_name = (
-  SELECT r.name FROM resource r, json_each(r.cast_character_ids_json) j
-  WHERE r.type = 'performer' AND j.value = entity.id
+  SELECT trim(r.name) FROM resource r, json_each(r.cast_character_ids_json) j
+  WHERE r.type = 'performer' AND j.value = entity.id AND length(trim(r.name)) BETWEEN 1 AND 40
 )
 WHERE type = 'character' AND (
   SELECT COUNT(*) FROM resource r, json_each(r.cast_character_ids_json) j

@@ -75,3 +75,10 @@ test('v2 → v3: actor names back-filled only where one performer plays the part
     ),
   ).toThrow(/CHECK/);
 });
+
+test('v2 → v3: a performer name longer than the actor field is not copied (the project still opens)', async () => {
+  ent(ID(1), 'c1', '林川');
+  performer(ID(11), '周远（周二周四下午有课，周末和其他时间都可以，拍摄前一天请联系班长和组长再确认一次）', [ID(1)]);
+  await migrate(db, { backupDir: join(root, 'rc') });
+  expect(listEntities(db).map((e) => [e.name, e.actor_name])).toEqual([['林川', null]]);
+});

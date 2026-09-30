@@ -140,14 +140,7 @@ export function createComment(db: DbPort, shotId: string, input: CreateCommentIn
       now,
     );
     for (const a of accounts) if (a !== actor.id) db.run('INSERT OR IGNORE INTO comment_mention (comment_id, account_id) VALUES (?, ?)', id, a);
-    // writing a comment means you have read the thread up to it
-    const n = db.get<{ n: number }>('SELECT n FROM comment WHERE id = ?', id)!.n;
-    db.run(
-      'INSERT INTO comment_read (account_id, shot_id, read_n) VALUES (?, ?, ?) ON CONFLICT(account_id, shot_id) DO UPDATE SET read_n = MAX(read_n, excluded.read_n)',
-      actor.id,
-      shotId,
-      n,
-    );
+    // own comments are never unread; others' stay unread until the panel reports it showed them
     return one(db, id);
   });
 }
@@ -160,7 +153,14 @@ export function updateComment(db: DbPort, id: string, input: UpdateCommentInput,
     if (r.deleted_at) throw new AppError('VALIDATION_ERROR', '这条批注已删除', 409);
     const { accounts, roles } = resolveMentions(input.mentions);
     db.run('UPDATE comment SET body = ?, mention_roles_json = ?, edited_at = ? WHERE id = ?', input.body, JSON.stringify(roles), now, id);
-    for (const a of accounts) if (a !== actor.id) db.run('INSERT OR IGNORE INTO comment_mention (comment_id, account_id) VALUES (?, ?)', id, a);
+    // people edited out of the text are no longer mentioned; those still in keep their "seen"
+    const keep = accounts.filter((a) => a !== actor.id);
+    db.run(
+      `DELETE FROM comment_mention WHERE comment_id = ?${keep.length ? ` AND account_id NOT IN (${keep.map(() => '?').join(', ')})` : ''}`,
+      id,
+      ...keep,
+    );
+    for (const a of keep) db.run('INSERT OR IGNORE INTO comment_mention (comment_id, account_id) VALUES (?, ?)', id, a);
     return one(db, id);
   });
 }
@@ -189,11 +189,12 @@ export function setResolved(db: DbPort, id: string, resolved: boolean, now = new
   });
 }
 
-/** The account has read every comment on this shot so far (and the mentions in it). */
-export function markRead(db: DbPort, shotId: string, now = new Date().toISOString()): void {
+/** The account has read this shot's comments up to `upto` (the newest one the panel showed), and the mentions in them. */
+export function markRead(db: DbPort, shotId: string, upto: string, now = new Date().toISOString()): void {
   const actor = me();
   db.tx(() => {
-    const top = db.get<{ n: number | null }>('SELECT MAX(n) AS n FROM comment WHERE shot_id = ?', shotId)?.n ?? 0;
+    const top = db.get<{ n: number }>('SELECT n FROM comment WHERE id = ? AND shot_id = ?', upto, shotId)?.n;
+    if (top === undefined) return;
     db.run(
       'INSERT INTO comment_read (account_id, shot_id, read_n) VALUES (?, ?, ?) ON CONFLICT(account_id, shot_id) DO UPDATE SET read_n = MAX(read_n, excluded.read_n)',
       actor.id,
@@ -201,10 +202,11 @@ export function markRead(db: DbPort, shotId: string, now = new Date().toISOStrin
       top,
     );
     db.run(
-      'UPDATE comment_mention SET seen_at = ? WHERE account_id = ? AND seen_at IS NULL AND comment_id IN (SELECT id FROM comment WHERE shot_id = ?)',
+      'UPDATE comment_mention SET seen_at = ? WHERE account_id = ? AND seen_at IS NULL AND comment_id IN (SELECT id FROM comment WHERE shot_id = ? AND n <= ?)',
       now,
       actor.id,
       shotId,
+      top,
     );
   });
 }
@@ -227,7 +229,8 @@ export function commentSummary(db: DbPort): CommentSummary {
   const mentions = db
     .all<CommentRow>(
       `SELECT ${COLS.split(', ').map((c) => `c.${c}`).join(', ')} FROM comment c JOIN comment_mention m ON m.comment_id = c.id
-        WHERE m.account_id = ? AND m.seen_at IS NULL AND c.deleted_at IS NULL ORDER BY c.n DESC LIMIT 30`,
+        JOIN shot s ON s.id = c.shot_id
+        WHERE m.account_id = ? AND m.seen_at IS NULL AND c.deleted_at IS NULL AND s.archived = 0 ORDER BY c.n DESC LIMIT 30`,
       actor.id,
     )
     .map((c) => {

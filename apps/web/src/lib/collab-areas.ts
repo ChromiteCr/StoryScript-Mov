@@ -14,7 +14,21 @@ export type QueryRoot = readonly string[];
 
 export const AREA_ROOTS: Readonly<Record<CollabArea, readonly QueryRoot[]>> = {
   script: [['script'], ['boards', 'script'], ['boards', 'script-versions'], ['plan', 'script'], ['m6', 'script']],
-  shots: [['shots'], ['shot-revisions'], ['boards', 'shots'], ['plan', 'shots'], ['m6', 'shots'], ['deliver', 'shots']],
+  shots: [
+    ['shots'],
+    ['shot-revisions'],
+    ['boards', 'shots'],
+    ['plan', 'shots'],
+    ['m6', 'shots'],
+    ['deliver', 'shots'],
+    // views computed from shots: board staleness, plan detail, coverage
+    ['boards', 'list'],
+    ['plan', 'plans'],
+    ['m6', 'coverage'],
+    ['deliver', 'boards'],
+    ['deliver', 'plans'],
+    ['deliver', 'coverage'],
+  ],
   boards: [['boards'], ['deliver', 'boards']],
   plan: [['plan'], ['m6', 'plans'], ['m6', 'setups'], ['deliver', 'plans']],
   takes: [['m6', 'takes'], ['m6', 'coverage'], ['deliver', 'takes'], ['deliver', 'coverage']],

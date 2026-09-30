@@ -157,7 +157,7 @@ test('feed names the teammate, presence shows pages, @导演 reaches the directo
 
   // A reads, replies, resolves; reading does not move the feed
   const before = a1.seq;
-  const r = await call('POST', `/api/v1/shots/${shot.id}/comments/read`, { cookie: a, body: {} });
+  const r = await call('POST', `/api/v1/shots/${shot.id}/comments/read`, { cookie: a, body: { upto: c.id } });
   expect(r.status).toBe(204);
   const a2 = await ok<CollabChanges>(call('GET', `/api/v1/collab/changes?since=${before}&epoch=${a1.epoch}&tab=a1&page=script`, { cookie: a }));
   expect(a2.seq).toBe(before);

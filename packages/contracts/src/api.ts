@@ -13,7 +13,7 @@ import { Constraint, Plan, Resource, ResourceType, Setup, SetupDurations, TimeWi
 import { StyleCard, StyleCardInput, StyleDefaults, StyleLevel, StyleLibrary, StyleResearchInput } from './style.ts';
 import { CastApplyInput, CastSuggestion, CastSyncApplyInput, CastSyncPreview } from './cast.ts';
 import { CollabChanges } from './collab.ts';
-import { CommentSummary, CreateCommentInput, ShotComment, UpdateCommentInput } from './comments.ts';
+import { CommentSummary, CreateCommentInput, MarkCommentsReadInput, ShotComment, UpdateCommentInput } from './comments.ts';
 import { Take, TakeRating } from './take.ts';
 
 /**
@@ -768,7 +768,7 @@ export const Api = {
   commentSummary: { method: 'GET', path: '/api/v1/comments/summary', output: CommentSummary },
   listComments: { method: 'GET', path: '/api/v1/shots/:id/comments', output: z.array(ShotComment) },
   createComment: { method: 'POST', path: '/api/v1/shots/:id/comments', input: CreateCommentInput, output: ShotComment },
-  markCommentsRead: { method: 'POST', path: '/api/v1/shots/:id/comments/read' },
+  markCommentsRead: { method: 'POST', path: '/api/v1/shots/:id/comments/read', input: MarkCommentsReadInput },
   updateComment: { method: 'PATCH', path: '/api/v1/comments/:id', input: UpdateCommentInput, output: ShotComment },
   deleteComment: { method: 'DELETE', path: '/api/v1/comments/:id', output: ShotComment },
   resolveComment: { method: 'POST', path: '/api/v1/comments/:id/resolve', output: ShotComment },

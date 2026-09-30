@@ -187,7 +187,7 @@ server {
 
 ```bash
 ssm server user list --data /var/lib/storyscript-mov              # 账号、所在小组、注册日期
-ssm server user remove 某人@example.com --data /var/lib/storyscript-mov   # 删除账号，立即退出登录
+ssm server user remove 某人@example.com --data /var/lib/storyscript-mov   # 删除账号，立即退出登录，并删除他自己的模型设置（accounts/<账号id>）
 ssm server team list --data /var/lib/storyscript-mov              # 小组、人数、组长、组码
 ssm server team remove g7x2k9pq --data /var/lib/storyscript-mov   # 删除小组（先停止服务；项目文件保留）
 ssm server invite set 新邀请码 --data /var/lib/storyscript-mov     # 换注册邀请码（先停止服务）

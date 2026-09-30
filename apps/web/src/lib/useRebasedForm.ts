@@ -18,8 +18,9 @@ import { stableKey } from './stable.ts';
  *  - only the revision moved (the teammate changed something the form does
  *    not hold): the base revision follows, so saving is not refused for it;
  *  - 用他的: draft and seed become the server's value;
- *    保留我的: the draft stays and the base moves to the server's revision, so
- *    the next save deliberately wins over the teammate's change;
+ *    保留我的: the fields the person changed stay theirs, fields they did not
+ *    touch follow the teammate (rebaseOntoLatest), and the base moves to the
+ *    server's revision, so the next save wins only where the person chose;
  *  - a save that succeeded: acknowledge it with the value and revision the
  *    server returned (a pending conflict is not swallowed by it).
  */
@@ -59,6 +60,22 @@ export function hasConflict<T>(s: RebasedState<T>, equals: Equals<T> = sameValue
   return isDirty(s, equals) && !equals(s.latest, s.seed);
 }
 
+/**
+ * 保留我的 for a flat record: keep the fields the person changed (draft ≠ seed),
+ * take the teammate's value for every field they left alone. Non-records keep
+ * the draft whole.
+ */
+export function rebaseOntoLatest<T>(draft: T, seed: T, latest: T): T {
+  if (typeof draft !== 'object' || draft === null || Array.isArray(draft)) return draft;
+  if (typeof latest !== 'object' || latest === null || Array.isArray(latest)) return draft;
+  const d = draft as Record<string, unknown>;
+  const sd = (seed ?? {}) as Record<string, unknown>;
+  const l = latest as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...d };
+  for (const k of Object.keys(l)) if (sameValue(d[k], sd[k])) out[k] = l[k];
+  return out as T;
+}
+
 function newer(a: number | undefined, b: number | undefined): boolean {
   return a === undefined || b === undefined || a >= b;
 }
@@ -77,7 +94,7 @@ export function rebasedReduce<T>(s: RebasedState<T>, a: RebasedAction<T>, equals
     case 'theirs':
       return { draft: s.latest, seed: s.latest, base: s.latestRevision, latest: s.latest, latestRevision: s.latestRevision };
     case 'mine':
-      return { ...s, seed: s.latest, base: s.latestRevision };
+      return { ...s, draft: rebaseOntoLatest(s.draft, s.seed, s.latest), seed: s.latest, base: s.latestRevision };
     case 'acknowledge': {
       const conflict = hasConflict(s, equals);
       const fresh = newer(a.revision, s.latestRevision);

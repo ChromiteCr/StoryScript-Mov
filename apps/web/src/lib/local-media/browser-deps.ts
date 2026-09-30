@@ -1,6 +1,6 @@
 import type { ProbeNormalized } from '@storyscript/contracts';
 import { probeIsoFile } from '@storyscript/core';
-import { api } from '../api.ts';
+import { api, tabHeaders } from '../api.ts';
 import type { LocalFile } from './folder.ts';
 import { extOf } from './folder.ts';
 import type { HashReply } from './hash.worker.ts';
@@ -59,7 +59,7 @@ async function uploadPoster(assetId: string, jpeg: Blob): Promise<void> {
   const res = await fetch(`/api/v1/media/assets/${encodeURIComponent(assetId)}/poster`, {
     method: 'PUT',
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'image/jpeg', Accept: 'application/json' },
+    headers: { 'Content-Type': 'image/jpeg', Accept: 'application/json', ...tabHeaders() },
     body: jpeg,
   });
   if (!res.ok) throw new Error(`海报上传失败（HTTP ${res.status}）`);

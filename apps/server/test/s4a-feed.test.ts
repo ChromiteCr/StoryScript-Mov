@@ -24,6 +24,11 @@ describe('route table', () => {
     expect(writeRouteOf('PUT', '/api/v1/styles/style.oner')).toBe('updateStyle');
   });
 
+  test('candidates insert links (media); the hand-registered poster upload is media only', () => {
+    expect(areasOf('POST', '/api/v1/media/candidates').areas).toEqual(['media']);
+    expect(areasOf('PUT', '/api/v1/media/assets/00000000-0000-4000-8000-000000000001/poster').areas).toEqual(['media']);
+  });
+
   test('an unknown write moves every area; ignored ones move none', () => {
     expect(areasOf('POST', '/api/v1/something-new').areas.length).toBeGreaterThan(10);
     expect(areasOf('POST', '/api/v1/scripts/preview').areas).toEqual([]);

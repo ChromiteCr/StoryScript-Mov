@@ -7,6 +7,11 @@ export function setRequestTab(id: string | null): void {
   requestTab = id;
 }
 
+/** Headers that tell the change feed which tab wrote (for requests made outside api.call). */
+export function tabHeaders(): Record<string, string> {
+  return requestTab ? { 'X-SSM-Tab': requestTab } : {};
+}
+
 /**
  * Typed fetch client over the contracts `Api` table.
  * - request input validated with the contract schema before sending

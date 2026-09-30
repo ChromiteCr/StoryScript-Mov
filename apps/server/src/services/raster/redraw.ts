@@ -143,6 +143,22 @@ function cacheHitJob(jobs: JobQueue, db: DbPort, key: string, cacheKey: string, 
   });
 }
 
+/**
+ * S4: a member's own image service is theirs: teammates see redraw results
+ * and job errors, but not its address.
+ */
+function shownHost(cfg: { host: string; source: ModelSource | null }): string {
+  return cfg.source === 'own' ? '' : cfg.host;
+}
+
+function hideOwnAddress<R extends { outcome: string }>(cfg: { host: string; base_url: string; source: ModelSource | null }, res: R): R {
+  const err = (res as { error?: { message: string } }).error;
+  if (cfg.source !== 'own' || !err) return res;
+  let message = err.message;
+  for (const s of [cfg.base_url.replace(/\/+$/, ''), cfg.base_url, cfg.host]) if (s) message = message.split(s).join('（我的图像服务）');
+  return { ...res, error: { ...err, message } };
+}
+
 export async function requestRedraw(deps: AppDeps, boardId: string, input: { confirmed: boolean; quality: ImageQuality }): Promise<Job> {
   const { project, jobs } = projectContext(deps);
   const db = project.db;
@@ -227,7 +243,7 @@ async function store(
     board_id: b.id,
     structure_hash: rp.structure_hash,
     dialect: rp.cfg.dialect,
-    host: rp.cfg.host,
+    host: shownHost(rp.cfg),
     model: rp.cfg.model,
     preset_id: rp.cfg.preset?.id ?? null,
     size: rp.plan.request_size,
@@ -256,7 +272,7 @@ async function store(
     outcome,
     provider: {
       dialect: rp.cfg.dialect,
-      host: rp.cfg.host,
+      host: shownHost(rp.cfg),
       model: rp.cfg.model,
       preset_id: rp.cfg.preset?.id ?? null,
       preset_verified: rp.cfg.preset?.verified ?? false,
@@ -303,7 +319,7 @@ async function runRedraw(deps: AppDeps, db: DbPort, projectDir: string, endpoint
     size: rp.plan.request_size,
     quality: rp.quality,
   };
-  const res = await callImage(endpoint, req, {
+  const res = hideOwnAddress(rp.cfg, await callImage(endpoint, req, {
     timeoutMs: o.timeoutMs,
     sleep: o.sleep,
     retryAfterCapMs: o.retryAfterCapMs,
@@ -313,7 +329,7 @@ async function runRedraw(deps: AppDeps, db: DbPort, projectDir: string, endpoint
     userAgent: USER_AGENT,
     fetch: deps.fetch,
     attempt: o.attempt,
-  });
+  }));
   if (res.outcome === 'cancelled') return { status: 'failed', attempts: res.attempts, usage: null, error: { code: 'CANCELLED', message: '已取消' } };
   if (res.outcome === 'failed') return { status: 'failed', attempts: res.attempts, usage: null, error: res.error };
 

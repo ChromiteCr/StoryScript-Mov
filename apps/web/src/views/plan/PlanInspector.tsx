@@ -13,7 +13,7 @@ import { CONSTRAINT_TYPE_LABEL, constraintText } from '../../lib/labels-plan.ts'
 import { planKeys, useCreateConstraint, useDeleteConstraint, useDeleteSetup, useUpdateSetup } from '../../lib/queries-plan.ts';
 import { setupCommit, setupForm, type DurKey } from '../../lib/setup-form.ts';
 import { stableKey } from '../../lib/stable.ts';
-import { useRebasedForm } from '../../lib/useRebasedForm.ts';
+import { useRebasedForm, rebaseOntoLatest } from '../../lib/useRebasedForm.ts';
 import { localTime } from '../../lib/print-plan.ts';
 import { CheckRow, TimeField } from './controls.tsx';
 import { setupMinutes, type PlanData } from './data.ts';
@@ -144,7 +144,9 @@ function SetupEditor({ data, setup, onDeleted }: { data: PlanData; setup: Setup;
               // the person's version wins on purpose: save it against the revision on screen now
               update.reset();
               form.keepMine();
-              const { input, draft } = setupCommit(setupForm(setup), form.value);
+              // only what the person changed wins; fields they left alone follow the teammate
+              const merged = rebaseOntoLatest(form.value, form.seed, setupForm(setup));
+              const { input, draft } = setupCommit(setupForm(setup), merged);
               form.setValue(draft);
               if (input) patch(input);
             }}

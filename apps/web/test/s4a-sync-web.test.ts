@@ -770,3 +770,23 @@ describe('setup form: the name and the durations', () => {
     expect(setupCommit(f, { ...f, label: '走廊', setup_min: '30' }).input).toEqual({ label: '走廊', durations: { setup_min: 30, per_shot_min: 5, reset_min: 10 } });
   });
 });
+
+describe('review fixes', () => {
+  it('保留我的 keeps only the fields the person changed; the rest follow the teammate', async () => {
+    const { rebaseOntoLatest, rebasedInit, rebasedReduce } = await import('../src/lib/useRebasedForm.ts');
+    const seed = { label: '天台', setup_min: 10, per_shot_min: 5 };
+    const draft = { label: '天台 · 仰拍', setup_min: 10, per_shot_min: 5 };
+    const latest = { label: '天台', setup_min: 20, per_shot_min: 5 };
+    expect(rebaseOntoLatest(draft, seed, latest)).toEqual({ label: '天台 · 仰拍', setup_min: 20, per_shot_min: 5 });
+    let s = rebasedInit(seed, 0);
+    s = rebasedReduce(s, { type: 'edit', draft });
+    s = rebasedReduce(s, { type: 'server', value: latest, revision: 1 });
+    s = rebasedReduce(s, { type: 'mine' });
+    expect(s).toMatchObject({ draft: { label: '天台 · 仰拍', setup_min: 20 }, seed: latest, base: 1 });
+  });
+
+  it('a shot change also refreshes the views computed from shots', () => {
+    const keys = rootsOfAreas(['shots']).map((r) => JSON.stringify(r));
+    for (const k of [['boards', 'list'], ['plan', 'plans'], ['m6', 'coverage'], ['deliver', 'coverage']]) expect(keys).toContain(JSON.stringify(k));
+  });
+});

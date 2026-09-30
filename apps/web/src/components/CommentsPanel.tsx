@@ -429,8 +429,10 @@ function CommentView({ c, env, resolved }: { c: ShotComment; env: Env; resolved:
 function ThreadView({ thread, env, expanded, onToggle }: { thread: Thread; env: Env; expanded: boolean; onToggle: () => void }) {
   const { root, replies, resolved } = thread;
   const unread = threadUnread(thread) > 0 || [root, ...replies].some((c) => env.fresh.has(c.id));
+  // a thread with a reply or an edit being typed never folds (a teammate may resolve it meanwhile)
+  const composing = env.replyTo === root.id || env.editing === root.id || replies.some((r) => env.editing === r.id);
 
-  if (resolved && !expanded) {
+  if (resolved && !expanded && !composing) {
     const by = root.resolved_by?.name ?? '组员';
     return (
       <li id={commentDomId(root.id)} className="py-2">
@@ -459,9 +461,11 @@ function ThreadView({ thread, env, expanded, onToggle }: { thread: Thread; env: 
           <span className="min-w-0 truncate">
             已解决 · {root.resolved_by?.name ?? '组员'} · {root.resolved_at ? formatCommentTime(root.resolved_at) : ''}
           </span>
-          <Button size="sm" variant="ghost" className="ml-auto" aria-expanded onClick={onToggle}>
-            收起
-          </Button>
+          {composing ? null : (
+            <Button size="sm" variant="ghost" className="ml-auto" aria-expanded onClick={onToggle}>
+              收起
+            </Button>
+          )}
         </div>
       ) : null}
       <CommentView c={root} env={env} resolved={resolved} />
@@ -560,9 +564,10 @@ export function CommentsPanel({ shotId, board = null }: { shotId: string; board?
 
   // Showing the comments is reading them: tell the server (once per set of new comments), then the counts and the bell refresh.
   const mark = markRead.mutate;
+  const newest = list?.at(-1)?.id ?? null;
   useEffect(() => {
-    if (unreadKey !== '' && visible) mark();
-  }, [unreadKey, visible, mark]);
+    if (unreadKey !== '' && visible && newest) mark(newest);
+  }, [unreadKey, visible, newest, mark]);
 
   // Arriving from the bell or a row's badge: open the resolved thread it is in, then scroll to the comment.
   useSyncExternalStore(subscribeCommentsFocus, commentsFocusSnapshot, () => null);

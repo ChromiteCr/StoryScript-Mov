@@ -102,7 +102,8 @@ export function useResolveComment(shotId: string) {
 export function useMarkCommentsRead(shotId: string) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.call('markCommentsRead', undefined, { params: { id: shotId } }),
+    // `upto`: the newest comment this panel has loaded; anything newer stays unread
+    mutationFn: (upto: string) => api.call('markCommentsRead', { upto }, { params: { id: shotId } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: commentKeys.summary }),
   });
 }

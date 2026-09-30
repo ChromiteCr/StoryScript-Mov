@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -590,9 +590,15 @@ describe('hosted server: admin commands', () => {
       expect(out.join('\n')).toContain(`组码 ${g.join_code}`);
       expect(await runServerCli(['team', 'remove', g.slug, '--data', dir])).toBe(1); // refused while running
 
-      // removing an account signs it out at once, even while the server runs
+      // S4: the account's own model settings live in accounts/<id>
+      const accountId = (await call('GET', '/api/v1/account', { cookie: a })).json().data.group.members.find((m: { you: boolean }) => m.you).id as string;
+      mkdirSync(join(dir, 'accounts', accountId), { recursive: true });
+      writeFileSync(join(dir, 'accounts', accountId, 'credentials.json'), '{"llm":{"api_key":"sk-own"}}');
+
+      // removing an account signs it out at once, even while the server runs, and drops their own model settings
       expect(await runServerCli(['user', 'remove', 'AA@school.test', '--data', dir])).toBe(0);
       expect((await call('GET', '/api/v1/account', { cookie: a })).status).toBe(401);
+      expect(existsSync(join(dir, 'accounts', accountId))).toBe(false);
 
       await server!.close();
       server = null;

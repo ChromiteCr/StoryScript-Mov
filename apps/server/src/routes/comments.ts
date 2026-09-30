@@ -1,6 +1,6 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { Api, CommentSummary, CreateCommentInput, ShotComment, UpdateCommentInput } from '@storyscript/contracts';
+import { Api, CommentSummary, CreateCommentInput, MarkCommentsReadInput, ShotComment, UpdateCommentInput } from '@storyscript/contracts';
 import type { AppDeps } from '../deps.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
@@ -17,8 +17,10 @@ export function registerCommentRoutes(app: Hono, deps: AppDeps): void {
     const input = await parseBody(c, CreateCommentInput);
     return respond(c, ShotComment, createComment(db(), id, input), 201);
   });
-  app.post(Api.markCommentsRead.path, (c) => {
-    markRead(db(), idParam(c));
+  app.post(Api.markCommentsRead.path, async (c) => {
+    const id = idParam(c);
+    const input = await parseBody(c, MarkCommentsReadInput);
+    markRead(db(), id, input.upto);
     return c.body(null, 204);
   });
   app.patch(Api.updateComment.path, async (c) => {

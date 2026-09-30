@@ -1,3 +1,4 @@
+import { rmSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Email } from '@storyscript/contracts';
@@ -16,6 +17,7 @@ import {
   teamDir,
   writeHostedConfig,
   type HostedConfig,
+  accountDir,
 } from './config.ts';
 import { mailerFromEnv } from './mail/mailer.ts';
 import { codeEmail } from './mail/templates.ts';
@@ -221,7 +223,9 @@ export async function runServerCli(argv: string[]): Promise<number | undefined> 
         }
         site.deleteAccount(account.id);
       });
-      console.log(`已删除账号 ${account.email}（${account.name}）。`);
+      // S4: their own model settings (a key) go with the account
+      rmSync(accountDir(dataDir, account.id), { recursive: true, force: true });
+      console.log(`已删除账号 ${account.email}（${account.name}）和他自己的模型设置。`);
       return 0;
     } finally {
       site.close();

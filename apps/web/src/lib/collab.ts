@@ -131,7 +131,6 @@ export function fetchCollabChanges(q: CollabQuery, signal?: AbortSignal): Promis
   return send(Api.collabChanges, undefined, { signal }, (url, init) => fetch(`${url}?${qs}`, init)) as Promise<CollabChanges>;
 }
 
-const TAB_KEY = 'ssm-collab-tab';
 let memoryTab: string | null = null;
 
 function newTabId(): string {
@@ -142,16 +141,9 @@ function newTabId(): string {
 
 /** One id per browser tab: it survives a reload of the tab (sessionStorage) but a second tab gets its own. */
 export function collabTabId(): string {
-  try {
-    const kept = window.sessionStorage.getItem(TAB_KEY);
-    if (kept) return kept;
-    const id = newTabId();
-    window.sessionStorage.setItem(TAB_KEY, id);
-    return id;
-  } catch {
-    memoryTab ??= newTabId();
-    return memoryTab;
-  }
+  // per page load, not sessionStorage: a duplicated tab copies sessionStorage and would take the other's writes for its own
+  memoryTab ??= newTabId();
+  return memoryTab;
 }
 
 /** Errors that end polling: the session is gone, the member left the group, or this server has no feed. */
@@ -505,7 +497,11 @@ export function useCollabSync(page: CollabPage, enabled = true): void {
       apply: (outcome, res) => {
         if (!live) return;
         invalidateRoots(qc, outcome.roots);
-        if (outcome.refreshMe) void qc.invalidateQueries({ queryKey: ['me'] });
+        if (outcome.refreshMe) {
+          void qc.invalidateQueries({ queryKey: ['me'] });
+          // a new leader may now edit the group's model (and see its key digits)
+          void qc.invalidateQueries({ queryKey: ['settings'] });
+        }
         recordPoll(res, outcome, Date.now());
         if (outcome.first && res.seq > 0) {
           // the popover's recent lines: the feed remembers the last events, so ask once for them

@@ -66,7 +66,7 @@ describe('shot comments', () => {
       expect(listComments(db, shot.id)[0]!.unread).toBe(true);
       const reply = createComment(db, shot.id, { body: '可以', board_id: null, parent_id: root.id, mentions: [] });
       expect(reply.parent_id).toBe(root.id);
-      markRead(db, shot.id);
+      markRead(db, shot.id, reply.id);
       const after = commentSummary(db);
       expect(after.shots[shot.id]).toEqual({ total: 2, unresolved: 1, unread: 0 });
       expect(after.mentions).toEqual([]);
@@ -103,6 +103,27 @@ describe('shot comments', () => {
     expect(gone).toMatchObject({ deleted: true, body: '' });
     expect(runWithRequest(as(B), () => listComments(db, shot.id))).toHaveLength(1);
     expect(runWithRequest(as(B), () => commentSummary(db)).shots[shot.id]).toBeUndefined();
+  });
+
+  test('reading stops at the comment the panel showed; an edit that drops a mention un-mentions; archived shots leave the inbox', () => {
+    const first = runWithRequest(as(B), () => createComment(db, shot.id, { body: '一', board_id: null, parent_id: null, mentions: [{ member: 'acc-a' }] }));
+    const second = runWithRequest(as(C), () => createComment(db, shot.id, { body: '二', board_id: null, parent_id: null, mentions: [] }));
+    runWithRequest(as(A), () => {
+      markRead(db, shot.id, first.id);
+      expect(commentSummary(db).shots[shot.id]!.unread).toBe(1);
+      expect(listComments(db, shot.id).find((x) => x.id === second.id)!.unread).toBe(true);
+    });
+    // B edits A out of the text: A is no longer mentioned
+    const edited = runWithRequest(as(B), () => createComment(db, shot.id, { body: '三', board_id: null, parent_id: null, mentions: [{ member: 'acc-a' }] }));
+    runWithRequest(as(A), () => expect(commentSummary(db).mentions.map((m) => m.comment_id)).toEqual([edited.id]));
+    const out = runWithRequest(as(B), () => updateComment(db, edited.id, { body: '三（改）', mentions: [] }));
+    expect(out.mentions).toEqual([]);
+    runWithRequest(as(A), () => expect(commentSummary(db).mentions).toEqual([]));
+    // a mention on a shot that gets archived drops out of the bell
+    runWithRequest(as(B), () => createComment(db, shot.id, { body: '四', board_id: null, parent_id: null, mentions: [{ member: 'acc-a' }] }));
+    runWithRequest(as(A), () => expect(commentSummary(db).mentions).toHaveLength(1));
+    db.run('UPDATE shot SET archived = 1 WHERE id = ?', shot.id);
+    runWithRequest(as(A), () => expect(commentSummary(db).mentions).toEqual([]));
   });
 
   test('outside the hosted server there are no comments', () => {

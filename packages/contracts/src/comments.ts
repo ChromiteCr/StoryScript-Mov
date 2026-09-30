@@ -48,6 +48,10 @@ export const CreateCommentInput = z.object({
 });
 export type CreateCommentInput = z.infer<typeof CreateCommentInput>;
 
+/** The newest comment the panel showed: reading stops there (later ones stay unread). */
+export const MarkCommentsReadInput = z.object({ upto: Uuid });
+export type MarkCommentsReadInput = z.infer<typeof MarkCommentsReadInput>;
+
 export const UpdateCommentInput = z.object({
   body: z.string().trim().min(1).max(COMMENT_MAX),
   mentions: z.array(CommentMention).max(20).default([]),

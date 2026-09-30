@@ -106,7 +106,7 @@ export const AREA_OF: Record<WriteRoute, readonly CollabArea[] | 'ignore'> = {
   reportBrowserFiles: ['media'],
   reportAssetFacts: ['media'],
   searchAssets: 'ignore',
-  buildCandidates: 'ignore',
+  buildCandidates: ['media'],
   createLink: ['media', 'takes'],
   reviewLink: ['media', 'takes'],
   addCoverageDecision: ['takes', 'media'],
@@ -200,6 +200,8 @@ export function writeRouteOf(method: string, path: string): WriteRoute | null {
 /** Areas a successful write touched; an unknown write moves everything (safe side). */
 export function areasOf(method: string, path: string): { route: WriteRoute | null; areas: readonly CollabArea[] } {
   const route = writeRouteOf(method, path);
+  // the poster upload is registered by hand (a binary body), outside the contract
+  if (!route && method === 'PUT' && /^\/api\/v1\/media\/assets\/[^/]+\/poster$/.test(path)) return { route: null, areas: ['media'] };
   if (!route) return { route: null, areas: ALL_AREAS };
   const a = AREA_OF[route];
   return { route, areas: a === 'ignore' ? [] : a };

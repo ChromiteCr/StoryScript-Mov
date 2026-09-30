@@ -127,3 +127,47 @@ describe('through the app', () => {
     expect(after.presence).toEqual([]);
   });
 });
+
+describe('which tab wrote it', () => {
+  test('from_this_tab is true only for the tab named in X-SSM-Tab', async () => {
+    const app = await makeM3App();
+    try {
+      const start = (await app.get<CollabChanges>('/api/v1/collab/changes?since=0&epoch=&tab=t1&page=script')).data;
+      const res = await app.raw('POST', '/api/v1/entities', JSON.stringify({ type: 'character', name: '林川', aliases: [] }), {
+        'content-type': 'application/json',
+        'x-ssm-tab': 't1',
+      });
+      expect(res.status).toBe(201);
+      const t1 = (await app.get<CollabChanges>(`/api/v1/collab/changes?since=${start.seq}&epoch=${start.epoch}&tab=t1&page=script`)).data;
+      const t2 = (await app.get<CollabChanges>(`/api/v1/collab/changes?since=${start.seq}&epoch=${start.epoch}&tab=t2&page=script`)).data;
+      expect(t1.events.map((e) => e.from_this_tab)).toEqual([true]);
+      expect(t2.events.map((e) => e.from_this_tab)).toEqual([false]);
+    } finally {
+      app.close();
+    }
+  });
+});
+
+describe('a created shot', () => {
+  test('its event names the scene and the new code', async () => {
+    const app = await makeM3App();
+    try {
+      await importFixture(app, '01-bookshop.txt', 'txt');
+      const start = (await app.get<CollabChanges>('/api/v1/collab/changes?since=0&epoch=&tab=t&page=script')).data;
+      const scenes = (await app.get<{ scenes: { id: string }[] }>('/api/v1/scripts/current')).data.scenes;
+      const made = await app.post<Shot>('/api/v1/shots', {
+        scene_id: scenes[0]!.id,
+        manual_note: '手工',
+        fields: {
+          template: null, shot_size: 'MS', angle: 'eye', lens: 'normal', focal_mm: null, movement: 'static', subjects: [], props: [], env: null,
+          subject_motion: 'none', set_piece: false, pov_owner: null, frame_format: null, technique_id: null, est_seconds: 3,
+          narrative_purpose: '交代', action: '书店全景', dialogue_quote: null, source: { paragraph_id: 'p-003', quote: '' }, assumptions: [], questions: [],
+        },
+      });
+      const after = (await app.get<CollabChanges>(`/api/v1/collab/changes?since=${start.seq}&epoch=${start.epoch}&tab=t&page=script`)).data;
+      expect(after.events.map((e) => [e.verb, e.scene_no, e.shot_code])).toEqual([['created', '1', made.data.code]]);
+    } finally {
+      app.close();
+    }
+  });
+});

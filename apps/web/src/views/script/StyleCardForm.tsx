@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { STYLE_LIMITS, type StyleCard, type StyleCardInput } from '@storyscript/contracts';
+import { useChangedBy } from '../../lib/collab.ts';
+import { isRevisionConflict } from '../../lib/errors.ts';
+import { styleKeys } from '../../lib/queries-style.ts';
 import { biasSummary, BIAS_GROUPS, hasFormErrors, normalizeStyleForm, toggleBias, validateStyleForm } from '../../lib/style-form.ts';
+import { useRebasedForm } from '../../lib/useRebasedForm.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
+import { RebaseNotice } from '../../components/RebaseNotice.tsx';
 import { Button, Field, Tag, TextArea, TextInput } from '../../components/ui.tsx';
 
 /**
@@ -50,7 +56,14 @@ function BiasPicker({ value, onChange }: { value: StyleCardInput['bias']; onChan
 export interface StyleCardFormProps {
   /** the form's accessible name, e.g. "新建风格卡" */
   label: string;
+  /**
+   * The form's starting point. Editing a card that is already saved: pass the
+   * card's current values with its `revision` on every render, and a teammate's
+   * save while the form is open no longer replaces what is typed (S4a).
+   */
   initial: StyleCardInput;
+  /** the card's revision when editing: sent as expected_revision */
+  revision?: number;
   submitLabel: string;
   busy?: boolean;
   error?: unknown;
@@ -63,25 +76,48 @@ export interface StyleCardFormProps {
   autoFocus?: boolean;
 }
 
-export function StyleCardForm({ label, initial, submitLabel, busy = false, error, onSubmit, onCancel, cancelLabel = '取消', extraActions, autoFocus = false }: StyleCardFormProps) {
+export function StyleCardForm({ label, initial, revision, submitLabel, busy = false, error, onSubmit, onCancel, cancelLabel = '取消', extraActions, autoFocus = false }: StyleCardFormProps) {
+  const qc = useQueryClient();
   const formRef = useRef<HTMLFormElement>(null);
   useEffect(() => {
     if (autoFocus) formRef.current?.querySelector('input')?.focus();
   }, [autoFocus]);
-  const [form, setForm] = useState<StyleCardInput>(initial);
+  const by = useChangedBy(['styles']);
+  const rebased = useRebasedForm<StyleCardInput>(initial, { revision, by });
+  const form = rebased.value;
   const [submitted, setSubmitted] = useState(false);
+  // the caller owns the mutation, so 刷新 hides the refused-save banner for this error only
+  const [refreshedFor, setRefreshedFor] = useState<unknown>(null);
   const errors = submitted ? validateStyleForm(form) : {};
-  const set = <K extends keyof StyleCardInput>(key: K, value: StyleCardInput[K]) => setForm((f) => ({ ...f, [key]: value }));
+  const set = <K extends keyof StyleCardInput>(key: K, value: StyleCardInput[K]) => rebased.setValue((f) => ({ ...f, [key]: value }));
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     setSubmitted(true);
     if (hasFormErrors(validateStyleForm(form))) return;
-    onSubmit(normalizeStyleForm(form));
+    const input = normalizeStyleForm(form);
+    onSubmit(rebased.expectedRevision === undefined ? input : { ...input, expected_revision: rebased.expectedRevision });
   };
 
   return (
     <form ref={formRef} aria-label={label} onSubmit={submit} noValidate className="flex flex-col gap-3 rounded-panel border border-graphite-700 bg-graphite-950/40 p-3">
+      <RebaseNotice
+        conflict={rebased.conflict}
+        refused={isRevisionConflict(error) && error !== refreshedFor}
+        onTheirs={() => {
+          setRefreshedFor(error);
+          rebased.takeTheirs();
+        }}
+        onMine={() => {
+          setRefreshedFor(error);
+          rebased.keepMine();
+        }}
+        onRefresh={() => {
+          setRefreshedFor(error);
+          rebased.takeTheirs();
+          void qc.invalidateQueries({ queryKey: styleKeys.all });
+        }}
+      />
       <Field label="名称" error={errors.name} hint="用手法命名，不写人名和片名。">
         {({ id, describedBy, invalid }) => (
           <TextInput id={id} aria-describedby={describedBy} aria-invalid={invalid || undefined} value={form.name} maxLength={STYLE_LIMITS.name} onChange={(e) => set('name', e.target.value)} />
@@ -108,7 +144,7 @@ export function StyleCardForm({ label, initial, submitLabel, busy = false, error
           <TextArea id={id} aria-describedby={describedBy} aria-invalid={invalid || undefined} value={form.low_budget} rows={2} maxLength={STYLE_LIMITS.low_budget} onChange={(e) => set('low_budget', e.target.value)} />
         )}
       </Field>
-      {error ? <ErrorNotice error={error} /> : null}
+      {error && !isRevisionConflict(error) ? <ErrorNotice error={error} /> : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button type="submit" variant="primary" busy={busy}>
           {submitLabel}

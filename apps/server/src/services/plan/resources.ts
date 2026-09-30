@@ -81,7 +81,7 @@ export function createResource(db: DbPort, input: Input<typeof CreateResourceInp
       confirmed: input.confirmed,
     };
     insertResource(db, res);
-    return res;
+    return { ...res, revision: 0 };
   });
 }
 

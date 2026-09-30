@@ -86,7 +86,7 @@ export function createSetup(db: DbPort, input: Input<typeof CreateSetupInput>): 
       estimate_confirmed: input.estimate_confirmed,
     };
     saveSetup(db, setup);
-    return setup;
+    return getSetup(db, setup.id)!;
   });
 }
 

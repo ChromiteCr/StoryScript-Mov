@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import type { Job, PlanDetail } from '@storyscript/contracts';
+import type { Job, PlanDetail, Resource, Setup } from '@storyscript/contracts';
 import { api, isApiClientError, type InputOf } from './api.ts';
-import { useProviders as useEffectiveProviders } from './queries.ts';
+import { refetchOnConflict, useProviders as useEffectiveProviders } from './queries.ts';
 import { markSaveFailed, markSaved, markSaving } from './saveStatus.ts';
 
 /**
@@ -102,12 +102,25 @@ function onPlanError(qc: QueryClient, id: string, e: unknown) {
   if (isApiClientError(e) && e.code === 'REVISION_CONFLICT') void qc.invalidateQueries({ queryKey: planKeys.plan(id) });
 }
 
+/**
+ * Create (id null) or update a resource. An update names the revision the
+ * edit started from (S4a): a teammate's newer save answers 409 and the plan
+ * queries refetch it.
+ */
 export function useSaveResource() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { id: string | null; input: InputOf<'createResource'> }) =>
-      saving(() => (v.id ? api.call('updateResource', v.input, { params: { id: v.id } }) : api.call('createResource', v.input))),
-    onSuccess: () => inputsChanged(qc),
+    mutationFn: (v: { id: string | null; input: InputOf<'createResource'>; expected_revision?: number }) =>
+      saving(() =>
+        v.id
+          ? api.call('updateResource', { ...v.input, expected_revision: v.expected_revision }, { params: { id: v.id } })
+          : api.call('createResource', v.input),
+      ),
+    onSuccess: (saved: Resource) => {
+      qc.setQueryData<Resource[]>(planKeys.resources, (old) => old?.map((x) => (x.id === saved.id ? saved : x)));
+      inputsChanged(qc);
+    },
+    onError: refetchOnConflict(qc, planKeys.all),
   });
 }
 
@@ -139,7 +152,12 @@ export function useUpdateSetup() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v: { id: string; input: InputOf<'updateSetup'> }) => saving(() => api.call('updateSetup', v.input, { params: { id: v.id } })),
-    onSuccess: () => inputsChanged(qc),
+    onSuccess: (saved: Setup) => {
+      // the new revision is in the cache before the refetch lands, so the next edit names it
+      qc.setQueryData<Setup[]>(planKeys.setups, (old) => old?.map((x) => (x.id === saved.id ? saved : x)));
+      inputsChanged(qc);
+    },
+    onError: refetchOnConflict(qc, planKeys.all),
   });
 }
 

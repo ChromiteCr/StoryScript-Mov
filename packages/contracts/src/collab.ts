@@ -43,6 +43,8 @@ export const CollabEvent = z.object({
   /** where it happened, when known: 「第 3 场」「3-002」 */
   scene_no: z.string().nullable(),
   shot_code: z.string().nullable(),
+  /** the write came from the tab that is polling (it already refreshed what it changed) */
+  from_this_tab: z.boolean().default(false),
 });
 export type CollabEvent = z.infer<typeof CollabEvent>;
 

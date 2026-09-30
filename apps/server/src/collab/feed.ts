@@ -219,6 +219,8 @@ interface StoredEvent {
   verb: CollabVerb;
   scene_no: string | null;
   shot_code: string | null;
+  /** the browser tab that made the write (X-SSM-Tab), if it said */
+  tab: string | null;
 }
 
 interface Heartbeat {
@@ -241,7 +243,10 @@ export class CollabFeed {
 
   constructor(private readonly now: () => number = Date.now) {}
 
-  bump(areas: readonly CollabArea[], e: { actor_id: string | null; verb?: CollabVerb; scene_no?: string | null; shot_code?: string | null }): void {
+  bump(
+    areas: readonly CollabArea[],
+    e: { actor_id: string | null; verb?: CollabVerb; scene_no?: string | null; shot_code?: string | null; tab?: string | null },
+  ): void {
     if (areas.length === 0) return;
     this.seq++;
     for (const a of areas) this.areaSeq.set(a, this.seq);
@@ -253,6 +258,7 @@ export class CollabFeed {
       verb: e.verb ?? 'changed',
       scene_no: e.scene_no ?? null,
       shot_code: e.shot_code ?? null,
+      tab: e.tab ?? null,
     });
     if (this.events.length > FEED_KEEP) this.events.splice(0, this.events.length - FEED_KEEP);
   }
@@ -284,7 +290,7 @@ export class CollabFeed {
   }
 
   changes(
-    q: { since: number; epoch: string },
+    q: { since: number; epoch: string; tab?: string },
     ctx: { roster: readonly RosterEntry[]; me: string | null; actor: (id: string | null) => ActorRef | null },
   ): CollabChanges {
     const oldest = this.events[0]?.seq ?? this.seq + 1;
@@ -293,7 +299,16 @@ export class CollabFeed {
       ? []
       : this.events
           .filter((e) => e.seq > q.since)
-          .map((e) => ({ seq: e.seq, at: e.at, actor: ctx.actor(e.actor_id), areas: e.areas, verb: e.verb, scene_no: e.scene_no, shot_code: e.shot_code }));
+          .map((e) => ({
+            seq: e.seq,
+            at: e.at,
+            actor: ctx.actor(e.actor_id),
+            areas: e.areas,
+            verb: e.verb,
+            scene_no: e.scene_no,
+            shot_code: e.shot_code,
+            from_this_tab: !!q.tab && e.tab === q.tab,
+          }));
     return {
       epoch: this.epoch,
       seq: this.seq,

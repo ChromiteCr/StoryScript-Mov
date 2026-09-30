@@ -47,6 +47,7 @@ export function createEntity(db: DbPort, input: Input<typeof CreateEntityInput>)
       origin: 'manual',
       confirmed: true,
       actor_name: cleanActorName(input.type, input.actor_name),
+      revision: 0,
     };
     insertEntity(db, e);
     return e;

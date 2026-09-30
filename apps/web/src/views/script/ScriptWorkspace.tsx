@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentScript, Paragraph, Project, Shot, ShotDraft } from '@storyscript/contracts';
 import { Palette, ScrollText, Upload } from 'lucide-react';
+import { setCollabFocus } from '../../lib/collab.ts';
 import { actorPhrase } from '../../lib/crew.ts';
 import { draftSceneId } from '../../lib/drafts.ts';
 import { SCRIPT_FORMAT_LABEL } from '../../lib/labels.ts';
@@ -17,6 +18,7 @@ import { hostOf } from '../TextProviderPanel.tsx';
 import { DraftDiffDialog } from './DraftDiffDialog.tsx';
 import { EntitiesPanel } from './EntitiesPanel.tsx';
 import { EntityDraftDialog } from './EntityDraftDialog.tsx';
+import { GoneShotContext } from './goneShot.ts';
 import { InspectorBody, inspectorTitle } from './InspectorPanel.tsx';
 import { PolishDialog } from './PolishDialog.tsx';
 import { PolishDiffDialog } from './PolishDiffDialog.tsx';
@@ -25,6 +27,7 @@ import { RevisionsDialog } from './RevisionsDialog.tsx';
 import { ScenesPanel } from './ScenesPanel.tsx';
 import { ScriptPane } from './ScriptPane.tsx';
 import { ShotTable } from './ShotTable.tsx';
+import { OpenShotBridge } from './openShot.tsx';
 import { StyleLibraryDialog } from './StyleLibraryDialog.tsx';
 import {
   reveal,
@@ -88,6 +91,9 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const [relinkOnly, setRelinkOnly] = useState(false);
   const seq = useRef(0);
   const dirty = useRef(false);
+  // S4a: the last copy seen of the shot open in the inspector, and the copy kept once a teammate archived it under unsaved edits
+  const lastShot = useRef<Shot | null>(null);
+  const [orphan, setOrphan] = useState<Shot | null>(null);
 
   const paragraphs = useMemo(() => new Map<string, Paragraph>(script.version.paragraphs.map((p) => [p.id, p] as const)), [script.version.paragraphs]);
   const entityList = useMemo(() => entities.data ?? [], [entities.data]);
@@ -186,10 +192,11 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const closeInspector = useCallback(() => {
     dirty.current = false;
     setDrawerOpen(false);
+    setOrphan(null);
     setInspector((cur) => {
       if (!cur || cur.kind === 'scene') return cur ? { kind: 'scene', sceneId: cur.sceneId } : cur;
       if (cur.kind === 'create') return { kind: 'scene', sceneId: cur.sceneId };
-      const s = liveShots.find((x) => x.id === cur.shotId);
+      const s = liveShots.find((x) => x.id === cur.shotId) ?? (lastShot.current?.id === cur.shotId ? lastShot.current : undefined);
       return s ? { kind: 'scene', sceneId: s.scene_id } : script.scenes[0] ? { kind: 'scene', sceneId: script.scenes[0].id } : null;
     });
   }, [liveShots, script.scenes]);
@@ -198,11 +205,38 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
     dirty.current = d;
   }, []);
 
-  // A shot that disappeared (archived elsewhere, deleted) leaves the inspector.
+  // A shot that disappeared (archived elsewhere, deleted) leaves the inspector, unless it has unsaved edits:
+  // then it stays, saving is off, and the person can copy the text or let go (S4a). The check runs while
+  // rendering, so the editor is never unmounted for a moment and keeps what was typed.
+  const inspectedShotId = inspector?.kind === 'shot' ? inspector.shotId : null;
+  const inspectedShot = inspectedShotId ? (liveShots.find((s) => s.id === inspectedShotId) ?? null) : null;
+  if (inspectedShot) lastShot.current = inspectedShot;
+  const shotGone = inspectedShotId !== null && shots.data !== undefined && inspectedShot === null;
+  const keptShot: Shot | null = !shotGone
+    ? null
+    : orphan?.id === inspectedShotId
+      ? orphan
+      : dirty.current && lastShot.current?.id === inspectedShotId
+        ? lastShot.current
+        : null;
   useEffect(() => {
-    if (inspector?.kind !== 'shot' || !shots.data) return;
-    if (!liveShots.some((s) => s.id === inspector.shotId)) closeInspector();
-  }, [inspector, liveShots, shots.data, closeInspector]);
+    if (!shotGone) {
+      if (orphan) setOrphan(null);
+      return;
+    }
+    if (keptShot) {
+      if (orphan?.id !== keptShot.id) setOrphan(keptShot);
+      return;
+    }
+    closeInspector();
+  }, [shotGone, keptShot, orphan, closeInspector]);
+  const inspectorShots = keptShot ? [...liveShots, keptShot] : liveShots;
+
+  // The poll tells teammates which shot is open here (「阿杰也在看这个镜头」).
+  useEffect(() => {
+    setCollabFocus(inspectedShotId !== null && (wide || drawerOpen) ? inspectedShotId : null);
+    return () => setCollabFocus(null);
+  }, [inspectedShotId, wide, drawerOpen]);
 
   // Leave the page with unsaved edits: the browser asks.
   useEffect(() => {
@@ -371,8 +405,8 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const inspectorKey = !inspector ? 'none' : inspector.kind === 'shot' ? `shot:${inspector.shotId}` : `${inspector.kind}:${inspector.sceneId}:${inspector.kind === 'scene' ? (inspector.focus ?? '') : ''}`;
   const inspectorPanel = (
     // keyed by target: a new selection starts at the top of the inspector
-    <Panel key={inspectorKey} title={inspectorTitle(inspector, liveShots, script.scenes)} padded={false}>
-      <InspectorBody target={inspector} shots={liveShots} />
+    <Panel key={inspectorKey} title={inspectorTitle(inspector, inspectorShots, script.scenes)} padded={false}>
+      <InspectorBody target={inspector} shots={inspectorShots} />
     </Panel>
   );
 
@@ -431,19 +465,23 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
 
   return (
     <WorkspaceContext.Provider value={ws}>
-      {body}
-      {!wide && drawerOpen && inspector ? (
-        <Dialog variant="drawer" title={inspectorTitle(inspector, liveShots, script.scenes)} onClose={() => (leaveEditor() ? closeInspector() : undefined)} bodyClassName="">
-          <InspectorBody target={inspector} shots={liveShots} />
-        </Dialog>
-      ) : null}
-      {draftId ? <DraftDiffDialog draftId={draftId} onClose={() => setDraftId(null)} /> : null}
-      {entityDraftId ? <EntityDraftDialog draftId={entityDraftId} onClose={() => setEntityDraftId(null)} /> : null}
-      {revisionsOf ? <RevisionsDialog shot={revisionsOf} onClose={() => setRevisionsOf(null)} /> : null}
-      {reason ? <ReasonDialog request={reason} onClose={() => setReason(null)} /> : null}
-      {stylesOpen ? <StyleLibraryDialog onClose={() => setStylesOpen(false)} /> : null}
-      {polishIds ? <PolishDialog shotIds={polishIds} onClose={() => setPolishIds(null)} /> : null}
-      {polishDraftId ? <PolishDiffDialog draftId={polishDraftId} onClose={() => setPolishDraftId(null)} /> : null}
+      <GoneShotContext.Provider value={keptShot?.id ?? null}>
+        {/* S4b: a mention opened from the bell selects its shot, also on narrow screens */}
+        <OpenShotBridge />
+        {body}
+        {!wide && drawerOpen && inspector ? (
+          <Dialog variant="drawer" title={inspectorTitle(inspector, inspectorShots, script.scenes)} onClose={() => (leaveEditor() ? closeInspector() : undefined)} bodyClassName="">
+            <InspectorBody target={inspector} shots={inspectorShots} />
+          </Dialog>
+        ) : null}
+        {draftId ? <DraftDiffDialog draftId={draftId} onClose={() => setDraftId(null)} /> : null}
+        {entityDraftId ? <EntityDraftDialog draftId={entityDraftId} onClose={() => setEntityDraftId(null)} /> : null}
+        {revisionsOf ? <RevisionsDialog shot={revisionsOf} onClose={() => setRevisionsOf(null)} /> : null}
+        {reason ? <ReasonDialog request={reason} onClose={() => setReason(null)} /> : null}
+        {stylesOpen ? <StyleLibraryDialog onClose={() => setStylesOpen(false)} /> : null}
+        {polishIds ? <PolishDialog shotIds={polishIds} onClose={() => setPolishIds(null)} /> : null}
+        {polishDraftId ? <PolishDiffDialog draftId={polishDraftId} onClose={() => setPolishDraftId(null)} /> : null}
+      </GoneShotContext.Provider>
     </WorkspaceContext.Provider>
   );
 }

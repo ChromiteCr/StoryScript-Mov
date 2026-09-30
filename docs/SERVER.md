@@ -81,6 +81,7 @@ ssm server init --data /var/lib/storyscript-mov \
 
 - key 存在服务器上这个小组的状态目录里（`teams/<代号>/state/credentials.json`，权限 600），只用来转发本组的请求；网页上只显示后 4 位，其他小组看不到。管理员能在服务器上读到这些文件，请告诉同学们用单独建的、设了余额上限的 key。
 - 服务器只连接公网上的 https 地址：base_url 指向本机、内网或云服务器元数据地址时，保存会被拒绝；连接时还会再检查一次每个解析到的地址和每次跳转，防止有人借服务器访问内部服务。
+- **组的模型只有组长能改。** 组员在设置里看到的是只读状态，看不到 key 的后 4 位。每个人还可以在「我的模型」里填自己的 base_url、模型和 key（存在 `accounts/<账号id>/credentials.json`，权限 600，组长和组员都看不到），并在每个小组分别选择用组的模型还是自己的。选了自己的却没填好时，AI 功能会提示去填，不会改用组长的 key。用自己 key 的调用不计入本组的每日上限。
 - 风格研究可以用同一个服务上的另一个模型（「研究用模型」），并可打开联网搜索（通义、OpenAI search 模型）。搜索由服务商完成，服务器本身不访问其他网站；研究、润色和拆镜一样计入本组每天的文本模型次数。
 - 环境文件里的 `STORYSCRIPT_LLM_*`、`STORYSCRIPT_IMAGE_*` 在服务器版里不使用（可以留着，不影响）。
 
@@ -237,7 +238,9 @@ sudo systemctl restart storyscript-mov
 ```
 /var/lib/storyscript-mov/
   server.json              站点配置和限额（邀请码只存哈希）
-  site.db                  账号、小组、登录会话、验证码（密码用 scrypt，会话和验证码只存哈希；权限 600）
+  site.db                  账号、小组、组员职务和各自的模型选择、登录会话、验证码（密码用 scrypt，会话和验证码只存哈希；权限 600）
+  site.db.v<N>.bak         升级 site.db 前自动留的旧版本副本（权限 600）
+  accounts/<账号id>/       每个人自己的模型设置（credentials.json，权限 600；只有本人看得到后 4 位）
   teams/<代号>/project/    小组的项目：SQLite 数据库、海报、AI 图
   teams/<代号>/state/      该小组实例的状态目录
 ```

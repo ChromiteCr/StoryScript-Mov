@@ -46,11 +46,17 @@ export function collabMiddleware(deps: AppDeps): MiddlewareHandler {
     if (db) {
       try {
         where = whereOf(db, c.req.path);
+        // a new shot has no id in the path: read it from the answer
+        if (route === 'createShot' && !where.shot_code) {
+          const made = ((await c.res.clone().json()) as { data?: { id?: string } }).data;
+          if (made?.id) where = whereOf(db, `/api/v1/shots/${made.id}`);
+        }
       } catch {
         // an archived or deleted target: the areas still move
       }
     }
-    deps.collab.bump(areas, { actor_id: actorId(), verb: verbOf(route), ...where });
+    const tab = c.req.header('x-ssm-tab')?.slice(0, 64) ?? null;
+    deps.collab.bump(areas, { actor_id: actorId(), verb: verbOf(route), ...where, tab });
   };
 }
 

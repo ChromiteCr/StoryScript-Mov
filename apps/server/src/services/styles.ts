@@ -53,6 +53,7 @@ export function createStyle(
     unverified: origin === 'researched',
     created_at: now,
     updated_at: now,
+    revision: 0,
   };
   insertStyle(db, card);
   return card;

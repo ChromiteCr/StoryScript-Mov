@@ -19,15 +19,26 @@ export interface TitleBarProps {
   view: View | null;
   /** hosted server: the account menu (no project switching there) */
   account: ReactNode | null;
+  /** hosted server: the 提到我的 bell, left of the presence strip */
+  alerts?: ReactNode;
+  /** hosted server: who is online and the newest change, left of the account menu */
+  presence?: ReactNode;
   switching: boolean;
   onSwitchProject: () => void;
 }
 
 /** 32px bar: app mark on the left, the project name centred (Resolve-style), project switch on the right. */
-export function TitleBar({ project, view, account, switching, onSwitchProject }: TitleBarProps) {
+export function TitleBar({ project, view, account, alerts = null, presence = null, switching, onSwitchProject }: TitleBarProps) {
   const center = project ? project.name : view === 'settings' ? '设置' : '项目管理器';
+  // hosted: the right side holds the presence strip, the bell and the account menu; below 1024px it takes the room it needs and the project name gives way
+  const crowded = presence !== null || alerts !== null;
   return (
-    <header className="grid h-8 shrink-0 grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)] items-center gap-3 border-b border-graphite-800 bg-graphite-950 px-3 print:hidden">
+    <header
+      className={
+        'grid h-8 shrink-0 items-center gap-3 border-b border-graphite-800 bg-graphite-950 px-3 print:hidden ' +
+        (crowded ? 'max-lg:grid-cols-[auto_minmax(0,1fr)_auto] lg:grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)]' : 'grid-cols-[minmax(0,1fr)_minmax(0,auto)_minmax(0,1fr)]')
+      }
+    >
       <div className="flex min-w-0 items-center gap-2 text-graphite-100">
         <AppGlyph />
         <span className="truncate text-xs font-medium text-graphite-300 max-md:sr-only">StoryScript-Mov</span>
@@ -35,7 +46,9 @@ export function TitleBar({ project, view, account, switching, onSwitchProject }:
       <p className="min-w-0 truncate text-center text-sm font-medium text-graphite-100" title={project?.name}>
         {center}
       </p>
-      <div className="flex min-w-0 justify-end">
+      <div className="flex min-w-0 items-center justify-end gap-1.5">
+        {presence}
+        {alerts}
         {account !== null ? (
           account
         ) : project ? (

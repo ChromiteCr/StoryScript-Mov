@@ -1,5 +1,12 @@
 import { Api, ApiError, type ErrorCode } from '@storyscript/contracts';
 
+let requestTab: string | null = null;
+
+/** S4a: the id this browser tab sends with its requests (set by the change-feed poller). */
+export function setRequestTab(id: string | null): void {
+  requestTab = id;
+}
+
 /**
  * Typed fetch client over the contracts `Api` table.
  * - request input validated with the contract schema before sending
@@ -206,6 +213,8 @@ export async function send(def: EndpointDef, input: unknown, opts: CallOptions, 
 
   const headers: Record<string, string> = { Accept: 'application/json' };
   if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // S4a: lets the change feed tell this tab its own writes apart from a second tab's
+  if (requestTab) headers['X-SSM-Tab'] = requestTab;
 
   let res: Response;
   try {

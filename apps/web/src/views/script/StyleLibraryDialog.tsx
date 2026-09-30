@@ -314,6 +314,7 @@ function CardItem({
             autoFocus
             label={`编辑风格卡：${card.name}`}
             initial={cardToInput(card)}
+            revision={card.revision}
             submitLabel="保存修改"
             busy={update.isPending}
             error={update.isError ? update.error : undefined}

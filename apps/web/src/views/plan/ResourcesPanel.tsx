@@ -1,13 +1,18 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { MapPin, Plus, Trash2, User, Wrench, type LucideIcon } from 'lucide-react';
 import type { Resource, ResourceType } from '@storyscript/contracts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
+import { RebaseNotice } from '../../components/RebaseNotice.tsx';
 import { Button, Field, IconButton, Notice, Tag, TextInput } from '../../components/ui.tsx';
 import { EmptyState, Panel } from '../../components/workspace.tsx';
 import { isApiClientError } from '../../lib/api.ts';
+import { useChangedBy } from '../../lib/collab.ts';
+import { isRevisionConflict } from '../../lib/errors.ts';
 import { PLAN_ERROR_COPY, RESOURCE_TYPE_LABEL } from '../../lib/labels-plan.ts';
 import { useCastSync } from '../../lib/queries-cast.ts';
-import { useDeleteResource, useSaveResource } from '../../lib/queries-plan.ts';
+import { planKeys, useDeleteResource, useSaveResource } from '../../lib/queries-plan.ts';
+import { useRebasedForm } from '../../lib/useRebasedForm.ts';
 import { CastSyncDialog } from './CastSyncDialog.tsx';
 import { CheckRow, Modal, TimeField } from './controls.tsx';
 import { fromLocalWindow, toLocalWindow, uncastCharacters, windowLabel, type LocalWindow, type PlanData } from './data.ts';
@@ -129,30 +134,58 @@ export function ResourcesPanel({ data, refDate }: { data: PlanData; refDate: str
           onSynced={(n) => setSynced(`已同步，更新了 ${n} 个演员和场地。`)}
         />
       ) : null}
-      {editing ? <ResourceDialog data={data} resource={editing === 'new' ? null : editing} refDate={refDate} onClose={() => setEditing(null)} /> : null}
+      {editing ? (
+        <ResourceDialog
+          data={data}
+          // the live row: a teammate's save reaches the open dialog (useRebasedForm), a delete says so
+          resource={editing === 'new' ? null : (data.resources.find((r) => r.id === editing.id) ?? editing)}
+          gone={editing !== 'new' && !data.resources.some((r) => r.id === editing.id)}
+          refDate={refDate}
+          onClose={() => setEditing(null)}
+        />
+      ) : null}
     </Panel>
   );
 }
 
 // ------------------------------------------------------------------ dialog ---
 
-function ResourceDialog({ data, resource, refDate, onClose }: { data: PlanData; resource: Resource | null; refDate: string; onClose: () => void }) {
+/** What the dialog edits, as typed: windows are local date and HH:mm. */
+interface ResourceForm {
+  type: ResourceType;
+  name: string;
+  windows: LocalWindow[];
+  cast: string[];
+  confirmed: boolean;
+}
+
+function resourceForm(resource: Resource | null, tz: string, refDate: string): ResourceForm {
+  return resource
+    ? { type: resource.type, name: resource.name, windows: resource.windows.map((w) => toLocalWindow(w, tz)), cast: resource.cast_character_ids, confirmed: resource.confirmed }
+    : { type: 'performer', name: '', windows: [{ date: refDate, start: '08:00', end: '20:00' }], cast: [], confirmed: true };
+}
+
+function ResourceDialog({ data, resource, gone, refDate, onClose }: { data: PlanData; resource: Resource | null; gone: boolean; refDate: string; onClose: () => void }) {
+  const qc = useQueryClient();
   const tz = data.project.timezone;
   const save = useSaveResource();
   const remove = useDeleteResource();
-  const [type, setType] = useState<ResourceType>(resource?.type ?? 'performer');
-  const [name, setName] = useState(resource?.name ?? '');
-  const [windows, setWindows] = useState<LocalWindow[]>(
-    resource ? resource.windows.map((w) => toLocalWindow(w, tz)) : [{ date: refDate, start: '08:00', end: '20:00' }],
-  );
-  const [cast, setCast] = useState<string[]>(resource?.cast_character_ids ?? []);
-  const [confirmed, setConfirmed] = useState(resource?.confirmed ?? true);
+  const by = useChangedBy(['plan']);
+  const form = useRebasedForm(resourceForm(resource, tz, refDate), { revision: resource?.revision, by });
+  const { type, name, windows, cast, confirmed } = form.value;
+  const set = <K extends keyof ResourceForm>(k: K, v: ResourceForm[K]) => form.setValue((f) => ({ ...f, [k]: v }));
+  const setType = (v: ResourceType) => set('type', v);
+  const setName = (v: string) => set('name', v);
+  const setWindows = (v: LocalWindow[]) => set('windows', v);
+  const setCast = (v: string[]) => set('cast', v);
+  const setConfirmed = (v: boolean) => set('confirmed', v);
   const [problem, setProblem] = useState<string | null>(null);
 
   const castType = type === 'performer' ? 'character' : type === 'location' ? 'location' : null;
   const castable = castType ? data.entities.filter((e) => e.type === castType) : [];
 
   const submit = () => {
+    if (gone) return;
     if (!name.trim()) return setProblem('请填写名称');
     const utc = windows.map((w) => fromLocalWindow(w, tz));
     const bad = utc.findIndex((w) => w === null);
@@ -168,6 +201,7 @@ function ResourceDialog({ data, resource, refDate, onClose }: { data: PlanData; 
           cast_character_ids: castType ? cast.filter((id) => castable.some((e) => e.id === id)) : [],
           confirmed,
         },
+        expected_revision: form.expectedRevision,
       },
       { onSuccess: onClose },
     );
@@ -194,7 +228,7 @@ function ResourceDialog({ data, resource, refDate, onClose }: { data: PlanData; 
           <Button variant="ghost" onClick={onClose}>
             取消
           </Button>
-          <Button variant="primary" busy={save.isPending} onClick={submit}>
+          <Button variant="primary" busy={save.isPending} disabled={gone} onClick={submit}>
             保存
           </Button>
         </>
@@ -207,6 +241,24 @@ function ResourceDialog({ data, resource, refDate, onClose }: { data: PlanData; 
           submit();
         }}
       >
+        {gone ? <Notice tone="warn" role="status" title="这个资源刚被组员删除了">先复制你改的内容，再关掉这个窗口。</Notice> : null}
+        <RebaseNotice
+          conflict={form.conflict}
+          refused={isRevisionConflict(save.error)}
+          onTheirs={() => {
+            save.reset();
+            form.takeTheirs();
+          }}
+          onMine={() => {
+            save.reset();
+            form.keepMine();
+          }}
+          onRefresh={() => {
+            save.reset();
+            form.takeTheirs();
+            void qc.invalidateQueries({ queryKey: planKeys.all });
+          }}
+        />
         <fieldset className="flex flex-col gap-1">
           <legend className="mb-1 text-xs font-medium text-graphite-100">类型</legend>
           <div className="flex gap-1" role="radiogroup">
@@ -294,7 +346,7 @@ function ResourceDialog({ data, resource, refDate, onClose }: { data: PlanData; 
         </CheckRow>
 
         {problem ? <Notice tone="danger" title={problem} /> : null}
-        {save.isError ? <ErrorNotice error={save.error} /> : null}
+        {save.isError && !isRevisionConflict(save.error) ? <ErrorNotice error={save.error} /> : null}
         {inUse ? (
           <Notice tone="danger" title={PLAN_ERROR_COPY.resourceInUse}>
             先在这些 setup 里换掉它：{inUse.map((s) => `「${s.label}」`).join('、')}

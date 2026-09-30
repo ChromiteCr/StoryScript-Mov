@@ -15,15 +15,18 @@ import {
 } from './lib/session.ts';
 import { takeJoinFromLocation } from './lib/join.ts';
 import { keys, useCloseProject, useCurrentProject, useHealth } from './lib/queries.ts';
+import { useCollabSync } from './lib/collab.ts';
 import { useView } from './lib/route.ts';
 import { isStage, type StageId } from './lib/stages.ts';
 import { resetSaveState } from './lib/saveStatus.ts';
 import { DemoBanner } from './components/DemoBanner.tsx';
 import { ErrorNotice } from './components/ErrorNotice.tsx';
+import { MentionsBell } from './components/MentionsBell.tsx';
 import { AccountMenu } from './components/AccountMenu.tsx';
 import { AuthScreen, GroupScreen } from './components/AccountScreens.tsx';
 import { ConnectingScreen, SessionExpiredScreen, UnreachableScreen } from './components/FullScreenNotice.tsx';
 import { PageBar } from './components/PageBar.tsx';
+import { ActivityLine, PresenceStrip } from './components/PresenceStrip.tsx';
 import { TitleBar } from './components/TitleBar.tsx';
 import { Button, Spinner } from './components/ui.tsx';
 import { HomeView } from './views/HomeView.tsx';
@@ -135,6 +138,9 @@ function Workbench({ onGroupChanged }: { onGroupChanged: () => void }) {
 
   const current = project.data ?? null;
 
+  // S4a: teammates' changes arrive by polling while a project is open (hosted and local); the tab says which page it is on
+  useCollabSync(view ?? (current ? 'script' : 'home'), current !== null);
+
   useEffect(() => {
     document.title = current ? `${current.name} - StoryScript-Mov` : 'StoryScript-Mov';
   }, [current]);
@@ -179,6 +185,15 @@ function Workbench({ onGroupChanged }: { onGroupChanged: () => void }) {
         project={current}
         view={view}
         account={health.data?.hosted ? <AccountMenu onGroupChanged={onGroupChanged} /> : null}
+        alerts={health.data?.hosted ? <MentionsBell /> : null}
+        presence={
+          health.data?.hosted ? (
+            <>
+              <ActivityLine />
+              <PresenceStrip />
+            </>
+          ) : null
+        }
         switching={close.isPending}
         onSwitchProject={() =>
           close.mutate(undefined, {

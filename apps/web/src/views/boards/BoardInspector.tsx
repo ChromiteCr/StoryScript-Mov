@@ -37,8 +37,10 @@ import {
   TONE_OPTIONS,
 } from '../../lib/labels-boards.ts';
 import { FRAME_FORMAT_LABEL, POSE_LABEL } from '../../lib/labels.ts';
+import { CommentsPanel } from '../../components/CommentsPanel.tsx';
 import { Button, SelectInput, TextInput } from '../../components/ui.tsx';
 import { Inspector, InspectorGroup, InspectorRow } from '../../components/workspace.tsx';
+import { useIsHosted } from '../../lib/queries-comments.ts';
 import type { EditorApi } from './useEditor.ts';
 
 /**
@@ -47,7 +49,8 @@ import type { EditorApi } from './useEditor.ts';
  * (focal with "keep shot size", height, tilt, roll, aspect, 1.43 guide) and
  * annotations (label text, arrow mode, whole-layer offset). Sliders preview
  * while dragged (the canvas shows structure) and commit one undo step on
- * release.
+ * release. On the hosted server the shot's 批注 (S4b) close the list: new
+ * ones are about the version being edited, 本版 / 全部 filters the threads.
  */
 
 const POSES = Object.keys(POSE_LABEL) as Pose[];
@@ -151,6 +154,7 @@ export interface BoardInspectorProps {
 }
 
 export function BoardInspector({ editor, readOnly, fields, keepSize, onKeepSize, sceneSides, viewSpec }: BoardInspectorProps) {
+  const hosted = useIsHosted();
   const spec = viewSpec ?? editor.spec;
   const present = editor.present;
   const subjects = spec.scene.subjects;
@@ -426,6 +430,8 @@ export function BoardInspector({ editor, readOnly, fields, keepSize, onKeepSize,
           )
         }
       />
+
+      {hosted ? <CommentsPanel key={editor.base.shot_id} shotId={editor.base.shot_id} board={{ id: editor.base.id, version: editor.base.version }} /> : null}
     </Inspector>
   );
 }

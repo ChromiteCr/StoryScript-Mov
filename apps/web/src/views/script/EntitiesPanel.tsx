@@ -1,14 +1,18 @@
 import { useCallback, useState, type FormEvent } from 'react';
-import type { UseQueryResult } from '@tanstack/react-query';
+import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { ACTOR_NAME_MAX, type CastSuggestion, type Entity, type EntityType, type Job } from '@storyscript/contracts';
 import { Check, ChevronDown, ChevronRight, Pencil, Plus, Sparkles } from 'lucide-react';
 import { pendingCastCount } from '../../lib/cast.ts';
 import { formatAliases, parseAliasInput } from '../../lib/drafts.ts';
 import { ENTITIES_SLOT, trackJob, useTrackedJob } from '../../lib/jobs.ts';
 import { ENTITY_TYPE_LABEL } from '../../lib/labels.ts';
-import { useCreateEntity, useDrafts, useExtractEntities, useUpdateEntity } from '../../lib/queries.ts';
+import { useChangedBy } from '../../lib/collab.ts';
+import { isRevisionConflict } from '../../lib/errors.ts';
+import { keys, useCreateEntity, useDrafts, useExtractEntities, useUpdateEntity } from '../../lib/queries.ts';
 import { useCastSuggestions } from '../../lib/queries-cast.ts';
+import { useRebasedForm } from '../../lib/useRebasedForm.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
+import { RebaseNotice } from '../../components/RebaseNotice.tsx';
 import { Button, IconButton, Notice, SelectInput, Spinner, TextInput } from '../../components/ui.tsx';
 import { EmptyState, Panel } from '../../components/workspace.tsx';
 import { CastDialog } from './CastDialog.tsx';
@@ -17,28 +21,75 @@ import { useWorkspace } from './context.ts';
 
 const TYPES: readonly EntityType[] = ['character', 'location', 'prop'];
 
+/** What the editor holds, as typed. */
+interface EntityForm {
+  name: string;
+  aliases: string;
+  actor: string;
+}
+
+const entityForm = (e: Entity): EntityForm => ({ name: e.name, aliases: formatAliases(e.aliases), actor: e.actor_name ?? '' });
+
+/**
+ * Edits one entity. A teammate saving the same entity while this is open does
+ * not replace what is typed: the form says so and offers 用他的 / 保留我的.
+ */
 function EntityEditor({ entity, onDone }: { entity: Entity; onDone: () => void }) {
+  const qc = useQueryClient();
   const update = useUpdateEntity();
-  const [name, setName] = useState(entity.name);
-  const [aliases, setAliases] = useState(formatAliases(entity.aliases));
-  const [actor, setActor] = useState(entity.actor_name ?? '');
+  const by = useChangedBy(['entities']);
+  const form = useRebasedForm(entityForm(entity), { revision: entity.revision, by });
+  const { name, aliases, actor } = form.value;
   const isCharacter = entity.type === 'character';
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
     if (name.trim() === '') return;
-    const input = { name: name.trim(), aliases: parseAliasInput(aliases), ...(isCharacter ? { actor_name: actor.trim() === '' ? null : actor.trim() } : {}) };
+    const input = {
+      name: name.trim(),
+      aliases: parseAliasInput(aliases),
+      ...(isCharacter ? { actor_name: actor.trim() === '' ? null : actor.trim() } : {}),
+      expected_revision: form.expectedRevision,
+    };
     update.mutate({ id: entity.id, input }, { onSuccess: onDone });
   };
 
   return (
     <form onSubmit={submit} className="flex flex-col gap-1.5 px-3 py-2">
-      <TextInput aria-label={`${entity.alias} 的名称`} value={name} onChange={(e) => setName(e.target.value)} autoFocus />
-      <TextInput aria-label="别名，用顿号或逗号分隔" value={aliases} onChange={(e) => setAliases(e.target.value)} placeholder="别名，用顿号分隔" />
+      <RebaseNotice
+        conflict={form.conflict}
+        refused={isRevisionConflict(update.error)}
+        onTheirs={() => {
+          update.reset();
+          form.takeTheirs();
+        }}
+        onMine={() => {
+          update.reset();
+          form.keepMine();
+        }}
+        onRefresh={() => {
+          update.reset();
+          form.takeTheirs();
+          void qc.invalidateQueries({ queryKey: keys.entities });
+        }}
+      />
+      <TextInput aria-label={`${entity.alias} 的名称`} value={name} onChange={(e) => form.setValue((f) => ({ ...f, name: e.target.value }))} autoFocus />
+      <TextInput
+        aria-label="别名，用顿号或逗号分隔"
+        value={aliases}
+        onChange={(e) => form.setValue((f) => ({ ...f, aliases: e.target.value }))}
+        placeholder="别名，用顿号分隔"
+      />
       {isCharacter ? (
-        <TextInput aria-label="演员" value={actor} onChange={(e) => setActor(e.target.value)} maxLength={ACTOR_NAME_MAX} placeholder="演员姓名，可不填" />
+        <TextInput
+          aria-label="演员"
+          value={actor}
+          onChange={(e) => form.setValue((f) => ({ ...f, actor: e.target.value }))}
+          maxLength={ACTOR_NAME_MAX}
+          placeholder="演员姓名，可不填"
+        />
       ) : null}
-      {update.isError ? <ErrorNotice error={update.error} /> : null}
+      {update.isError && !isRevisionConflict(update.error) ? <ErrorNotice error={update.error} /> : null}
       <div className="flex gap-1.5">
         <Button type="submit" variant="primary" size="sm" busy={update.isPending} disabled={name.trim() === ''}>
           保存

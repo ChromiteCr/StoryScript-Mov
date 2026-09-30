@@ -1,7 +1,7 @@
 import { MutationCache, QueryCache, QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { CreateProjectInput, CurrentScript, Entity, HealthInfo, Job, Project, ProvidersView, Scene, Shot, ShotDraft } from '@storyscript/contracts';
 import { api, isApiClientError, isUnauthorized, type InputOf } from './api.ts';
-import { describeError } from './errors.ts';
+import { describeError, isRevisionConflict } from './errors.ts';
 import { isTerminalJob, resetTrackedJobs } from './jobs.ts';
 import { invalidateCast } from './queries-cast.ts';
 import { textNotConfiguredReason, type ModelScope } from './models.ts';
@@ -29,6 +29,16 @@ export const keys = {
   draft: (id: string) => ['drafts', id] as const,
   job: (id: string) => ['jobs', 'one', id] as const,
 };
+
+/**
+ * S4a: a refused save (REVISION_CONFLICT) means a teammate's newer version
+ * exists. Refetch it, so the form can offer 用他的 / 保留我的 at once.
+ */
+export function refetchOnConflict(qc: QueryClient, root: readonly string[]): (error: unknown) => void {
+  return (error) => {
+    if (isRevisionConflict(error)) void qc.invalidateQueries({ queryKey: [...root] });
+  };
+}
 
 /** Query roots that belong to the open project; dropped when it changes. */
 const PROJECT_SCOPED_ROOTS: ReadonlySet<string> = new Set(['script', 'entities', 'shots', 'shot-revisions', 'drafts', 'jobs', 'boards', 'styles']);
@@ -319,6 +329,7 @@ export function useUpdateEntity() {
       upsertEntity(qc, e);
       invalidateCast(qc);
     },
+    onError: refetchOnConflict(qc, keys.entities),
   });
 }
 

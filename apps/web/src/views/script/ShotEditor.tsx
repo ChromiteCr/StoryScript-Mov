@@ -19,7 +19,8 @@ import {
   type ShotSubject,
 } from '@storyscript/contracts';
 import { TECHNIQUES } from '@storyscript/core';
-import { History, Lock, LockOpen, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { Check, Copy, History, Lock, LockOpen, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
+import { unsavedShotText, useCollabFeed, watchersOf, watchersText } from '../../lib/collab.ts';
 import { isRevisionConflict } from '../../lib/errors.ts';
 import {
   ANGLE_LABEL,
@@ -40,13 +41,14 @@ import {
   TEMPLATE_LABEL,
 } from '../../lib/labels.ts';
 import { polishAiReason } from '../../lib/polish.ts';
-import { useCreateShot, useUpdateShot } from '../../lib/queries.ts';
+import { useCreateShot, useHealth, useUpdateShot } from '../../lib/queries.ts';
 import { emptyShotFields, emptySubject, linesToList, parseNumberField, revisionLabel } from '../../lib/shots.ts';
 import { stableKey } from '../../lib/stable.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, IconButton, Notice, SelectInput, Tag, TextArea, TextInput } from '../../components/ui.tsx';
 import { FormRow } from './SceneInspector.tsx';
 import { useWorkspace } from './context.ts';
+import { useGoneShotId } from './goneShot.ts';
 
 /**
  * Shot inspector: every ShotFields field (enums as Chinese dropdowns), saved
@@ -203,8 +205,18 @@ type Errors = Partial<Record<'focal' | 'est' | 'manualNote' | 'form', string>>;
 
 export type EditorTarget = { mode: 'edit'; shot: Shot } | { mode: 'create'; scene: Scene };
 
+/**
+ * A teammate archived this shot while it was being edited (S4a; the workspace
+ * says so through GoneShotContext): the editor stays with what was typed,
+ * saving is off, and the person copies the text or lets go.
+ */
 export function ShotEditor({ target }: { target: EditorTarget }) {
   const ws = useWorkspace();
+  const goneId = useGoneShotId();
+  const gone = target.mode === 'edit' && goneId === target.shot.id;
+  const hosted = useHealth().data?.hosted ?? false;
+  const feed = useCollabFeed();
+  const [copied, setCopied] = useState(false);
   const update = useUpdateShot();
   const lockToggle = useUpdateShot();
   const create = useCreateShot();
@@ -225,6 +237,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
 
   const dirty = stableKey(form) !== stableKey(initial);
   const locked = base?.locked ?? false;
+  const watching = watchersText(watchersOf(base?.id ?? null, feed.presence));
   const staleBase = latest !== null && base !== null && latest.revision !== base.revision;
 
   const { setEditorDirty } = ws;
@@ -270,6 +283,17 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
     setForm(formFromShot(latest));
     setErrors({});
     update.reset();
+  };
+
+  const copyText = () => {
+    const text = unsavedShotText({ action: form.fields.action, notes: form.notes, dialogue: form.dialogue, narrative: form.fields.narrative_purpose });
+    void navigator.clipboard.writeText(text).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 1600);
+      },
+      () => setCopied(false),
+    );
   };
 
   /** AI 润色 works on the saved shot: unsaved edits are dropped first, after asking (same question as switching away). */
@@ -371,7 +395,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    disabled={polishAiReason(ws.ai) !== null || pending}
+                    disabled={polishAiReason(ws.ai) !== null || pending || gone}
                     title={polishAiReason(ws.ai) ?? '让模型按方式和风格重写这个镜头，结果先进草案'}
                     onClick={startPolish}
                   >
@@ -383,7 +407,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
                   variant="ghost"
                   size="sm"
                   busy={lockToggle.isPending}
-                  disabled={dirty}
+                  disabled={dirty || gone}
                   title={dirty ? '先保存或还原修改' : base.locked ? '解锁后才能修改' : '锁定后，AI 重新拆镜不会改动它'}
                   onClick={() =>
                     lockToggle.mutate(
@@ -424,6 +448,21 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
               </span>
             </div>
             {base.manual_note ? <p className="text-xs break-words text-graphite-300">手工说明：{base.manual_note}</p> : null}
+            {gone ? (
+              <Notice tone="warn" role="alert" title={`${hosted ? '这个镜头刚被组员归档了' : '这个镜头刚在别处被归档了'}；你的修改还没保存`}>
+                <p>它已经不在镜头表里，不能再保存。文字可以复制到别的镜头里。</p>
+                <div className="mt-1.5 flex flex-wrap gap-1.5">
+                  <Button size="sm" onClick={copyText}>
+                    {copied ? <Check aria-hidden className="size-3 text-ok" /> : <Copy aria-hidden className="size-3" />}
+                    {copied ? '已复制' : '复制文字'}
+                  </Button>
+                  <Button size="sm" onClick={ws.closeInspector}>
+                    放弃
+                  </Button>
+                </div>
+              </Notice>
+            ) : null}
+            {watching ? <Notice tone="info" role="status" title={watching} /> : null}
             {locked ? (
               <Notice tone="info" title="镜头已锁定">
                 内容不能修改，AI 重新拆镜也不会改动它。要修改先解锁。
@@ -708,7 +747,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
         ) : null}
         {create.isError ? <ErrorNotice error={create.error} context="shot-save" /> : null}
         <div className="flex items-center gap-2">
-          <Button type="submit" variant="primary" busy={pending} disabled={locked || (!base && !scene) || (base !== null && !dirty)}>
+          <Button type="submit" variant="primary" busy={pending} disabled={locked || gone || (!base && !scene) || (base !== null && !dirty)}>
             {base ? '保存' : '新建镜头'}
           </Button>
           {base ? (
@@ -721,7 +760,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
             </Button>
           )}
           <span aria-live="polite" className="ml-auto text-xs text-graphite-300">
-            {dirty ? '有未保存的修改' : savedAt ? `已保存 ${savedAt}` : ''}
+            {gone ? '镜头已归档，不能保存' : dirty ? '有未保存的修改' : savedAt ? `已保存 ${savedAt}` : ''}
           </span>
         </div>
       </div>

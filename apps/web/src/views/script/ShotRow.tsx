@@ -6,9 +6,11 @@ import { ANGLE_LABEL, LENS_LABEL, MOVEMENT_LABEL, QUOTE_MATCH_LABEL, REQUIRED_ST
 import { polishAiReason } from '../../lib/polish.ts';
 import { useArchiveShot, useSetRequirement, useUpdateShot } from '../../lib/queries.ts';
 import { sourceState } from '../../lib/shots.ts';
+import { CommentBadge } from '../../components/CommentsPanel.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Menu, type MenuItem } from '../../components/Menu.tsx';
 import { Tag } from '../../components/ui.tsx';
+import { setCommentsFocus } from '../../lib/open-shot.ts';
 import { shotRowDomId, useWorkspace } from './context.ts';
 
 function Spec({ shot }: { shot: Shot }) {
@@ -328,7 +330,7 @@ export const ShotRow = memo(function ShotRow({
             拍法：{f.camera_notes}
           </p>
         ) : null}
-        <div className="mt-1 flex min-w-0 items-center gap-1">
+        <div className="mt-1 flex min-w-0 flex-wrap items-center gap-1">
           {shot.origin === 'ai' ? <Tag>AI</Tag> : null}
           {shot.required_status !== 'required' ? (
             <Tag tone={waived ? 'danger' : 'neutral'} title={shot.requirement_reason ? `原因：${shot.requirement_reason}` : undefined}>
@@ -341,6 +343,15 @@ export const ShotRow = memo(function ShotRow({
             </Tag>
           ) : null}
           <SourceCell shot={shot} />
+          {/* S4b: comments on this shot (hosted server; renders nothing without any) */}
+          <CommentBadge
+            shotId={shot.id}
+            label={`${shot.code} 的批注`}
+            onOpen={() => {
+              setCommentsFocus({ shotId: shot.id });
+              ws.selectShot(shot);
+            }}
+          />
         </div>
         {update.isError ? <ErrorNotice className="mt-2" error={update.error} context="shot-save" /> : null}
       </div>

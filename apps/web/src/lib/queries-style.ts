@@ -2,7 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { StyleCardInput, StyleDefaults } from '@storyscript/contracts';
 import { api } from './api.ts';
 import { describeError } from './errors.ts';
-import { keys } from './queries.ts';
+import { keys, refetchOnConflict } from './queries.ts';
 import { markSaved, markSaveFailed, markSaving } from './saveStatus.ts';
 
 /**
@@ -50,11 +50,14 @@ export function useCreateStyle() {
   });
 }
 
+/** `input.expected_revision` is the revision the edit started from (S4a): a teammate's newer save answers 409. */
 export function useUpdateStyle() {
+  const qc = useQueryClient();
   const refresh = useRefreshStyles();
   return useMutation({
     mutationFn: ({ id, input }: { id: string; input: StyleCardInput }) => saving(() => api.call('updateStyle', input, { params: { id } })),
     onSuccess: refresh,
+    onError: refetchOnConflict(qc, styleKeys.all),
   });
 }
 

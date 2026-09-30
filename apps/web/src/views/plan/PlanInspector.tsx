@@ -1,12 +1,19 @@
-import { useEffect, useState } from 'react';
+import { useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Plus, Trash2, X } from 'lucide-react';
-import type { ConstraintType, PlanDetail, Setup, SetupDurations } from '@storyscript/contracts';
+import type { ConstraintType, PlanDetail, Setup } from '@storyscript/contracts';
 import { localToUtc, utcToLocal } from '@storyscript/core';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
+import { RebaseNotice } from '../../components/RebaseNotice.tsx';
 import { Button, IconButton, SelectInput, Tag, TextInput } from '../../components/ui.tsx';
 import { EmptyState, Inspector, InspectorGroup, InspectorRow } from '../../components/workspace.tsx';
+import { useChangedBy } from '../../lib/collab.ts';
+import { isRevisionConflict } from '../../lib/errors.ts';
 import { CONSTRAINT_TYPE_LABEL, constraintText } from '../../lib/labels-plan.ts';
-import { useCreateConstraint, useDeleteConstraint, useDeleteSetup, useUpdateSetup } from '../../lib/queries-plan.ts';
+import { planKeys, useCreateConstraint, useDeleteConstraint, useDeleteSetup, useUpdateSetup } from '../../lib/queries-plan.ts';
+import { setupCommit, setupForm, type DurKey } from '../../lib/setup-form.ts';
+import { stableKey } from '../../lib/stable.ts';
+import { useRebasedForm } from '../../lib/useRebasedForm.ts';
 import { localTime } from '../../lib/print-plan.ts';
 import { CheckRow, TimeField } from './controls.tsx';
 import { setupMinutes, type PlanData } from './data.ts';
@@ -49,42 +56,63 @@ export function PlanInspector({
 
 // ------------------------------------------------------------------ setup ---
 
-type DurKey = keyof SetupDurations;
 const DUR_FIELDS: [DurKey, string][] = [
   ['setup_min', '准备'],
   ['per_shot_min', '每镜'],
   ['reset_min', '复位'],
 ];
 
+/**
+ * The name and the durations are typed and committed on blur or Enter; a
+ * teammate's save of the same setup never replaces what is being typed
+ * (useRebasedForm). Selects and checkboxes commit at once, naming the
+ * revision on screen: a teammate's newer save answers 409, not an overwrite.
+ */
 function SetupEditor({ data, setup, onDeleted }: { data: PlanData; setup: Setup; onDeleted: () => void }) {
+  const qc = useQueryClient();
   const update = useUpdateSetup();
   const remove = useDeleteSetup();
-  const [label, setLabel] = useState(setup.label);
-  const [dur, setDur] = useState(() => Object.fromEntries(DUR_FIELDS.map(([k]) => [k, String(setup.durations[k])])) as Record<DurKey, string>);
+  const by = useChangedBy(['plan']);
+  const form = useRebasedForm(setupForm(setup), { revision: setup.revision, by });
   const [adding, setAdding] = useState('');
 
-  useEffect(() => setLabel(setup.label), [setup.label]);
-  const { setup_min, per_shot_min, reset_min } = setup.durations;
-  useEffect(() => setDur({ setup_min: String(setup_min), per_shot_min: String(per_shot_min), reset_min: String(reset_min) }), [setup_min, per_shot_min, reset_min]);
-
-  const patch = (input: Parameters<typeof update.mutate>[0]['input']) => update.mutate({ id: setup.id, input });
-
-  const commitLabel = () => {
-    const t = label.trim();
-    if (!t) return setLabel(setup.label);
-    if (t !== setup.label) patch({ label: t });
-  };
-  const commitDur = () => {
-    const next = { ...setup.durations };
-    for (const [k] of DUR_FIELDS) {
-      const n = Number(dur[k]);
-      if (dur[k].trim() === '' || !Number.isFinite(n) || n < 0) {
-        setDur({ ...dur, [k]: String(setup.durations[k]) });
-        return;
+  type Patch = Parameters<typeof update.mutate>[0]['input'];
+  // One save at a time, each naming the revision the last one returned: a name typed and a box ticked
+  // in quick succession are two saves of ours, not a teammate's change.
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  const saved = useRef<number | undefined>(setup.revision);
+  const sending = useRef<Set<string>>(new Set());
+  const send = (input: Patch, revision: number | undefined) => {
+    chain.current = chain.current.then(async () => {
+      const expected = revision === undefined ? undefined : Math.max(revision, saved.current ?? revision);
+      try {
+        const next = await update.mutateAsync({ id: setup.id, input: { ...input, expected_revision: expected } });
+        saved.current = next.revision ?? saved.current;
+        form.acknowledge(setupForm(next), next.revision);
+      } catch {
+        // shown through update.error
       }
-      next[k] = n;
-    }
-    if (DUR_FIELDS.some(([k]) => next[k] !== setup.durations[k])) patch({ durations: next });
+    });
+  };
+  const patch = (input: Patch) => send(input, setup.revision);
+
+  /** Blur or Enter in the name or a duration; Enter and the blur after it send it once. */
+  const commit = () => {
+    if (form.conflict) return; // the person picks 用他的 or 保留我的 first
+    const { input, draft } = setupCommit(form.seed, form.value);
+    form.setValue(draft);
+    if (!input) return;
+    const key = stableKey(input);
+    if (sending.current.has(key)) return;
+    sending.current.add(key);
+    send(input, form.expectedRevision);
+    void chain.current.then(() => sending.current.delete(key));
+  };
+
+  const refresh = () => {
+    update.reset();
+    form.takeTheirs();
+    void qc.invalidateQueries({ queryKey: planKeys.all });
   };
 
   const shots = setup.shot_ids.map((id) => data.shotById.get(id)).filter((s) => s !== undefined);
@@ -104,7 +132,25 @@ function SetupEditor({ data, setup, onDeleted }: { data: PlanData; setup: Setup;
       }
       note={
         <>
-          {update.isError ? <ErrorNotice error={update.error} className="mb-2" /> : null}
+          <RebaseNotice
+            className="mb-2"
+            conflict={form.conflict}
+            refused={isRevisionConflict(update.error)}
+            onTheirs={() => {
+              update.reset();
+              form.takeTheirs();
+            }}
+            onMine={() => {
+              // the person's version wins on purpose: save it against the revision on screen now
+              update.reset();
+              form.keepMine();
+              const { input, draft } = setupCommit(setupForm(setup), form.value);
+              form.setValue(draft);
+              if (input) patch(input);
+            }}
+            onRefresh={refresh}
+          />
+          {update.isError && !isRevisionConflict(update.error) ? <ErrorNotice error={update.error} className="mb-2" /> : null}
           {remove.isError ? <ErrorNotice error={remove.error} className="mb-2" /> : null}
         </>
       }
@@ -112,10 +158,10 @@ function SetupEditor({ data, setup, onDeleted }: { data: PlanData; setup: Setup;
       <InspectorRow label="名称">
         <TextInput
           aria-label="setup 名称"
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          onBlur={commitLabel}
-          onKeyDown={(e) => e.key === 'Enter' && commitLabel()}
+          value={form.value.label}
+          onChange={(e) => form.setValue((v) => ({ ...v, label: e.target.value }))}
+          onBlur={commit}
+          onKeyDown={(e) => e.key === 'Enter' && commit()}
         />
       </InspectorRow>
       <InspectorRow label="场地">
@@ -140,10 +186,10 @@ function SetupEditor({ data, setup, onDeleted }: { data: PlanData; setup: Setup;
               <TextInput
                 inputMode="decimal"
                 className="px-1.5 tabular-nums"
-                value={dur[k]}
-                onChange={(e) => setDur({ ...dur, [k]: e.target.value })}
-                onBlur={commitDur}
-                onKeyDown={(e) => e.key === 'Enter' && commitDur()}
+                value={form.value[k]}
+                onChange={(e) => form.setValue((v) => ({ ...v, [k]: e.target.value }))}
+                onBlur={commit}
+                onKeyDown={(e) => e.key === 'Enter' && commit()}
               />
             </label>
           ))}

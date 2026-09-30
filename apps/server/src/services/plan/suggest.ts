@@ -141,6 +141,7 @@ export function startOrderSuggestion(deps: AppDeps, planId: string): Job {
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'suggest_order',
+    model_source: ai.source,
     idempotency_key: `suggest_order:${plan.id}:${inputHash}`,
     input_hash: contentHash({ prompt_version: ORDER_PROMPT_VERSION, messages: ctx.messages }),
     remote: ai.remote,

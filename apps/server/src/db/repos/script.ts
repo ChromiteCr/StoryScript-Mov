@@ -1,5 +1,6 @@
 import type { z } from 'zod';
 import { Paragraph, Scene, ScreenSides, ScriptVersion, type ScriptVersionSummary } from '@storyscript/contracts';
+import { actorId, actorResolver } from '../../collab/actor.ts';
 import type { DbPort } from '../port.ts';
 
 /** script_version / scene ↔ contracts. Versions are immutable once inserted. */
@@ -13,6 +14,7 @@ interface VersionRow {
   raw_text: string;
   paragraphs_json: string;
   created_at: string;
+  actor_id: string | null;
 }
 
 interface SceneRow {
@@ -31,12 +33,12 @@ interface SceneRow {
 export type SceneRecord = Scene & { sort: number };
 export type VersionSummary = z.infer<typeof ScriptVersionSummary>;
 
-const V_COLS = 'id, parent_id, source_name, format, content_hash, raw_text, paragraphs_json, created_at';
+const V_COLS = 'id, parent_id, source_name, format, content_hash, raw_text, paragraphs_json, created_at, actor_id';
 const S_COLS =
   'id, script_version_id, sort, display_no, heading, paragraph_ids_json, location_entity_id, time_label, screen_sides_json, origin';
 
-function versionFromRow(r: VersionRow): ScriptVersion {
-  return ScriptVersion.parse({ ...r, paragraphs: JSON.parse(r.paragraphs_json) });
+function versionFromRow(r: VersionRow, who: ReturnType<typeof actorResolver>): ScriptVersion {
+  return ScriptVersion.parse({ ...r, paragraphs: JSON.parse(r.paragraphs_json), actor: who(r.actor_id) });
 }
 
 function sceneFromRow(r: SceneRow): SceneRecord {
@@ -51,7 +53,7 @@ function sceneFromRow(r: SceneRow): SceneRecord {
 export function insertScriptVersion(db: DbPort, v: ScriptVersion): void {
   const x = ScriptVersion.parse(v);
   db.run(
-    `INSERT INTO script_version (${V_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO script_version (${V_COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.parent_id,
     x.source_name,
@@ -60,28 +62,30 @@ export function insertScriptVersion(db: DbPort, v: ScriptVersion): void {
     x.raw_text,
     JSON.stringify(x.paragraphs.map((p) => Paragraph.parse(p))),
     x.created_at,
+    actorId(),
   );
 }
 
 export function getScriptVersion(db: DbPort, id: string): ScriptVersion | null {
   const r = db.get<VersionRow>(`SELECT ${V_COLS} FROM script_version WHERE id = ?`, id);
-  return r ? versionFromRow(r) : null;
+  return r ? versionFromRow(r, actorResolver(db)) : null;
 }
 
 /** The current version = the most recently imported one. */
 export function latestScriptVersion(db: DbPort): ScriptVersion | null {
   const r = db.get<VersionRow>(`SELECT ${V_COLS} FROM script_version ORDER BY created_at DESC, rowid DESC LIMIT 1`);
-  return r ? versionFromRow(r) : null;
+  return r ? versionFromRow(r, actorResolver(db)) : null;
 }
 
 export function listVersionSummaries(db: DbPort): VersionSummary[] {
+  const who = actorResolver(db);
   return db
-    .all<{ id: string; source_name: string; content_hash: string; created_at: string; scene_count: number }>(
-      `SELECT v.id, v.source_name, v.content_hash, v.created_at,
+    .all<{ id: string; source_name: string; content_hash: string; created_at: string; scene_count: number; actor_id: string | null }>(
+      `SELECT v.id, v.source_name, v.content_hash, v.created_at, v.actor_id,
               (SELECT COUNT(*) FROM scene s WHERE s.script_version_id = v.id) AS scene_count
          FROM script_version v ORDER BY v.created_at DESC, v.rowid DESC`,
     )
-    .map((r) => ({ ...r, scene_count: Number(r.scene_count) }));
+    .map(({ actor_id, ...r }) => ({ ...r, scene_count: Number(r.scene_count), actor: who(actor_id) }));
 }
 
 export function insertScene(db: DbPort, s: Scene, sort: number): void {

@@ -1,5 +1,6 @@
 import type { AppDeps } from '../deps.ts';
 import type { DbPort } from '../db/port.ts';
+import { modelDir } from '../collab/models.ts';
 import { AppError } from '../http/errors.ts';
 
 /**
@@ -16,12 +17,14 @@ const DAY_MS = 24 * 3600 * 1000;
 export function assertJobQuota(deps: AppDeps, db: DbPort, lane: 'llm' | 'image', now: number = Date.now()): void {
   const limits = deps.hosted?.limits;
   if (!limits) return;
+  // S4: the cap protects the group's key; a member calling with their own key spends their own money
+  if (modelDir(deps, lane === 'llm' ? 'text' : 'image').source === 'own') return;
   const limit = lane === 'llm' ? limits.llm_jobs_per_day : limits.image_jobs_per_day;
   const kinds: readonly string[] = lane === 'llm' ? LLM_JOB_KINDS : IMAGE_JOB_KINDS;
   const since = new Date(now - DAY_MS).toISOString();
   const used =
     db.get<{ n: number }>(
-      `SELECT COUNT(*) AS n FROM job WHERE remote = 1 AND kind IN (${kinds.map(() => '?').join(', ')}) AND created_at >= ?`,
+      `SELECT COUNT(*) AS n FROM job WHERE remote = 1 AND kind IN (${kinds.map(() => '?').join(', ')}) AND created_at >= ? AND (model_source IS NULL OR model_source = 'group')`,
       ...kinds,
       since,
     )?.n ?? 0;

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoTime, Origin, Uuid } from './common.ts';
+import { ActorRef, IsoTime, Origin, Uuid } from './common.ts';
 
 export const ScriptFormat = z.enum(['paste', 'txt', 'md', 'fountain']);
 export type ScriptFormat = z.infer<typeof ScriptFormat>;
@@ -28,6 +28,8 @@ export const ScriptVersion = z.object({
   raw_text: z.string(),
   paragraphs: z.array(Paragraph),
   created_at: IsoTime,
+  /** S4: who imported this version */
+  actor: ActorRef.nullable().optional(),
 });
 export type ScriptVersion = z.infer<typeof ScriptVersion>;
 

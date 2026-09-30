@@ -93,6 +93,6 @@ export function addCoverageDecision(
       at: nextInstant(now, lastDecisionAt(db, shotId)),
     };
     insertDecision(db, decision);
-    return decision;
+    return listDecisions(db).find((d) => d.id === decision.id) ?? decision;
   });
 }

@@ -3,6 +3,7 @@ import type { Board, BoardView, Project, Shot } from '@storyscript/contracts';
 import { Download, History, Redo2, RefreshCw, Save, Sparkles, Undo2 } from 'lucide-react';
 import { boardCaption, pngFileName } from '../../lib/print-boards.ts';
 import { RENDER_MODE_LABEL, versionLabel, type BoardViewMode } from '../../lib/labels-boards.ts';
+import { actorShortText } from '../../lib/crew.ts';
 import { isTerminalJob, untrackJob } from '../../lib/jobs.ts';
 import { rasterStaleFor, redrawBlockedReason, STALE_TITLE, type ShotRaster } from '../../lib/labels-raster.ts';
 import { useCancelJob, useHealth, useProviders } from '../../lib/queries.ts';
@@ -211,14 +212,15 @@ export function BoardMain(p: BoardMainProps) {
             onChange={(e) => p.onView(e.target.value || null)}
             disabled={!p.versions}
           >
-            <option value="">{`最新 · ${versionLabel(latest)}`}</option>
+            <option value="">{`最新 · ${versionLabel(latest)}${latest.actor ? ` · ${actorShortText(latest.actor)}` : ''}`}</option>
             {(p.versions ?? [])
               .filter((v) => v.id !== latest.id)
               .slice()
               .reverse()
               .map((v) => (
                 <option key={v.id} value={v.id}>
-                  {versionLabel(v)} · {new Date(v.created_at).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}
+                  {versionLabel(v)}
+                  {v.actor ? ` · ${actorShortText(v.actor)}` : ''} · {new Date(v.created_at).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}
                 </option>
               ))}
           </SelectInput>

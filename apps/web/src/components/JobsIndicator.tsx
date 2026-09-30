@@ -1,8 +1,10 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { ListChecks, LoaderCircle } from 'lucide-react';
 import { isApiClientError } from '../lib/api.ts';
+import { isOtherActor } from '../lib/crew.ts';
 import { formatProgress, isJobInFlight, JOB_KIND_LABEL, JOB_STATUS_LABEL } from '../lib/jobs.ts';
 import { useActiveJobs } from '../lib/queries.ts';
+import { useMyActorId } from './AccountMenu.tsx';
 import { ErrorNotice } from './ErrorNotice.tsx';
 import { Spinner } from './ui.tsx';
 import { EmptyState } from './workspace.tsx';
@@ -13,6 +15,7 @@ import { EmptyState } from './workspace.tsx';
  */
 export function JobsIndicator({ enabled }: { enabled: boolean }) {
   const jobs = useActiveJobs(enabled);
+  const myId = useMyActorId();
   const [open, setOpen] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
@@ -67,7 +70,10 @@ export function JobsIndicator({ enabled }: { enabled: boolean }) {
           const progress = formatProgress(job.progress);
           return (
             <li key={job.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate text-graphite-100">{JOB_KIND_LABEL[job.kind]}</span>
+              <span className="min-w-0 flex-1 truncate text-graphite-100">
+                {JOB_KIND_LABEL[job.kind]}
+                {job.actor && isOtherActor(job.actor, myId) ? <span className="text-xs text-graphite-300"> · {job.actor.name}</span> : null}
+              </span>
               <span className="shrink-0 text-xs text-graphite-300 tabular-nums">
                 {JOB_STATUS_LABEL[job.status]}
                 {progress ? ` ${progress}` : ''}

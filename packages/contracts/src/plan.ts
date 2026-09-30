@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoTime, Uuid } from './common.ts';
+import { ActorRef, IsoTime, Uuid } from './common.ts';
 
 export const ResourceType = z.enum(['performer', 'location', 'equipment']);
 export type ResourceType = z.infer<typeof ResourceType>;
@@ -19,6 +19,8 @@ export const Resource = z.object({
   /** performer → character entity ids (casting map); empty for non-performers */
   cast_character_ids: z.array(Uuid),
   confirmed: z.boolean(),
+  /** S4a: bumped by every change; updates may name the one they started from */
+  revision: z.number().int().nonnegative().optional(),
 });
 export type Resource = z.infer<typeof Resource>;
 
@@ -39,6 +41,8 @@ export const Setup = z.object({
   durations: SetupDurations,
   /** estimates must be confirmed before a plan can be approved */
   estimate_confirmed: z.boolean(),
+  /** S4a: bumped by every change; updates may name the one they started from */
+  revision: z.number().int().nonnegative().optional(),
 });
 export type Setup = z.infer<typeof Setup>;
 
@@ -154,5 +158,9 @@ export const Plan = z.object({
   revision: z.number().int().nonnegative(),
   created_at: IsoTime,
   updated_at: IsoTime,
+  /** S4 */
+  created_by: ActorRef.nullable().optional(),
+  approved_by: ActorRef.nullable().optional(),
+  approved_at: IsoTime.nullable().optional(),
 });
 export type Plan = z.infer<typeof Plan>;

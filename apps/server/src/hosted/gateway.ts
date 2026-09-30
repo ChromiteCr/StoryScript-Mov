@@ -6,6 +6,8 @@ import {
   ChangePasswordInput,
   CodeLoginInput,
   CreateGroupInput,
+  CrewRolesInput,
+  ModelChoiceInput,
   DisbandGroupInput,
   EmailOnlyInput,
   JoinGroupInput,
@@ -23,7 +25,9 @@ import { SESSION_COOKIE } from '../security/sessions.ts';
 import type { Accounts } from './accounts.ts';
 import type { HostedConfig } from './config.ts';
 import type { Groups } from './groups.ts';
-import { SESSION_TTL_MS, type Account, type SiteDb } from './site-db.ts';
+import type { HostedRequest } from '../collab/actor.ts';
+import { accountDir } from './config.ts';
+import { crewRolesOf, SESSION_TTL_MS, type Account, type SiteDb } from './site-db.ts';
 import type { TeamRuntime } from './teams.ts';
 
 /**
@@ -37,6 +41,8 @@ import type { TeamRuntime } from './teams.ts';
 
 export interface GatewayOptions {
   config: HostedConfig;
+  /** the server's data folder (each account's own model settings live under accounts/<id>) */
+  dataDir: string;
   site: SiteDb;
   accounts: Accounts;
   groups: Groups;
@@ -208,6 +214,16 @@ export function createGateway(o: GatewayOptions): Hono {
   });
   gw.post(Api.resetGroupCode.path, (c) => c.json({ data: groups.resetCode(accountOf(c), slugOf(c)) }));
   gw.delete(Api.removeGroupMember.path, (c) => c.json({ data: groups.removeMember(accountOf(c), slugOf(c), c.req.param('id') ?? '') }));
+  gw.put(Api.setCrewRoles.path, async (c) => {
+    const account = accountOf(c);
+    const input = await parseBody(c, CrewRolesInput);
+    return c.json({ data: groups.setCrewRoles(account, slugOf(c), c.req.param('id') ?? '', input.crew_roles) });
+  });
+  gw.put(Api.setModelChoice.path, async (c) => {
+    const account = accountOf(c);
+    const input = await parseBody(c, ModelChoiceInput);
+    return c.json({ data: groups.setModelChoice(account, slugOf(c), input) });
+  });
   gw.post(Api.disbandGroup.path, async (c) => {
     const account = accountOf(c);
     await parseBody(c, DisbandGroupInput);
@@ -217,11 +233,30 @@ export function createGateway(o: GatewayOptions): Hono {
 
   // ---- everything else: the account's group instance ----
 
+  // S4: the group instance learns who is asking from the env (a browser can set headers, not this)
+  const hostedRequest = (account: Account, slug: string): HostedRequest | null => {
+    const m = site.membership(account.id, slug);
+    if (!m) return null;
+    return {
+      actor: {
+        id: account.id,
+        name: account.name,
+        role: m.role,
+        crew_roles: crewRolesOf(m.crew_roles_json),
+        text_source: m.text_source,
+        image_source: m.image_source,
+      },
+      roster: () => site.members(slug).map((x) => ({ id: x.id, name: x.name, role: x.role, crew_roles: crewRolesOf(x.crew_roles_json) })),
+      personalDir: accountDir(o.dataDir, account.id),
+    };
+  };
+
   const forward = async (c: Context) => {
-    const { current } = who(c);
+    const { account, current } = who(c);
     const team = current ? runtime.get(current) : undefined;
-    if (!team) return c.json(errorBody('NO_TEAM', '你还没有加入小组：创建一个，或用组长发的链接加入。'), 409);
-    return team.fetch(c.req.raw, c.env);
+    const hosted = current ? hostedRequest(account, current) : null;
+    if (!team || !hosted) return c.json(errorBody('NO_TEAM', '你还没有加入小组：创建一个，或用组长发的链接加入。'), 409);
+    return team.fetch(c.req.raw, { ...(c.env as object), hosted });
   };
   gw.all('/api', forward);
   gw.all('/api/*', forward);

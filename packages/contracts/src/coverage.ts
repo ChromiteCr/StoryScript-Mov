@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoTime, Uuid } from './common.ts';
+import { ActorRef, IsoTime, Uuid } from './common.ts';
 
 export const CoverageStatus = z.enum(['planned', 'attempted', 'usable', 'needs_pickup', 'waived']);
 export type CoverageStatus = z.infer<typeof CoverageStatus>;
@@ -16,6 +16,8 @@ export const CoverageDecision = z.object({
   reason: z.string().min(1),
   basis_content_hash: z.string(),
   at: IsoTime,
+  /** S4: who decided */
+  actor: ActorRef.nullable().optional(),
 });
 export type CoverageDecision = z.infer<typeof CoverageDecision>;
 

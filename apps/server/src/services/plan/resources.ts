@@ -6,6 +6,7 @@ import { getEntity } from '../../db/repos/entity.ts';
 import { deleteResourceRow, getResource, insertResource, updateResourceRow } from '../../db/repos/resource.ts';
 import { setupsUsingResource } from '../../db/repos/setup.ts';
 import { AppError } from '../../http/errors.ts';
+import { assertExpectedRevision } from '../revision.ts';
 
 /**
  * Resources (FR-06): performers (cast to character entities), locations
@@ -87,6 +88,7 @@ export function createResource(db: DbPort, input: Input<typeof CreateResourceInp
 export function updateResource(db: DbPort, id: string, input: Input<typeof UpdateResourceInput>): Resource {
   return db.tx(() => {
     const cur = requireResource(db, id);
+    assertExpectedRevision(`资源「${cur.name}」`, cur.revision, input.expected_revision);
     const type = input.type ?? cur.type;
     if (type !== cur.type) {
       const used = setupsUsingResource(db, id);
@@ -106,7 +108,7 @@ export function updateResource(db: DbPort, id: string, input: Input<typeof Updat
       confirmed: input.confirmed ?? cur.confirmed,
     };
     updateResourceRow(db, next);
-    return next;
+    return requireResource(db, id);
   });
 }
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentScript, Paragraph, Project, Shot, ShotDraft } from '@storyscript/contracts';
 import { Palette, ScrollText, Upload } from 'lucide-react';
+import { actorPhrase } from '../../lib/crew.ts';
 import { draftSceneId } from '../../lib/drafts.ts';
 import { SCRIPT_FORMAT_LABEL } from '../../lib/labels.ts';
 import { useAiGate, useDrafts, useEntities, useProviders, useScriptVersions, useShots } from '../../lib/queries.ts';
@@ -8,6 +9,7 @@ import { pendingPolishDrafts, pruneSelection, selectableShotIds, setShots, toggl
 import { locateParagraph } from '../../lib/shots.ts';
 import { stageDef } from '../../lib/stages.ts';
 import { useMediaQuery, WIDE_QUERY } from '../../lib/useMediaQuery.ts';
+import { ActorLabel } from '../../components/ActorLabel.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { Button, Tag } from '../../components/ui.tsx';
 import { PageHeader, Panel, Workspace } from '../../components/workspace.tsx';
@@ -315,12 +317,17 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
     <PageHeader
       title={label}
       icon={ScrollText}
-      status={<Tag>{versionNo.n ? `第 ${versionNo.n} 版${versionNo.total > 1 ? ` / 共 ${versionNo.total} 版` : ''}` : '当前版本'}</Tag>}
+      status={
+        <Tag title={actorPhrase(v.actor, '导入：') ?? undefined}>
+          {versionNo.n ? `第 ${versionNo.n} 版${versionNo.total > 1 ? ` / 共 ${versionNo.total} 版` : ''}` : '当前版本'}
+        </Tag>
+      }
       lead={
         <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="min-w-0 break-all text-graphite-100">{v.source_name}</span>
           <span>{SCRIPT_FORMAT_LABEL[v.format]}</span>
           <span className="tabular-nums">{new Date(v.created_at).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })}</span>
+          <ActorLabel actor={v.actor} before="导入：" />
           <span className="tabular-nums">
             {script.scenes.length} 场 · {liveShots.length} 镜
           </span>

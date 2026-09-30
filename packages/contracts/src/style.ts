@@ -47,6 +47,8 @@ export const StyleCard = z.object({
   unverified: z.boolean(),
   created_at: IsoTime.nullable(),
   updated_at: IsoTime.nullable(),
+  /** S4a: bumped by every change; updates may name the one they started from */
+  revision: z.number().int().nonnegative().optional(),
 });
 export type StyleCard = z.infer<typeof StyleCard>;
 
@@ -57,6 +59,8 @@ export const StyleCardInput = z.object({
   bias: StyleBias,
   gear: z.string().trim().max(STYLE_LIMITS.gear),
   low_budget: z.string().trim().max(STYLE_LIMITS.low_budget),
+  /** S4a (updates): the revision the edit started from; an older one is refused */
+  expected_revision: z.number().int().nonnegative().optional(),
 });
 export type StyleCardInput = z.infer<typeof StyleCardInput>;
 

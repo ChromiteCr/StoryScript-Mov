@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import type { Hono } from 'hono';
 import { Api, type HealthInfo, type SiteInfo } from '@storyscript/contracts';
+import { modelDir } from '../collab/models.ts';
 import { providerFlags } from '../config/providers.ts';
 import { sqliteVersion } from '../db/port.ts';
 import type { AppDeps } from '../deps.ts';
@@ -15,6 +16,8 @@ export function registerHealthRoutes(app: Hono, deps: AppDeps): void {
     // a hosted server never touches footage: no tool probing, no server paths
     const none = { path: null, version: null };
     const tools = deps.hosted ? { ffmpeg: none, ffprobe: none, h264_encoders: [] } : await deps.tools();
+    const text = modelDir(deps, 'text');
+    const image = modelDir(deps, 'image');
     const data: HealthInfo = {
       app_version: APP_VERSION,
       node: process.versions.node,
@@ -23,7 +26,11 @@ export function registerHealthRoutes(app: Hono, deps: AppDeps): void {
       ffprobe: tools.ffprobe,
       encoders: tools.h264_encoders,
       project_open: deps.projectSession.isOpen,
-      ...providerFlags(deps.stateDir, deps.env),
+      // S4: follow the member's choice (their own model, or the group's)
+      text_provider_configured: providerFlags(text.dir, text.env).text_provider_configured,
+      image_provider_configured: providerFlags(image.dir, image.env).image_provider_configured,
+      text_model_source: text.source,
+      image_model_source: image.source,
       demo: deps.demo,
       home_dir: deps.hosted ? '' : homedir(),
       hosted: deps.hosted !== null,

@@ -1,4 +1,5 @@
 import { CoverageDecision } from '@storyscript/contracts';
+import { actorId, actorResolver } from '../../collab/actor.ts';
 import type { DbPort } from '../port.ts';
 
 /** coverage_decision ↔ contracts CoverageDecision. Append-only (triggers refuse UPDATE/DELETE). */
@@ -11,16 +12,18 @@ interface DecisionRow {
   reason: string;
   basis_content_hash: string;
   at: string;
+  actor_id: string | null;
 }
 
-const COLS = 'id, shot_id, decision, selected_link_ids_json, reason, basis_content_hash, at';
+const COLS = 'id, shot_id, decision, selected_link_ids_json, reason, basis_content_hash, at, actor_id';
 
-function fromRow(r: DecisionRow): CoverageDecision {
-  return CoverageDecision.parse({ ...r, selected_link_ids: JSON.parse(r.selected_link_ids_json) });
+function fromRow(r: DecisionRow, who: ReturnType<typeof actorResolver>): CoverageDecision {
+  return CoverageDecision.parse({ ...r, selected_link_ids: JSON.parse(r.selected_link_ids_json), actor: who(r.actor_id) });
 }
 
 export function listDecisions(db: DbPort): CoverageDecision[] {
-  return db.all<DecisionRow>(`SELECT ${COLS} FROM coverage_decision ORDER BY at, id`).map(fromRow);
+  const who = actorResolver(db);
+  return db.all<DecisionRow>(`SELECT ${COLS} FROM coverage_decision ORDER BY at, id`).map((r) => fromRow(r, who));
 }
 
 export function lastDecisionAt(db: DbPort, shotId: string): string | null {
@@ -30,7 +33,7 @@ export function lastDecisionAt(db: DbPort, shotId: string): string | null {
 export function insertDecision(db: DbPort, d: CoverageDecision): void {
   const x = CoverageDecision.parse(d);
   db.run(
-    `INSERT INTO coverage_decision (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO coverage_decision (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.shot_id,
     x.decision,
@@ -38,5 +41,6 @@ export function insertDecision(db: DbPort, d: CoverageDecision): void {
     x.reason,
     x.basis_content_hash,
     x.at,
+    actorId(),
   );
 }

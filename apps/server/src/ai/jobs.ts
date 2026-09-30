@@ -115,6 +115,7 @@ export function startEntityExtraction(deps: AppDeps): Job {
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'extract_entities',
+    model_source: ai.source,
     idempotency_key: `extract_entities:${version.id}`,
     input_hash: contentHash({ prompt_version: ENTITIES_PROMPT_VERSION, messages }),
     remote: ai.remote,
@@ -219,6 +220,7 @@ export function startBreakdown(deps: AppDeps, sceneId: string, input: z.input<ty
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'breakdown_scene',
+    model_source: ai.source,
     idempotency_key: `breakdown:${scene.id}:${contentHash(request)}`,
     input_hash: contentHash({ prompt_version: promptVersion, messages }),
     remote: ai.remote,

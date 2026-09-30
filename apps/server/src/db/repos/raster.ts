@@ -1,5 +1,6 @@
 import { Board, BoardRaster, type RasterStatus } from '@storyscript/contracts';
 import type { z } from 'zod';
+import { actorId, actorResolver } from '../../collab/actor.ts';
 import type { DbPort } from '../port.ts';
 
 /**
@@ -28,23 +29,27 @@ interface RasterRow {
   ai_label_on: number;
   source_type: string;
   created_at: string;
+  actor_id: string | null;
 }
 
 const COLS =
-  'id, board_id, structure_hash, dialect, host, model, preset_id, size, quality, prompt_hash, control_sha256, file, sha256, status, outcome, usage_json, ai_label_on, source_type, created_at';
+  'id, board_id, structure_hash, dialect, host, model, preset_id, size, quality, prompt_hash, control_sha256, file, sha256, status, outcome, usage_json, ai_label_on, source_type, created_at, actor_id';
 
-function fromRow(r: RasterRow): BoardRaster {
+type Who = ReturnType<typeof actorResolver>;
+
+function fromRow(r: RasterRow, who: Who): BoardRaster {
   return BoardRaster.parse({
     ...r,
     usage: r.usage_json === null ? null : JSON.parse(r.usage_json),
     ai_label_on: r.ai_label_on === 1,
+    actor: who(r.actor_id),
   });
 }
 
 export function insertRaster(db: DbPort, raster: BoardRaster): void {
   const x = BoardRaster.parse(raster);
   db.run(
-    `INSERT INTO board_raster (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO board_raster (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.board_id,
     x.structure_hash,
@@ -64,17 +69,21 @@ export function insertRaster(db: DbPort, raster: BoardRaster): void {
     x.ai_label_on ? 1 : 0,
     x.source_type,
     x.created_at,
+    actorId(),
   );
 }
 
 export function getRaster(db: DbPort, id: string): BoardRaster | null {
   const r = db.get<RasterRow>(`SELECT ${COLS} FROM board_raster WHERE id = ?`, id);
-  return r ? fromRow(r) : null;
+  return r ? fromRow(r, actorResolver(db)) : null;
 }
 
 /** Newest first. */
 export function listBoardRasters(db: DbPort, boardId: string): BoardRaster[] {
-  return db.all<RasterRow>(`SELECT ${COLS} FROM board_raster WHERE board_id = ? ORDER BY created_at DESC, rowid DESC`, boardId).map(fromRow);
+  const who = actorResolver(db);
+  return db
+    .all<RasterRow>(`SELECT ${COLS} FROM board_raster WHERE board_id = ? ORDER BY created_at DESC, rowid DESC`, boardId)
+    .map((r) => fromRow(r, who));
 }
 
 export function countRasters(db: DbPort): number {
@@ -110,23 +119,25 @@ interface BoardRow {
   user_edited: number;
   revision: number;
   created_at: string;
+  actor_id: string | null;
 }
 
-const BOARD_COLS = 'id, shot_id, version, parent_board_id, spec_json, renderer_version, basis_content_hash, user_edited, revision, created_at';
+const BOARD_COLS =
+  'id, shot_id, version, parent_board_id, spec_json, renderer_version, basis_content_hash, user_edited, revision, created_at, actor_id';
 
-function boardFromRow(r: BoardRow): Board {
-  return Board.parse({ ...r, spec: JSON.parse(r.spec_json), user_edited: r.user_edited === 1 });
+function boardFromRow(r: BoardRow, who: Who): Board {
+  return Board.parse({ ...r, spec: JSON.parse(r.spec_json), user_edited: r.user_edited === 1, actor: who(r.actor_id) });
 }
 
 export function readBoard(db: DbPort, id: string): Board | null {
   const r = db.get<BoardRow>(`SELECT ${BOARD_COLS} FROM board WHERE id = ?`, id);
-  return r ? boardFromRow(r) : null;
+  return r ? boardFromRow(r, actorResolver(db)) : null;
 }
 
 /** The shot's current board: highest version. */
 export function readLatestShotBoard(db: DbPort, shotId: string): Board | null {
   const r = db.get<BoardRow>(`SELECT ${BOARD_COLS} FROM board WHERE shot_id = ? ORDER BY version DESC LIMIT 1`, shotId);
-  return r ? boardFromRow(r) : null;
+  return r ? boardFromRow(r, actorResolver(db)) : null;
 }
 
 // ---------------------------------------------------------------------------

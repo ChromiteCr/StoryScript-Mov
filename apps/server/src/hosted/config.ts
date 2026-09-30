@@ -50,6 +50,8 @@ export type HostedConfig = z.infer<typeof HostedConfig>;
 
 export const serverConfigPath = (dataDir: string) => join(dataDir, 'server.json');
 export const teamDir = (dataDir: string, slug: string) => join(dataDir, 'teams', slug);
+/** S4: an account's own settings (its own model); created 0700 on first save */
+export const accountDir = (dataDir: string, accountId: string) => join(dataDir, 'accounts', accountId);
 
 export function readHostedConfig(dataDir: string): HostedConfig | null {
   return readJsonFile(serverConfigPath(dataDir), HostedConfig);

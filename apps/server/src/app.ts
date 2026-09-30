@@ -13,6 +13,10 @@ import { registerStaticRoutes } from './routes/static.ts';
 import { publicOnlyFetch } from './security/egress.ts';
 import { authGuard, headersMiddleware, hostGuard, originGuard, type ServerMode } from './security/guards.ts';
 import { SessionStore } from './security/sessions.ts';
+import { hostedRequestOf, runWithRequest, syncMember } from './collab/actor.ts';
+import { CollabFeed } from './collab/feed.ts';
+import { collabMiddleware, registerCollabRoutes } from './routes/collab.ts';
+import { registerCommentRoutes } from './routes/comments.ts';
 import { registerDraftRoutes } from './routes/drafts.ts';
 import { registerStyleRoutes } from './routes/styles.ts';
 import { registerEntityRoutes } from './routes/entities.ts';
@@ -104,6 +108,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
     chooseFolder: opts.chooseFolder ?? (() => chooseFolder()),
     hosted: opts.hosted ?? null,
     fetch: opts.fetch ?? (opts.hosted ? publicOnlyFetch : globalThis.fetch),
+    collab: new CollabFeed(),
   };
 
   const app = new Hono();
@@ -114,6 +119,14 @@ export function createApp(opts: CreateAppOptions): AppHandle {
 
   app.use('*', headersMiddleware(opts.mode));
   if (opts.hosted) {
+    // S4: only the gateway reaches a group instance, and it says who is asking (in env, never a header)
+    app.use('*', async (c, next) => {
+      const req = hostedRequestOf(c.env);
+      if (!req) return c.json(errorBody('UNAUTHORIZED', '请先登录。'), 401);
+      const project = projectSession.get();
+      if (project) syncMember(project.db, req.actor);
+      return runWithRequest(req, () => next());
+    });
     registerHostedLimits(app);
   } else {
     app.use('*', hostGuard(opts.port));
@@ -121,8 +134,12 @@ export function createApp(opts: CreateAppOptions): AppHandle {
     app.use('*', authGuard(sessions));
   }
 
+  // S4a: successful writes and finished jobs move the change feed
+  app.use('/api/*', collabMiddleware(deps));
   registerSessionRoutes(app, deps);
   registerHealthRoutes(app, deps);
+  registerCollabRoutes(app, deps);
+  registerCommentRoutes(app, deps);
   registerProjectRoutes(app, deps);
   registerPlatformRoutes(app, deps);
   registerSettingsRoutes(app, deps);

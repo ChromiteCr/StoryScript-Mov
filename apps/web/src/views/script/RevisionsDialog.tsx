@@ -2,6 +2,7 @@ import type { Shot } from '@storyscript/contracts';
 import { ORIGIN_LABEL, shotSpecLine } from '../../lib/labels.ts';
 import { useShotRevisions } from '../../lib/queries.ts';
 import { changedFieldLabels, revisionLabel } from '../../lib/shots.ts';
+import { ActorLabel } from '../../components/ActorLabel.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Spinner, Tag } from '../../components/ui.tsx';
@@ -27,9 +28,12 @@ export function RevisionsDialog({ shot, onClose }: { shot: Shot; onClose: () => 
                 <span className="text-xs text-graphite-100 tabular-nums">{revisionLabel(r.revision)}</span>
                 <Tag>{ORIGIN_LABEL[r.origin]}</Tag>
                 {r.revision === shot.revision ? <Tag>当前</Tag> : null}
-                <time dateTime={r.at} className="ml-auto text-xs text-graphite-300 tabular-nums">
-                  {new Date(r.at).toLocaleString('zh-CN')}
-                </time>
+                <span className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-x-2 gap-y-0.5 text-xs text-graphite-300">
+                  <ActorLabel actor={r.actor} className="text-graphite-100" />
+                  <time dateTime={r.at} className="tabular-nums">
+                    {new Date(r.at).toLocaleString('zh-CN')}
+                  </time>
+                </span>
               </div>
               <p className="mt-1 text-sm text-graphite-100">{shotSpecLine(r.fields)}</p>
               {r.fields.action ? <p className="text-sm break-words text-graphite-300">{r.fields.action}</p> : null}

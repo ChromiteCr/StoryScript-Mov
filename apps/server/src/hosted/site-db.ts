@@ -1,7 +1,7 @@
 import { chmodSync, existsSync } from 'node:fs';
 import { createHash, randomBytes, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
-import type { GroupRole } from '@storyscript/contracts';
+import type { GroupRole, ModelSource } from '@storyscript/contracts';
 import { openDb, type DbPort } from '../db/port.ts';
 
 /**
@@ -13,7 +13,9 @@ import { openDb, type DbPort } from '../db/port.ts';
  *
  * Schema versions (PRAGMA user_version): 1 = one group per account (columns
  * on accounts, S2a); 2 = memberships table + sessions.current_team. The old
- * account columns stay, unused (SQLite cannot drop a foreign-key column).
+ * account columns stay, unused (SQLite cannot drop a foreign-key column);
+ * 3 = crew roles and each member's model choice on memberships (S4). An
+ * existing file is copied to site.db.v<N>.bak before it is migrated.
  */
 
 export const SESSION_TTL_MS = 30 * 24 * 3600 * 1000;
@@ -86,7 +88,15 @@ UPDATE sessions SET current_team =
   (SELECT m.team_slug FROM memberships m WHERE m.account_id = sessions.account_id ORDER BY m.joined_seq LIMIT 1);
 PRAGMA user_version = 2;
 `;
-export const SITE_SCHEMA_VERSION = 2;
+
+/** v2 → v3 (S4): crew roles, and whose model each member uses in each group */
+const MIGRATE_3 = `
+ALTER TABLE memberships ADD COLUMN crew_roles_json TEXT NOT NULL DEFAULT '[]';
+ALTER TABLE memberships ADD COLUMN text_source TEXT NOT NULL DEFAULT 'group' CHECK (text_source IN ('group', 'own'));
+ALTER TABLE memberships ADD COLUMN image_source TEXT NOT NULL DEFAULT 'group' CHECK (image_source IN ('group', 'own'));
+PRAGMA user_version = 3;
+`;
+export const SITE_SCHEMA_VERSION = 3;
 
 export interface Account {
   id: string;
@@ -102,12 +112,26 @@ export interface Membership {
   role: GroupRole;
   joined_at: string;
   joined_seq: number;
+  crew_roles_json: string;
+  text_source: ModelSource;
+  image_source: ModelSource;
 }
 
-/** A group member: the account plus its role there. */
+/** A group member: the account plus its role and crew roles there. */
 export interface Member extends Account {
   role: GroupRole;
   joined_at: string;
+  crew_roles_json: string;
+}
+
+/** crew_roles_json → string[] (never throws on a bad row) */
+export function crewRolesOf(json: string): string[] {
+  try {
+    const v: unknown = JSON.parse(json);
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  } catch {
+    return [];
+  }
 }
 
 /** A signed-in browser: its account and the group it is working in (may be stale; the gateway checks). */
@@ -138,17 +162,27 @@ export class SiteDb {
   constructor(
     readonly db: DbPort,
     private readonly now: () => number = Date.now,
+    /** the file, when there is one: an existing site.db is copied aside before it is migrated */
+    file?: string,
   ) {
     const version = db.get<{ user_version: number }>('PRAGMA user_version')?.user_version ?? 0;
     if (version > SITE_SCHEMA_VERSION) throw new Error(`site.db 的版本 ${version} 比这个程序新，请升级 storyscript-mov`);
+    if (file && version > 0 && version < SITE_SCHEMA_VERSION) {
+      const bak = `${file}.v${version}.bak`;
+      if (!existsSync(bak)) {
+        db.exec(`VACUUM INTO '${bak.replace(/'/g, "''")}'`);
+        chmodSync(bak, 0o600);
+      }
+    }
     db.exec(BASE_SCHEMA);
     if (version < 2) db.tx(() => db.exec(MIGRATE_2));
+    if (version < 3) db.tx(() => db.exec(MIGRATE_3));
   }
 
   static open(dataDir: string, now?: () => number): SiteDb {
     const path = siteDbPath(dataDir);
     const fresh = !existsSync(path);
-    const site = new SiteDb(openDb(path), now);
+    const site = new SiteDb(openDb(path), now, path);
     if (fresh) chmodSync(path, 0o600);
     return site;
   }
@@ -226,6 +260,15 @@ export class SiteDb {
     this.db.run('UPDATE memberships SET role = ? WHERE account_id = ? AND team_slug = ?', role, accountId, slug);
   }
 
+  setCrewRoles(accountId: string, slug: string, roles: readonly string[]): void {
+    this.db.run('UPDATE memberships SET crew_roles_json = ? WHERE account_id = ? AND team_slug = ?', JSON.stringify(roles), accountId, slug);
+  }
+
+  setModelChoice(accountId: string, slug: string, choice: { text?: ModelSource; image?: ModelSource }): void {
+    if (choice.text) this.db.run('UPDATE memberships SET text_source = ? WHERE account_id = ? AND team_slug = ?', choice.text, accountId, slug);
+    if (choice.image) this.db.run('UPDATE memberships SET image_source = ? WHERE account_id = ? AND team_slug = ?', choice.image, accountId, slug);
+  }
+
   // ---- groups ----
 
   createTeam(t: { slug: string; name: string; join_code: string }): Team {
@@ -262,7 +305,7 @@ export class SiteDb {
   /** Earliest joined first (that order also decides who leads next). */
   members(slug: string): Member[] {
     return this.db.all<Member>(
-      `SELECT ${ACCOUNT_COLS_A}, m.role, m.joined_at FROM memberships m JOIN accounts a ON a.id = m.account_id
+      `SELECT ${ACCOUNT_COLS_A}, m.role, m.joined_at, m.crew_roles_json FROM memberships m JOIN accounts a ON a.id = m.account_id
        WHERE m.team_slug = ? ORDER BY m.joined_seq`,
       slug,
     );

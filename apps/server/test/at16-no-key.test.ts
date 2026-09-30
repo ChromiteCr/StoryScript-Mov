@@ -26,7 +26,7 @@ describe('AT-16 without any key', () => {
     const health = await app.get<HealthInfo>('/api/v1/health');
     expect(health.data.text_provider_configured).toBe(false);
     const providers = await app.get<ProvidersView>('/api/v1/settings/providers');
-    expect(providers.data).toEqual({ text: null, image: null });
+    expect(providers.data).toEqual({ text: null, image: null, editable: true });
 
     const imported = await importFixture(app, '02-last-train.fountain', 'fountain');
     expect(imported.scenes).toHaveLength(3);

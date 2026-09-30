@@ -4,7 +4,7 @@ import type { AdoptSuggestionInput, CreatePlanInput, Plan, PlanDetail, PlanRevis
 import { canApprovePlan, localWindowToUtc, planInputHash, reorderSchedule, schedule, type ScheduleInput } from '@storyscript/core';
 import type { DbPort } from '../../db/port.ts';
 import { getDraft, setDraftStatus } from '../../db/repos/draft.ts';
-import { getPlan, insertPlan, readPlanMeta, updatePlanRow, writePlanMeta, type PlanMeta } from '../../db/repos/plan.ts';
+import { getPlan, insertPlan, readPlanMeta, setPlanApproval, updatePlanRow, writePlanMeta, type PlanMeta } from '../../db/repos/plan.ts';
 import { getProject } from '../../db/repos/project.ts';
 import { AppError } from '../../http/errors.ts';
 import { buildScheduleInput } from './input.ts';
@@ -98,14 +98,24 @@ export function createPlan(db: DbPort, input: Input<typeof CreatePlanInput>, now
     };
     insertPlan(db, plan);
     writePlanMeta(db, plan.id, { crew_call: input.crew_call, crew_wrap: input.crew_wrap, crew_window: crew, order_manual: false }, now);
-    return planDetail(db, plan);
+    return planDetail(db, requirePlan(db, plan.id));
   });
 }
 
 /** Store a new result computed from the current input (revision + 1, back to draft). */
 function storeResult(db: DbPort, plan: Plan, input: ScheduleInput, order: readonly Uuid[] | null, now: string): PlanDetail {
   const result = order ? reorderSchedule(input, order) : schedule(input);
-  const next: Plan = { ...plan, result, input_hash: planInputHash(input), status: 'draft', revision: plan.revision + 1, updated_at: now };
+  // back to draft: whoever approved the previous result no longer stands behind this one
+  const next: Plan = {
+    ...plan,
+    result,
+    input_hash: planInputHash(input),
+    status: 'draft',
+    revision: plan.revision + 1,
+    updated_at: now,
+    approved_by: null,
+    approved_at: null,
+  };
   updatePlanRow(db, next);
   const meta = planMeta(db, plan);
   const manual = order !== null;
@@ -149,7 +159,8 @@ export function approvePlan(db: DbPort, id: string, input: Input<typeof PlanRevi
     }
     const next: Plan = { ...plan, status: 'approved', revision: plan.revision + 1, updated_at: now };
     updatePlanRow(db, next);
-    return planDetail(db, next);
+    setPlanApproval(db, next.id, now);
+    return planDetail(db, requirePlan(db, next.id));
   });
 }
 

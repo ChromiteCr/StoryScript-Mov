@@ -6,6 +6,8 @@ export * from './board.ts';
 export * from './preset.ts';
 export * from './style.ts';
 export * from './cast.ts';
+export * from './collab.ts';
+export * from './comments.ts';
 export * from './plan.ts';
 export * from './take.ts';
 export * from './media.ts';

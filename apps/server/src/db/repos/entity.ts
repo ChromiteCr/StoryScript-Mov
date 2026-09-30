@@ -12,9 +12,10 @@ interface EntityRow {
   origin: string;
   confirmed: number;
   actor_name: string | null;
+  revision: number;
 }
 
-const COLS = 'id, type, alias, name, aliases_json, origin, confirmed, actor_name';
+const COLS = 'id, type, alias, name, aliases_json, origin, confirmed, actor_name, revision';
 export const ALIAS_PREFIX: Record<EntityType, string> = { character: 'c', location: 'l', prop: 'o' };
 
 function fromRow(r: EntityRow): Entity {
@@ -60,7 +61,7 @@ export function nextAlias(db: DbPort, type: EntityType): string {
 export function insertEntity(db: DbPort, e: Entity): void {
   const x = Entity.parse(e);
   db.run(
-    `INSERT INTO entity (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO entity (id, type, alias, name, aliases_json, origin, confirmed, actor_name) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.type,
     x.alias,
@@ -75,7 +76,7 @@ export function insertEntity(db: DbPort, e: Entity): void {
 export function updateEntityRow(db: DbPort, e: Entity): void {
   const x = Entity.parse(e);
   db.run(
-    'UPDATE entity SET name = ?, aliases_json = ?, confirmed = ?, actor_name = ? WHERE id = ?',
+    'UPDATE entity SET name = ?, aliases_json = ?, confirmed = ?, actor_name = ?, revision = revision + 1 WHERE id = ?',
     x.name,
     JSON.stringify(x.aliases),
     x.confirmed ? 1 : 0,

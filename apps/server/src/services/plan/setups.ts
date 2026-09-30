@@ -17,6 +17,7 @@ import {
 } from '../../db/repos/setup.ts';
 import { getShot, listActiveShots } from '../../db/repos/shot.ts';
 import { AppError } from '../../http/errors.ts';
+import { assertExpectedRevision } from '../revision.ts';
 
 /**
  * Setups (FR-06). Manual CRUD plus `derive`, which groups every active
@@ -92,6 +93,7 @@ export function createSetup(db: DbPort, input: Input<typeof CreateSetupInput>): 
 export function updateSetup(db: DbPort, id: string, input: Input<typeof UpdateSetupInput>): Setup {
   return db.tx(() => {
     const cur = requireSetup(db, id);
+    assertExpectedRevision(`「${cur.label}」`, cur.revision, input.expected_revision);
     const location = input.location_resource_id !== undefined ? input.location_resource_id : cur.location_resource_id;
     checkLocation(db, location);
     const next: Setup = {

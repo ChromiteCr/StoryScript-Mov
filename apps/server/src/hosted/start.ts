@@ -95,7 +95,7 @@ export async function startHostedServer(opts: {
   const running: HostedConfig = { ...config, port };
   const accounts = new Accounts({ site, mailer, config: running, now: opts.now });
   const groups = new Groups({ site, runtime, config: running, now: opts.now });
-  const gateway = createGateway({ config: running, site, accounts, groups, runtime, webDir });
+  const gateway = createGateway({ config: running, dataDir: opts.dataDir, site, accounts, groups, runtime, webDir });
   handler = getRequestListener(gateway.fetch);
   writeFileSync(pidPath(opts.dataDir), `${process.pid}\n`);
 

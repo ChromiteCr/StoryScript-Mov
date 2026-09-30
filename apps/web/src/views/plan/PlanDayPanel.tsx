@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CalendarPlus, Check, Download, RefreshCw, Sparkles } from 'lucide-react';
 import type { HealthInfo, PlanDetail } from '@storyscript/contracts';
+import { ActorLabel } from '../../components/ActorLabel.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, Notice, Spinner } from '../../components/ui.tsx';
 import { EmptyState, PaperCanvas, Panel } from '../../components/workspace.tsx';
@@ -173,6 +174,7 @@ function DayBody({
               <span className="text-xs text-graphite-300 tabular-nums">
                 开工 {crew} · 修订 r{plan.revision}
               </span>
+              {plan.status === 'approved' ? <ActorLabel actor={plan.approved_by} before="由 " after=" 批准" className="text-xs text-graphite-300" /> : null}
               {plan.status === 'approved' && !stale ? null : (
                 <Button
                   variant="primary"

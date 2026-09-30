@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoTime, Uuid } from './common.ts';
+import { ActorRef, IsoTime, Uuid } from './common.ts';
 import { EnvKind, FrameFormat, Movement, Pose, PropKind } from './shot.ts';
 
 // ---------------------------------------------------------------------------
@@ -155,6 +155,8 @@ export const Board = z.object({
   user_edited: z.boolean(),
   revision: z.number().int().nonnegative(),
   created_at: IsoTime,
+  /** S4: whose change made this version (an automatic layout records whoever caused it; null locally) */
+  actor: ActorRef.nullable().optional(),
 });
 export type Board = z.infer<typeof Board>;
 
@@ -181,5 +183,7 @@ export const BoardRaster = z.object({
   ai_label_on: z.boolean(),
   source_type: z.literal('model_generated'),
   created_at: IsoTime,
+  /** S4: who asked for the redraw */
+  actor: ActorRef.nullable().optional(),
 });
 export type BoardRaster = z.infer<typeof BoardRaster>;

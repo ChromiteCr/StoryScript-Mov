@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoTime, Origin, Uuid } from './common.ts';
+import { ActorRef, IsoTime, Origin, Uuid } from './common.ts';
 import { ParagraphId } from './script.ts';
 
 // ---------------------------------------------------------------------------
@@ -186,6 +186,8 @@ export const ShotRevision = z.object({
   origin: Origin,
   reason: z.string().nullable(),
   at: IsoTime,
+  /** S4: who made this revision (hosted server) */
+  actor: ActorRef.nullable().optional(),
 });
 export type ShotRevision = z.infer<typeof ShotRevision>;
 
@@ -219,5 +221,7 @@ export const ShotDraft = z.object({
   usage: z.record(z.string(), z.number()).nullable(),
   status: DraftStatus,
   created_at: IsoTime,
+  /** S4: who asked the model */
+  actor: ActorRef.nullable().optional(),
 });
 export type ShotDraft = z.infer<typeof ShotDraft>;

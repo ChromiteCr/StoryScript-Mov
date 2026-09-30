@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
-import type { Job, JobKind, JobStatus } from '@storyscript/contracts';
+import type { Job, JobKind, JobStatus, ModelSource } from '@storyscript/contracts';
 import { redactSecrets } from '../adapters/llm/redact.ts';
 import type { DbPort } from '../db/port.ts';
+import { actorId, currentRequest, runWithRequest, type HostedRequest } from '../collab/actor.ts';
 import { getJob, getJobByKey, insertJob, isTerminal, listJobsByStatus, updateJobRow } from '../db/repos/job.ts';
 import { AppError } from '../http/errors.ts';
 
@@ -64,6 +65,8 @@ export interface JobSpec {
   input_hash: string;
   remote: boolean;
   lane?: JobLane;
+  /** S4: whose model the job calls (recorded on the row) */
+  model_source?: ModelSource | null;
   run: (ctx: JobRunContext) => Promise<JobRunResult>;
 }
 
@@ -111,6 +114,8 @@ export interface JobQueueOptions {
 interface Entry {
   id: string;
   spec: JobSpec;
+  /** S4: who queued it; run and commit happen in their name */
+  req: HostedRequest | null;
   lane: JobLane;
   controller: AbortController;
   started: boolean;
@@ -127,6 +132,16 @@ export const RERUN_QUEUED_MESSAGE = '服务重启时该任务被中断，已按�
 export const RERUN_UNAVAILABLE_MESSAGE = '服务重启时该任务被中断，无法自动重跑';
 
 const LIMITS: Record<JobLane, number> = { llm: 1, image: 1, local: 2 };
+
+/** S4a: who wants to hear that a job of this project finished (the change feed). */
+const settledListeners = new WeakMap<DbPort, Set<(job: Job) => void>>();
+
+export function onJobSettled(db: DbPort, fn: (job: Job) => void): () => void {
+  let set = settledListeners.get(db);
+  if (!set) settledListeners.set(db, (set = new Set()));
+  set.add(fn);
+  return () => set.delete(fn);
+}
 const LANES = Object.keys(LIMITS) as JobLane[];
 
 export class JobQueue {
@@ -247,22 +262,23 @@ export class JobQueue {
         created_at: now,
         updated_at: now,
       };
-      insertJob(this.db, fresh);
+      insertJob(this.db, fresh, { actor_id: actorId(), model_source: spec.model_source ?? null });
       return { job: fresh, fresh: true };
     });
     if (!job.fresh) return job.job;
-    this.admit(job.job.id, spec);
-    return job.job;
+    this.admit(job.job.id, spec, currentRequest());
+    return getJob(this.db, job.job.id) ?? job.job;
   }
 
   /** Track a queued row in memory and schedule it on its lane. */
-  private admit(id: string, spec: JobSpec): void {
+  private admit(id: string, spec: JobSpec, req: HostedRequest | null = null): void {
     const lane = spec.lane ?? 'llm';
     let resolveDone!: () => void;
     const done = new Promise<void>((r) => (resolveDone = r));
     this.entries.set(id, {
       id,
       spec,
+      req,
       lane,
       controller: new AbortController(),
       started: false,
@@ -329,7 +345,7 @@ export class JobQueue {
     let result: JobRunResult;
     try {
       updateJobRow(this.db, entry.id, { status: 'running' as JobStatus }, this.now());
-      result = await entry.spec.run({
+      result = await runWithRequest(entry.req, () => entry.spec.run({
         job_id: entry.id,
         signal: entry.controller.signal,
         markSent: (attempt) => {
@@ -342,7 +358,7 @@ export class JobQueue {
             }
           }
         },
-      });
+      }));
     } catch (err) {
       result = {
         status: 'failed',
@@ -357,7 +373,8 @@ export class JobQueue {
     try {
       if (!entry.cancelled) {
         this.db.tx(() => {
-          const ref = result.commit ? result.commit() : null;
+          const commit = result.commit;
+          const ref = commit ? runWithRequest(entry.req, () => commit()) : null;
           updateJobRow(
             this.db,
             entry.id,
@@ -397,6 +414,15 @@ export class JobQueue {
     } finally {
       this.finish(entry);
       this.pump(entry.lane);
+      const listeners = settledListeners.get(this.db);
+      if (listeners?.size) {
+        try {
+          const job = getJob(this.db, entry.id);
+          if (job) for (const fn of listeners) fn(job);
+        } catch {
+          // the project was closed underneath; nobody is listening any more
+        }
+      }
     }
   }
 }

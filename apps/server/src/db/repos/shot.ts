@@ -1,4 +1,5 @@
 import { Shot, ShotRevision, SourceAnchor } from '@storyscript/contracts';
+import { actorId, actorResolver } from '../../collab/actor.ts';
 import type { DbPort } from '../port.ts';
 
 /** shot / shot_revision ↔ contracts. Every revision bump writes one shot_revision row. */
@@ -32,6 +33,7 @@ interface RevisionRow {
   origin: string;
   reason: string | null;
   at: string;
+  actor_id: string | null;
 }
 
 const COLS =
@@ -120,7 +122,7 @@ export function updateShotRow(db: DbPort, s: Shot): void {
 export function insertShotRevision(db: DbPort, r: ShotRevision): void {
   const x = ShotRevision.parse(r);
   db.run(
-    'INSERT INTO shot_revision (id, shot_id, revision, fields_json, origin, reason, at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO shot_revision (id, shot_id, revision, fields_json, origin, reason, at, actor_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
     x.id,
     x.shot_id,
     x.revision,
@@ -128,13 +130,18 @@ export function insertShotRevision(db: DbPort, r: ShotRevision): void {
     x.origin,
     x.reason,
     x.at,
+    actorId(),
   );
 }
 
 export function listShotRevisions(db: DbPort, shotId: string): ShotRevision[] {
+  const who = actorResolver(db);
   return db
-    .all<RevisionRow>('SELECT id, shot_id, revision, fields_json, origin, reason, at FROM shot_revision WHERE shot_id = ? ORDER BY revision', shotId)
-    .map((r) => ShotRevision.parse({ ...r, fields: JSON.parse(r.fields_json) }));
+    .all<RevisionRow>(
+      'SELECT id, shot_id, revision, fields_json, origin, reason, at, actor_id FROM shot_revision WHERE shot_id = ? ORDER BY revision',
+      shotId,
+    )
+    .map((r) => ShotRevision.parse({ ...r, fields: JSON.parse(r.fields_json), actor: who(r.actor_id) }));
 }
 
 /** Highest trailing number among the scene's non-archived shot codes. */

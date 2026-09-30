@@ -445,7 +445,7 @@ describe('hosted server: groups', () => {
       expect(site.memberships('acc-1')).toMatchObject([{ team_slug: 'goldgrp1', role: 'leader' }]);
       expect(site.memberships('acc-2')).toEqual([]);
       expect(site.members('goldgrp1').map((m) => [m.name, m.role])).toEqual([['老张', 'leader']]);
-      expect(site.db.get<{ user_version: number }>('PRAGMA user_version')?.user_version).toBe(2);
+      expect(site.db.get<{ user_version: number }>('PRAGMA user_version')?.user_version).toBe(3);
       const cookie = site.createSession('acc-1', 'goldgrp1');
       expect(site.session(cookie)).toMatchObject({ current_team: 'goldgrp1', account: { email: 'old@school.test' } });
     } finally {

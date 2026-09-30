@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import type { GroupView } from '@storyscript/contracts';
 import { FolderKanban, Settings2 } from 'lucide-react';
 import { api } from '../lib/api.ts';
+import { rosterText } from '../lib/crew.ts';
 import { navigate } from '../lib/route.ts';
 import { GroupDialog, meKey, useMe } from '../components/AccountMenu.tsx';
 import { GroupForms } from '../components/AccountScreens.tsx';
@@ -96,10 +97,17 @@ export function HostedProjectsView({ onGroupChanged }: { onGroupChanged: () => v
                           {opening === g.slug ? <Spinner label="正在切换" /> : null}
                         </span>
                       </button>
-                      <div className="flex items-center gap-2 px-0.5">
-                        <span className="min-w-0 flex-1 truncate text-xs text-graphite-300">
-                          {g.role === 'leader' ? '组长' : '组员'}，{g.members.length}/{g.max_members} 人
-                        </span>
+                      <div className="flex items-start gap-2 px-0.5">
+                        <div className="flex min-w-0 flex-1 flex-col gap-0.5 text-xs text-graphite-300">
+                          <span className="truncate">
+                            {g.role === 'leader' ? '组长' : '组员'}，{g.members.length}/{g.max_members} 人
+                          </span>
+                          {g.members.some((m) => m.crew_roles.length > 0) ? (
+                            <span className="line-clamp-2 break-words" title={rosterText(g.members)}>
+                              {rosterText(g.members)}
+                            </span>
+                          ) : null}
+                        </div>
                         <IconButton icon={Settings2} label={`「${g.name}」的小组设置`} onClick={() => setSettingsFor(g.slug)} />
                       </div>
                     </li>

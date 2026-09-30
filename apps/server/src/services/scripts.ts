@@ -4,7 +4,7 @@ import type { Scene, ScriptImportResult, ScriptInput, ScriptVersion } from '@sto
 import { contentHash, normalizeForMatch, parseScript, relinkShots, shotFieldsFromLine } from '@storyscript/core';
 import type { DbPort } from '../db/port.ts';
 import { listEntities } from '../db/repos/entity.ts';
-import { insertScene, insertScriptVersion, latestScriptVersion, listScenes, getScene, stripSort, type SceneRecord } from '../db/repos/script.ts';
+import { getScriptVersion, insertScene, insertScriptVersion, latestScriptVersion, listScenes, getScene, stripSort, type SceneRecord } from '../db/repos/script.ts';
 import { listActiveShots, updateShotRow } from '../db/repos/shot.ts';
 import { createShot } from './shots.ts';
 
@@ -154,7 +154,7 @@ export function importScript(db: DbPort, input: z.input<typeof ScriptInput>, now
     }
 
     return {
-      version,
+      version: getScriptVersion(db, version.id) ?? version,
       scenes: listScenes(db, version.id).map(stripSort),
       needs_relink_shot_ids: relink.needs_relink,
       created_shot_ids: created,

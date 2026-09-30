@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react';
 import { useMutation, useQueries, useQueryClient, type QueryClient, type UseQueryResult } from '@tanstack/react-query';
 import type { Board, BoardView, RasterView } from '@storyscript/contracts';
 import { api, type InputOf } from './api.ts';
+import type { ModelScope } from './models.ts';
 import { mergeShotRasters, type RedrawQuality, type ShotRaster } from './labels-raster.ts';
 import { boardKeys } from './queries-boards.ts';
 import { keys } from './queries.ts';
@@ -28,20 +29,23 @@ const live = { staleTime: 0, gcTime: 60_000 } as const;
 
 // ------------------------------------------------------------- settings ---
 
-export function useSaveImageProvider() {
+/** scope me: the signed-in member's own image model (hosted server only) */
+export function useSaveImageProvider(scope: ModelScope = 'group') {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: InputOf<'saveImageProvider'>) => api.call('saveImageProvider', input),
+    mutationFn: (input: InputOf<'saveImageProvider'>) => (scope === 'me' ? api.call('saveMyImageProvider', input) : api.call('saveImageProvider', input)),
     onSuccess: (view) => {
-      qc.setQueryData(keys.providers, view);
+      qc.setQueryData(scope === 'me' ? keys.myProviders : keys.providers, view);
       void qc.invalidateQueries({ queryKey: keys.health });
     },
   });
 }
 
 /** paid=false: GET /models only; paid=true: one smallest image (the caller confirmed the cost). */
-export function useTestImageProvider() {
-  return useMutation({ mutationFn: (paid: boolean) => api.call('testImageProvider', { paid }) });
+export function useTestImageProvider(scope: ModelScope = 'group') {
+  return useMutation({
+    mutationFn: (paid: boolean) => (scope === 'me' ? api.call('testMyImageProvider', { paid }) : api.call('testImageProvider', { paid })),
+  });
 }
 
 // -------------------------------------------------------------- rasters ---

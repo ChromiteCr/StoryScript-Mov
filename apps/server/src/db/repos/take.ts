@@ -1,4 +1,5 @@
 import { Take } from '@storyscript/contracts';
+import { actorId, actorResolver } from '../../collab/actor.ts';
 import type { DbPort } from '../port.ts';
 
 /**
@@ -17,9 +18,10 @@ interface TakeRow {
   unresolved_labels_json: string;
   logged_at: string;
   revision: number;
+  logged_by: string | null;
 }
 
-const COLS = 'id, setup_id, take_no, camera_label, rating, clip_hint, notes, unresolved_labels_json, logged_at, revision';
+const COLS = 'id, setup_id, take_no, camera_label, rating, clip_hint, notes, unresolved_labels_json, logged_at, revision, logged_by';
 
 function shotIdsByTake(db: DbPort, takeIds?: readonly string[]): Map<string, string[]> {
   const rows =
@@ -40,9 +42,10 @@ function shotIdsByTake(db: DbPort, takeIds?: readonly string[]): Map<string, str
   return map;
 }
 
-function fromRow(r: TakeRow, shotIds: string[]): Take {
+function fromRow(r: TakeRow, shotIds: string[], who: ReturnType<typeof actorResolver>): Take {
   return Take.parse({
     ...r,
+    logged_by: who(r.logged_by),
     unresolved_labels: JSON.parse(r.unresolved_labels_json),
     shot_ids: shotIds,
   });
@@ -52,13 +55,14 @@ function fromRow(r: TakeRow, shotIds: string[]): Take {
 export function listTakes(db: DbPort): Take[] {
   const rows = db.all<TakeRow>(`SELECT ${COLS} FROM take ORDER BY logged_at, rowid`);
   const shots = shotIdsByTake(db);
-  return rows.map((r) => fromRow(r, shots.get(r.id) ?? []));
+  const who = actorResolver(db);
+  return rows.map((r) => fromRow(r, shots.get(r.id) ?? [], who));
 }
 
 export function getTake(db: DbPort, id: string): Take | null {
   const r = db.get<TakeRow>(`SELECT ${COLS} FROM take WHERE id = ?`, id);
   if (!r) return null;
-  return fromRow(r, shotIdsByTake(db, [id]).get(id) ?? []);
+  return fromRow(r, shotIdsByTake(db, [id]).get(id) ?? [], actorResolver(db));
 }
 
 function writeShots(db: DbPort, takeId: string, shotIds: readonly string[]): void {
@@ -69,7 +73,7 @@ function writeShots(db: DbPort, takeId: string, shotIds: readonly string[]): voi
 export function insertTake(db: DbPort, t: Take): void {
   const x = Take.parse(t);
   db.run(
-    `INSERT INTO take (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO take (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.setup_id,
     x.take_no,
@@ -80,6 +84,7 @@ export function insertTake(db: DbPort, t: Take): void {
     JSON.stringify(x.unresolved_labels),
     x.logged_at,
     x.revision,
+    actorId(),
   );
   writeShots(db, x.id, x.shot_ids);
 }

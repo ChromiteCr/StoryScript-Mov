@@ -16,9 +16,10 @@ interface StyleRow {
   unverified: number;
   created_at: string;
   updated_at: string;
+  revision: number;
 }
 
-const COLS = 'id, name, summary, grammar, bias_json, gear, low_budget, origin, reference, unverified, created_at, updated_at';
+const COLS = 'id, name, summary, grammar, bias_json, gear, low_budget, origin, reference, unverified, created_at, updated_at, revision';
 const DEFAULTS_KEY = 'style_defaults';
 
 function fromRow(r: StyleRow): StyleCard {
@@ -37,7 +38,7 @@ export function getStyle(db: DbPort, id: string): StyleCard | null {
 export function insertStyle(db: DbPort, card: StyleCard): void {
   const x = StyleCard.parse(card);
   db.run(
-    `INSERT INTO style (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    'INSERT INTO style (id, name, summary, grammar, bias_json, gear, low_budget, origin, reference, unverified, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     x.id,
     x.name,
     x.summary,
@@ -56,7 +57,7 @@ export function insertStyle(db: DbPort, card: StyleCard): void {
 export function updateStyleRow(db: DbPort, card: StyleCard): void {
   const x = StyleCard.parse(card);
   db.run(
-    'UPDATE style SET name = ?, summary = ?, grammar = ?, bias_json = ?, gear = ?, low_budget = ?, updated_at = ? WHERE id = ?',
+    'UPDATE style SET name = ?, summary = ?, grammar = ?, bias_json = ?, gear = ?, low_budget = ?, updated_at = ?, revision = revision + 1 WHERE id = ?',
     x.name,
     x.summary,
     x.grammar,

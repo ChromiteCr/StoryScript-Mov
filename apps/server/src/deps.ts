@@ -1,3 +1,4 @@
+import type { CollabFeed } from './collab/feed.ts';
 import type { ToolsInfo } from './diagnostics.ts';
 import type { ProjectSession } from './project/session.ts';
 import type { ServerMode } from './security/guards.ts';
@@ -31,4 +32,6 @@ export interface AppDeps {
   hosted: HostedTeam | null;
   /** how model services are reached: global fetch locally, public https only on a hosted server (security/egress.ts) */
   fetch: typeof fetch;
+  /** S4a: what changed lately and who is online (in memory) */
+  collab: CollabFeed;
 }

@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
 import type { Job, PlanDetail } from '@storyscript/contracts';
 import { api, isApiClientError, type InputOf } from './api.ts';
+import { useProviders as useEffectiveProviders } from './queries.ts';
 import { markSaveFailed, markSaved, markSaving } from './saveStatus.ts';
 
 /**
@@ -20,7 +21,6 @@ export const planKeys = {
   entities: ['plan', 'entities'] as const,
   shots: ['plan', 'shots'] as const,
   script: ['plan', 'script'] as const,
-  providers: ['plan', 'providers'] as const,
   job: (id: string) => ['plan', 'job', id] as const,
   draft: (id: string) => ['plan', 'draft', id] as const,
 };
@@ -64,9 +64,13 @@ export function useCurrentScript() {
   return useQuery({ queryKey: planKeys.script, queryFn: ({ signal }) => api.call('currentScript', undefined, { signal }), ...live });
 }
 
-/** Provider view (host only, never the key) for the "what will be sent" confirmation. */
+/**
+ * Provider view (host only, never the key) for the "what will be sent"
+ * confirmation: the model this member's requests actually use (hosted: the
+ * group's, or their own when they chose it).
+ */
 export function useProviders(enabled: boolean) {
-  return useQuery({ queryKey: planKeys.providers, queryFn: ({ signal }) => api.call('getProviders', undefined, { signal }), enabled });
+  return useEffectiveProviders(enabled);
 }
 
 // ---------------------------------------------------------------- writes ---

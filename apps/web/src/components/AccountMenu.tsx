@@ -1,11 +1,13 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AccountMe, GroupPreview, GroupView } from '@storyscript/contracts';
 import { ArrowLeftRight, Check, Copy, KeyRound, LogOut, Trash2, Users } from 'lucide-react';
-import { api } from '../lib/api.ts';
+import { api, type InputOf } from '../lib/api.ts';
 import { pendingJoin, setPendingJoin } from '../lib/join.ts';
+import { refreshModels, useHealth } from '../lib/queries.ts';
 import { navigate } from '../lib/route.ts';
 import { markSessionExpired } from '../lib/session.ts';
+import { CrewRolesEditor } from './CrewRolesEditor.tsx';
 import { Dialog } from './Dialog.tsx';
 import { ErrorNotice } from './ErrorNotice.tsx';
 import { Menu } from './Menu.tsx';
@@ -22,8 +24,32 @@ import { Button, Field, Tag, TextInput } from './ui.tsx';
 
 export const meKey = ['me'] as const;
 
-export function useMe() {
-  return useQuery({ queryKey: meKey, queryFn: ({ signal }) => api.call('me', undefined, { signal }) });
+/** `enabled` false where there are no accounts (the local app). */
+export function useMe(enabled = true) {
+  return useQuery({ queryKey: meKey, queryFn: ({ signal }) => api.call('me', undefined, { signal }), enabled });
+}
+
+/** The signed-in member's id in the current group (hosted only, else null): who counts as "someone else" on a history row. */
+export function useMyActorId(): string | null {
+  const hosted = useHealth().data?.hosted ?? false;
+  const me = useMe(hosted);
+  return me.data?.group?.members.find((m) => m.you)?.id ?? null;
+}
+
+/**
+ * S4: which model this member uses in the group, for text and for image
+ * separately (the group's, or their own). The effective model changes with
+ * it, so health and every provider view refresh.
+ */
+export function useSetModelChoice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ slug, choice }: { slug: string; choice: InputOf<'setModelChoice'> }) => api.call('setModelChoice', choice, { params: { slug } }),
+    onSuccess: async () => {
+      await qc.invalidateQueries({ queryKey: meKey });
+      refreshModels(qc);
+    },
+  });
 }
 
 function signOut() {
@@ -125,6 +151,9 @@ export function GroupDialog({
   const [confirm, setConfirm] = useState<'code' | 'leave' | 'disband' | { remove: string; name: string } | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<unknown>(null);
+  /** member id whose crew roles are open for editing */
+  const [editing, setEditing] = useState<string | null>(null);
+  const [rolesError, setRolesError] = useState<unknown>(null);
   const leader = group.role === 'leader';
   const alone = group.members.length === 1;
   const link = `${window.location.origin}/#join=${group.join_code}`;
@@ -142,6 +171,20 @@ export function GroupDialog({
       }
     } catch (e) {
       setError(e);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveRoles = async (id: string, roles: string[]) => {
+    setBusy(true);
+    setRolesError(null);
+    try {
+      await api.call('setCrewRoles', { crew_roles: roles }, { params: { slug: group.slug, id } });
+      await qc.invalidateQueries({ queryKey: meKey });
+      setEditing(null);
+    } catch (e) {
+      setRolesError(e);
     } finally {
       setBusy(false);
     }
@@ -198,20 +241,56 @@ export function GroupDialog({
           组员 {group.members.length}/{group.max_members}
         </h3>
         <ul className="flex flex-col divide-y divide-graphite-800 rounded-panel border border-graphite-800">
-          {group.members.map((m) => (
-            <li key={m.id} className="flex min-h-9 items-center gap-2 px-3 py-1.5 text-sm">
-              <span className="min-w-0 flex-1 truncate">
-                {m.name}
-                {m.you ? <span className="text-graphite-300">（你）</span> : null}
-              </span>
-              {m.role === 'leader' ? <Tag>组长</Tag> : null}
-              {leader && !m.you ? (
-                <Button variant="ghost" size="sm" onClick={() => setConfirm({ remove: m.id, name: m.name })}>
-                  移出
-                </Button>
-              ) : null}
-            </li>
-          ))}
+          {group.members.map((m) => {
+            const canEditRoles = m.you || leader;
+            return (
+              <li key={m.id} className="px-3 py-1.5 text-sm">
+                <div className="flex min-h-6 flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="min-w-0 break-words">
+                    {m.name}
+                    {m.you ? <span className="text-graphite-300">（你）</span> : null}
+                  </span>
+                  {m.role === 'leader' ? <Tag>组长</Tag> : null}
+                  {m.crew_roles.length > 0 ? <span className="sr-only">职务：</span> : null}
+                  {m.crew_roles.map((r) => (
+                    <Tag key={r}>{r}</Tag>
+                  ))}
+                  <span className="ml-auto flex items-center gap-1">
+                    {canEditRoles ? (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label={`编辑职务：${m.name}`}
+                        aria-expanded={editing === m.id}
+                        disabled={busy && editing !== m.id}
+                        onClick={() => {
+                          setRolesError(null);
+                          setEditing(editing === m.id ? null : m.id);
+                        }}
+                      >
+                        编辑职务
+                      </Button>
+                    ) : null}
+                    {leader && !m.you ? (
+                      <Button variant="ghost" size="sm" onClick={() => setConfirm({ remove: m.id, name: m.name })}>
+                        移出
+                      </Button>
+                    ) : null}
+                  </span>
+                </div>
+                {editing === m.id && canEditRoles ? (
+                  <CrewRolesEditor
+                    name={m.name}
+                    initial={m.crew_roles}
+                    busy={busy}
+                    error={rolesError}
+                    onSave={(roles) => void saveRoles(m.id, roles)}
+                    onCancel={() => setEditing(null)}
+                  />
+                ) : null}
+              </li>
+            );
+          })}
         </ul>
       </section>
 

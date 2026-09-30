@@ -132,6 +132,7 @@ export function startPolish(deps: AppDeps, request: PolishRequest): Job {
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
     kind: 'polish_shots',
+    model_source: ai.source,
     idempotency_key: `polish:${contentHash({ request, expected })}`,
     input_hash: contentHash({ prompt_version: POLISH_PROMPT_VERSION, messages }),
     remote: ai.remote,

@@ -1,9 +1,10 @@
 import { MutationCache, QueryCache, QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CreateProjectInput, CurrentScript, Entity, Job, Project, Scene, Shot, ShotDraft } from '@storyscript/contracts';
+import type { CreateProjectInput, CurrentScript, Entity, HealthInfo, Job, Project, ProvidersView, Scene, Shot, ShotDraft } from '@storyscript/contracts';
 import { api, isApiClientError, isUnauthorized, type InputOf } from './api.ts';
 import { describeError } from './errors.ts';
 import { isTerminalJob, resetTrackedJobs } from './jobs.ts';
 import { invalidateCast } from './queries-cast.ts';
+import { textNotConfiguredReason, type ModelScope } from './models.ts';
 import { markSaved, markSaveFailed, markSaving } from './saveStatus.ts';
 import { markNoTeam, markSessionExpired } from './session.ts';
 import { mergeShots, reorderLocally } from './shots.ts';
@@ -17,6 +18,8 @@ export const keys = {
   jobs: ['jobs', 'active'] as const,
   // M3
   providers: ['settings', 'providers'] as const,
+  /** S4 hosted: the signed-in member's own model (under `providers`, so one invalidation refreshes both) */
+  myProviders: ['settings', 'providers', 'me'] as const,
   script: ['script', 'current'] as const,
   scriptVersions: ['script', 'versions'] as const,
   entities: ['entities'] as const,
@@ -162,23 +165,61 @@ async function saving<R>(run: () => Promise<R>): Promise<R> {
 
 // ---------------------------------------------------------------- settings --
 
-export function useProviders() {
-  return useQuery({ queryKey: keys.providers, queryFn: ({ signal }) => api.call('getProviders', undefined, { signal }) });
+/** The settings of one scope: the group's (the leader's) or, on the hosted server, the signed-in member's own. */
+export function useScopedProviders(scope: ModelScope) {
+  return useQuery({
+    queryKey: scope === 'me' ? keys.myProviders : keys.providers,
+    queryFn: ({ signal }) => (scope === 'me' ? api.call('getMyProviders', undefined, { signal }) : api.call('getProviders', undefined, { signal })),
+  });
 }
 
-export function useSaveTextProvider() {
+/**
+ * What this member's AI requests actually use: the group's settings, except
+ * for a kind where the member chose their own model (hosted). Confirmations
+ * that name the host a request goes to read this, so they never name the
+ * group's host for a request that goes to the member's own.
+ */
+export function useProviders(enabled = true): { data: ProvidersView | undefined; isPending: boolean; isError: boolean; error: unknown } {
+  const health = useHealth().data;
+  const ownText = health?.text_model_source === 'own';
+  const ownImage = health?.image_model_source === 'own';
+  const group = useQuery({ queryKey: keys.providers, queryFn: ({ signal }) => api.call('getProviders', undefined, { signal }), enabled });
+  const mine = useQuery({
+    queryKey: keys.myProviders,
+    queryFn: ({ signal }) => api.call('getMyProviders', undefined, { signal }),
+    enabled: enabled && (ownText || ownImage),
+  });
+  const data: ProvidersView | undefined =
+    group.data === undefined
+      ? undefined
+      : {
+          ...group.data,
+          text: ownText ? (mine.data?.text ?? null) : group.data.text,
+          image: ownImage ? (mine.data?.image ?? null) : group.data.image,
+        };
+  const waitingForMine = (ownText || ownImage) && mine.isPending && !mine.isError;
+  return { data: waitingForMine ? undefined : data, isPending: group.isPending || waitingForMine, isError: group.isError || mine.isError, error: group.error ?? mine.error };
+}
+
+/** After the member's choice of model changed: the effective model, and so every provider view, may have changed. */
+export function refreshModels(qc: QueryClient): void {
+  void qc.invalidateQueries({ queryKey: keys.health });
+  void qc.invalidateQueries({ queryKey: keys.providers });
+}
+
+export function useSaveTextProvider(scope: ModelScope = 'group') {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: InputOf<'saveTextProvider'>) => api.call('saveTextProvider', input),
+    mutationFn: (input: InputOf<'saveTextProvider'>) => (scope === 'me' ? api.call('saveMyTextProvider', input) : api.call('saveTextProvider', input)),
     onSuccess: (view) => {
-      qc.setQueryData(keys.providers, view);
+      qc.setQueryData(scope === 'me' ? keys.myProviders : keys.providers, view);
       void qc.invalidateQueries({ queryKey: keys.health });
     },
   });
 }
 
-export function useTestTextProvider() {
-  return useMutation({ mutationFn: () => api.call('testTextProvider') });
+export function useTestTextProvider(scope: ModelScope = 'group') {
+  return useMutation({ mutationFn: () => (scope === 'me' ? api.call('testMyTextProvider') : api.call('testTextProvider')) });
 }
 
 export interface AiGate {
@@ -190,12 +231,13 @@ export interface AiGate {
 }
 
 /** Pure part of useAiGate (tested). */
-export function aiGateOf(health: { text_provider_configured: boolean; demo: boolean } | undefined): AiGate {
+export function aiGateOf(health: Pick<HealthInfo, 'text_provider_configured' | 'demo'> & Partial<Pick<HealthInfo, 'hosted' | 'text_model_source'>> | undefined): AiGate {
   if (!health) return { enabled: false, reason: '正在检测模型配置…', demo: false };
   // In demo mode the server answers AI routes from fixtures/replay without a key.
   if (health.demo) return { enabled: true, reason: null, demo: true };
   if (health.text_provider_configured) return { enabled: true, reason: null, demo: false };
-  return { enabled: false, reason: '未配置文本模型：在"设置 → 模型"中填写后可用。手工流程不受影响。', demo: false };
+  // hosted: whose model is missing (the group's, or the member's own) decides what to do next
+  return { enabled: false, reason: textNotConfiguredReason(health), demo: false };
 }
 
 /** AI buttons work only with a configured text provider (SPEC §1: 无 key 可用). */

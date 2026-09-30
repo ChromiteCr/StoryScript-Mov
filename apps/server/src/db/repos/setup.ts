@@ -18,9 +18,10 @@ interface SetupRow {
   resource_ids_json: string;
   durations_json: string;
   estimate_confirmed: number;
+  revision: number;
 }
 
-const COLS = 'id, location_resource_id, label, shot_ids_json, resource_ids_json, durations_json, estimate_confirmed';
+const COLS = 'id, location_resource_id, label, shot_ids_json, resource_ids_json, durations_json, estimate_confirmed, revision';
 
 function fromRow(r: SetupRow): Setup {
   return Setup.parse({
@@ -31,6 +32,7 @@ function fromRow(r: SetupRow): Setup {
     resource_ids: JSON.parse(r.resource_ids_json),
     durations: JSON.parse(r.durations_json),
     estimate_confirmed: r.estimate_confirmed === 1,
+    revision: r.revision,
   });
 }
 
@@ -65,12 +67,16 @@ export function saveSetup(db: DbPort, s: Setup): void {
   const exists = db.get<{ id: string }>('SELECT id FROM setup WHERE id = ?', x.id);
   if (exists) {
     db.run(
-      'UPDATE setup SET location_resource_id = ?, label = ?, shot_ids_json = ?, resource_ids_json = ?, durations_json = ?, estimate_confirmed = ? WHERE id = ?',
+      'UPDATE setup SET location_resource_id = ?, label = ?, shot_ids_json = ?, resource_ids_json = ?, durations_json = ?, estimate_confirmed = ?, revision = revision + 1 WHERE id = ?',
       ...values(x),
       x.id,
     );
   } else {
-    db.run(`INSERT INTO setup (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?)`, x.id, ...values(x));
+    db.run(
+      'INSERT INTO setup (id, location_resource_id, label, shot_ids_json, resource_ids_json, durations_json, estimate_confirmed) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      x.id,
+      ...values(x),
+    );
   }
   syncShots(db, x);
 }
@@ -88,7 +94,7 @@ function syncShots(db: DbPort, x: Setup): void {
       const other = getSetup(db, row.setup_id);
       if (other) {
         db.run(
-          'UPDATE setup SET shot_ids_json = ? WHERE id = ?',
+          'UPDATE setup SET shot_ids_json = ?, revision = revision + 1 WHERE id = ?',
           JSON.stringify(other.shot_ids.filter((id) => id !== shotId)),
           other.id,
         );

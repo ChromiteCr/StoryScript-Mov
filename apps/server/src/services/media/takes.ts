@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
 import type { CreateTakeInput, Take, UpdateTakeInput } from '@storyscript/contracts';
+import { actorId } from '../../collab/actor.ts';
 import type { DbPort } from '../../db/port.ts';
 import { getTake, insertTake, nextTakeNo, updateTakeRow } from '../../db/repos/take.ts';
 import { AppError } from '../../http/errors.ts';
@@ -24,6 +25,8 @@ export interface TakeAuditEntry {
   changed: string[];
   /** the take as it was before this correction */
   before: Take;
+  /** S4: the account that made the correction (null locally / for older entries) */
+  actor_id?: string | null;
 }
 
 const blankToNull = (s: string | null | undefined): string | null => {
@@ -87,7 +90,7 @@ export function createTake(db: DbPort, input: CreateInput, now = new Date().toIS
       revision: 0,
     };
     insertTake(db, take);
-    return take;
+    return requireTake(db, take.id);
   });
 }
 
@@ -137,7 +140,7 @@ export function updateTake(db: DbPort, id: string, input: UpdateInput, now = new
     next.revision = take.revision + 1;
     updateTakeRow(db, next);
     const audit = kvGet<TakeAuditEntry[]>(db, takeAuditKey(id)) ?? [];
-    audit.push({ revision: next.revision, at: now, reason, changed: changed.map((k) => FIELD_LABEL[k] ?? k), before: take });
+    audit.push({ revision: next.revision, at: now, reason, changed: changed.map((k) => FIELD_LABEL[k] ?? k), before: take, actor_id: actorId() });
     kvPut(db, takeAuditKey(id), audit, now);
     return next;
   });

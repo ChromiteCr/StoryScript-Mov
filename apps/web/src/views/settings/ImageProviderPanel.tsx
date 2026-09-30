@@ -17,7 +17,8 @@ import {
   verifiedText,
   type DialectChoice,
 } from '../../lib/labels-raster.ts';
-import { useHealth, useProviders } from '../../lib/queries.ts';
+import { panelConfigured, type ModelScope } from '../../lib/models.ts';
+import { useHealth, useScopedProviders } from '../../lib/queries.ts';
 import { useSaveImageProvider, useTestImageProvider } from '../../lib/queries-raster.ts';
 import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
@@ -72,11 +73,16 @@ interface FormProps {
   save: ReturnType<typeof useSaveImageProvider>;
   test: ReturnType<typeof useTestImageProvider>;
   onPaidTest: () => void;
+  scope: ModelScope;
+  /** the group's settings seen by a member: shown, not editable; the paid trial (the group's money) is the leader's */
+  readOnly: boolean;
 }
 
-function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
+function ImageProviderForm({ view, save, test, onPaidTest, scope, readOnly }: FormProps) {
   const hosted = useHealth().data?.hosted ?? false;
   const fromEnv = view?.source === 'env';
+  /** address, model and key cannot be edited: set by the environment, or the group's and the viewer is not the leader */
+  const locked = fromEnv || readOnly;
   const [baseUrl, setBaseUrl] = useState(view?.base_url ?? '');
   const [model, setModel] = useState(view?.model ?? '');
   const [key, setKey] = useState('');
@@ -91,10 +97,12 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
     clearKey ||
     dialect !== dialectChoiceOf(view);
   const hasKey = Boolean(view?.key_last4);
-  const testable = view !== null && hasKey && view.base_url !== '' && view.model !== '';
+  // a member cannot see the group's key digits, so an address and a model name are what they can check
+  const testable = view !== null && (hasKey || readOnly) && view.base_url !== '' && view.model !== '';
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
+    if (readOnly) return;
     const next: typeof errors = {};
     if (!validHttpUrl(baseUrl)) next.base_url = '请填写完整的 http(s) 地址，例如 https://api.openai.com/v1';
     if (model.trim() === '') next.model = '请填写模型名';
@@ -118,12 +126,18 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
     );
   };
 
-  const where = hosted ? '保存在服务器上本组的设置里，只用来转发本组的请求；组员和其他小组都看不到完整的 key，它也不进入项目文件和导出文件。' : '保存在本机 credentials.json（权限 0600），不进入项目目录、日志和导出文件。';
-  const keyHint = fromEnv
-    ? '来自环境变量 STORYSCRIPT_IMAGE_API_KEY。'
-    : hasKey
-      ? `只写不读：留空表示沿用已保存的 key。${where}`
-      : `只写不读：${where}`;
+  const where = !hosted
+    ? '保存在本机 credentials.json（权限 0600），不进入项目目录、日志和导出文件。'
+    : scope === 'me'
+      ? '保存在服务器上你自己的账号设置里，只有你看得到；组长和组员都看不到，它也不进入项目文件和导出文件。'
+      : '保存在服务器上本组的设置里，只用来转发本组的请求；组员和其他小组都看不到完整的 key，它也不进入项目文件和导出文件。';
+  const keyHint = readOnly
+    ? '本组的 key 由组长保管，组员看不到。'
+    : fromEnv
+      ? '来自环境变量 STORYSCRIPT_IMAGE_API_KEY。'
+      : hasKey
+        ? `只写不读：留空表示沿用已保存的 key。${where}`
+        : `只写不读：${where}`;
 
   const testTitle = !testable ? '先保存地址、模型和 key' : dirty ? '测试使用已保存的配置，请先保存' : undefined;
 
@@ -142,7 +156,7 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
             aria-describedby={describedBy}
             aria-invalid={invalid || undefined}
             value={baseUrl}
-            readOnly={fromEnv}
+            readOnly={locked}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://api.openai.com/v1"
             spellCheck={false}
@@ -157,7 +171,7 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
           <li key={p.base_url}>
             <button
               type="button"
-              disabled={fromEnv}
+              disabled={locked}
               title={`${p.base_url} · ${p.note}`}
               onClick={() => {
                 setBaseUrl(p.base_url);
@@ -181,7 +195,7 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
             aria-describedby={describedBy}
             aria-invalid={invalid || undefined}
             value={model}
-            readOnly={fromEnv}
+            readOnly={locked}
             onChange={(e) => setModel(e.target.value)}
             spellCheck={false}
             autoComplete="off"
@@ -197,17 +211,17 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
             type="password"
             aria-describedby={describedBy}
             value={key}
-            readOnly={fromEnv}
+            readOnly={locked}
             disabled={clearKey}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={view?.key_last4 ? `已保存，末四位 ${view.key_last4}` : '未设置'}
+            placeholder={readOnly ? '由组长保管' : view?.key_last4 ? `已保存，末四位 ${view.key_last4}` : '未设置'}
             autoComplete="new-password"
             spellCheck={false}
             className="font-mono text-xs disabled:opacity-50"
           />
         )}
       </Field>
-      {!fromEnv && hasKey ? (
+      {!locked && hasKey ? (
         <label className="-mt-1 inline-flex items-center gap-1.5 text-xs text-graphite-300">
           <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} className="size-3.5 accent-graphite-100" />
           清除已保存的 key
@@ -216,7 +230,7 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
 
       <Field label="写法" hint={dialect === 'auto' ? '按主机名识别：火山方舟、OpenRouter 用 generations-ref，其余默认 openai-edits。' : DIALECT_HINT[dialect]}>
         {({ id, describedBy }) => (
-          <SelectInput id={id} aria-describedby={describedBy} value={dialect} onChange={(e) => setDialect(e.target.value as DialectChoice)}>
+          <SelectInput id={id} aria-describedby={describedBy} value={dialect} disabled={readOnly} onChange={(e) => setDialect(e.target.value as DialectChoice)}>
             {DIALECT_CHOICES.map((c) => (
               <option key={c.value} value={c.value}>
                 {c.label}
@@ -229,10 +243,12 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
       {save.isError ? <ErrorNotice error={save.error} context="provider" /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        <Button type="submit" variant="primary" busy={save.isPending} disabled={!dirty}>
-          {save.isPending ? null : <Save aria-hidden className="size-3.5" />}
-          保存
-        </Button>
+        {readOnly ? null : (
+          <Button type="submit" variant="primary" busy={save.isPending} disabled={!dirty}>
+            {save.isPending ? null : <Save aria-hidden className="size-3.5" />}
+            保存
+          </Button>
+        )}
         <Button
           onClick={() => test.mutate(false)}
           busy={test.isPending && test.variables === false}
@@ -242,15 +258,17 @@ function ImageProviderForm({ view, save, test, onPaidTest }: FormProps) {
           {test.isPending && test.variables === false ? null : <PlugZap aria-hidden className="size-3.5" />}
           免费检查
         </Button>
-        <Button
-          onClick={onPaidTest}
-          busy={test.isPending && test.variables === true}
-          disabled={!testable || dirty || test.isPending}
-          title={testTitle ?? '生成 1 张最小尺寸图片（会计费，先确认）'}
-        >
-          {test.isPending && test.variables === true ? null : <BadgeDollarSign aria-hidden className="size-3.5" />}
-          付费试生成…
-        </Button>
+        {readOnly ? null : (
+          <Button
+            onClick={onPaidTest}
+            busy={test.isPending && test.variables === true}
+            disabled={!testable || dirty || test.isPending}
+            title={testTitle ?? '生成 1 张最小尺寸图片（会计费，先确认）'}
+          >
+            {test.isPending && test.variables === true ? null : <BadgeDollarSign aria-hidden className="size-3.5" />}
+            付费试生成…
+          </Button>
+        )}
         <span aria-live="polite" className="text-xs text-graphite-300">
           {save.isSuccess && !dirty ? '已保存。' : dirty && view !== null ? '测试使用已保存的配置，请先保存。' : ''}
         </span>
@@ -293,22 +311,30 @@ function PaidTestDialog({ view, onClose, onConfirm }: { view: ImageProviderView;
   );
 }
 
-/** Inspector groups for the image model: detection result, the form, what leaves the machine. */
-export function ImageProviderPanel() {
-  const providers = useProviders();
+/**
+ * Inspector groups for the image model: detection result, the form, what
+ * leaves the machine. scope "me" (hosted server): the signed-in member's own
+ * model instead of the group's. A member sees the group's read-only.
+ */
+export function ImageProviderPanel({ scope = 'group' }: { scope?: ModelScope }) {
+  const providers = useScopedProviders(scope);
   const health = useHealth();
-  const save = useSaveImageProvider();
-  const test = useTestImageProvider();
+  const save = useSaveImageProvider(scope);
+  const test = useTestImageProvider(scope);
   const [paidAsk, setPaidAsk] = useState(false);
   const view = providers.data?.image ?? null;
-  const configured = health.data?.image_provider_configured ?? false;
+  const readOnly = scope === 'group' && providers.data?.editable === false;
+  const configured = panelConfigured({ kind: 'image', scope, health: health.data, view, readOnly });
   const demo = health.data?.demo ?? false;
   const host = hostOf(view?.base_url);
+  const mine = scope === 'me';
+  const hosted = health.data?.hosted ?? false;
+  const target = mine ? '你自己配置的地址（在本组选了「我的模型」时）' : hosted ? '本组配置的地址（在本组选了「组的模型」时）' : '你配置的地址';
 
   return (
     <>
       <InspectorGroup
-        title="图像模型（实验）"
+        title={mine ? '我的图像模型（实验）' : '图像模型（实验）'}
         note={
           <p className="text-graphite-300">
             只有 AI 铅笔重绘用到图像模型；结构线稿和铅笔稿由本机渲染，不需要它。未配置时分镜页的重绘按钮置灰。
@@ -328,7 +354,7 @@ export function ImageProviderPanel() {
               <span className="sr-only">（末四位）</span>
             </span>
           ) : (
-            <span className="text-graphite-300">未设置</span>
+            <span className="text-graphite-300">{readOnly ? '由组长保管' : '未设置'}</span>
           )}
         </InspectorRow>
         {view ? (
@@ -360,7 +386,7 @@ export function ImageProviderPanel() {
       ) : null}
 
       <InspectorGroup
-        title="图像模型 · 连接设置"
+        title={mine ? '我的图像模型 · 连接设置' : '图像模型 · 连接设置'}
         note={
           providers.isPending ? (
             <Spinner label="正在读取配置…" />
@@ -373,17 +399,19 @@ export function ImageProviderPanel() {
               save={save}
               test={test}
               onPaidTest={() => setPaidAsk(true)}
+              scope={scope}
+              readOnly={readOnly}
             />
           )
         }
       />
 
       <InspectorGroup
-        title="图像模型 · 外发与标识"
+        title={mine ? '我的图像模型 · 外发与标识' : '图像模型 · 外发与标识'}
         note={
           <div className="flex flex-col gap-2 text-graphite-300">
             <p>
-              只有在分镜页点"AI 铅笔重绘"并确认后，才会把{SENT_DATA}发送到你配置的地址
+              只有在分镜页点"AI 铅笔重绘"并确认后，才会把{SENT_DATA}发送到{target}
               {host ? (
                 <>
                   （当前为 <span className="font-mono text-xs text-graphite-100">{host}</span>）
@@ -401,7 +429,7 @@ export function ImageProviderPanel() {
         }
       />
 
-      {paidAsk && view ? (
+      {paidAsk && view && !readOnly ? (
         <PaidTestDialog
           view={view}
           onClose={() => setPaidAsk(false)}

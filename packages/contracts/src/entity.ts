@@ -18,6 +18,8 @@ export const Entity = z.object({
   confirmed: z.boolean(),
   /** S3b: characters only — who plays the part (shown in the plan and call sheets, never sent to a model) */
   actor_name: z.string().max(40).nullable(),
+  /** S4a: bumped by every change; updates may name the one they started from */
+  revision: z.number().int().nonnegative().optional(),
 });
 export type Entity = z.infer<typeof Entity>;
 

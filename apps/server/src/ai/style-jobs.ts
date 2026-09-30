@@ -38,6 +38,7 @@ export function startStyleResearch(deps: AppDeps, input: StyleResearchInput): Jo
   const research = ai.research;
   return jobs.enqueue({
     kind: 'research_style',
+    model_source: ai.source,
     idempotency_key: `research_style:${contentHash(input)}`,
     input_hash: contentHash({ prompt_version: STYLE_RESEARCH_PROMPT_VERSION, messages, model: research.cfg.model, search: research.extraBody !== null }),
     remote: ai.remote,

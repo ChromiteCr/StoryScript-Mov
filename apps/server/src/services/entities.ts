@@ -14,6 +14,7 @@ import { getDraft, setDraftStatus } from '../db/repos/draft.ts';
 import { cleanAliases, findEntityByName, getEntity, insertEntity, nextAlias, updateEntityRow } from '../db/repos/entity.ts';
 import { splitActorNames } from '@storyscript/core';
 import { AppError } from '../http/errors.ts';
+import { assertExpectedRevision } from './revision.ts';
 
 type Input<S extends z.ZodType> = z.infer<S>;
 
@@ -56,6 +57,7 @@ export function updateEntity(db: DbPort, id: string, input: Input<typeof UpdateE
   return db.tx(() => {
     const e = getEntity(db, id);
     if (!e) throw new AppError('NOT_FOUND', '实体不存在', 404);
+    assertExpectedRevision(`「${e.name}」`, e.revision, input.expected_revision);
     const name = input.name !== undefined ? input.name.trim() : e.name;
     if (!name) throw new AppError('VALIDATION_ERROR', '名称不能为空', 400);
     const next: Entity = {
@@ -66,7 +68,7 @@ export function updateEntity(db: DbPort, id: string, input: Input<typeof UpdateE
       actor_name: input.actor_name !== undefined ? cleanActorName(e.type, input.actor_name) : e.actor_name,
     };
     updateEntityRow(db, next);
-    return next;
+    return getEntity(db, id)!;
   });
 }
 

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { IsoTime, Uuid } from './common.ts';
+import { ActorRef, IsoTime, ModelSource, Uuid } from './common.ts';
 
 export const JobStatus = z.enum([
   'queued',
@@ -41,5 +41,8 @@ export const Job = z.object({
   result_ref: z.string().nullable(),
   created_at: IsoTime,
   updated_at: IsoTime,
+  /** S4: who started it, and whose model it used */
+  actor: ActorRef.nullable().optional(),
+  model_source: ModelSource.nullable().optional(),
 });
 export type Job = z.infer<typeof Job>;

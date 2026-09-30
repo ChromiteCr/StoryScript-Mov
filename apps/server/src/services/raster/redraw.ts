@@ -1,7 +1,7 @@
 import { assertJobQuota } from '../quota.ts';
 import { randomUUID } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import type { Board, BoardRaster, Job } from '@storyscript/contracts';
+import type { Board, BoardRaster, Job, ModelSource } from '@storyscript/contracts';
 import { buildImagePrompt, RASTER_POST_VERSION, stableStringify, structureHash, type CanvasPlan, type ImagePrompt } from '@storyscript/core';
 import { callImage, type CallOutcome } from '../../adapters/image/call.ts';
 import { sha256Hex } from '../../adapters/image/payload.ts';
@@ -59,7 +59,7 @@ export const redrawJobKey = (boardId: string, cacheKey: string) => `image_redraw
 
 export interface RedrawPlan {
   board: Board;
-  cfg: ImageClientConfig;
+  cfg: ImageClientConfig & { source: ModelSource | null };
   prompt: ImagePrompt;
   plan: CanvasPlan;
   control: ControlImage;
@@ -174,6 +174,7 @@ export async function requestRedraw(deps: AppDeps, boardId: string, input: { con
   const endpoint: ImageEndpoint = { base_url: rp.cfg.base_url, api_key: rp.cfg.api_key, model: rp.cfg.model, dialect: rp.cfg.dialect, preset: rp.cfg.preset, host: rp.cfg.host };
   return jobs.enqueue({
     kind: 'image_redraw',
+    model_source: rp.cfg.source,
     idempotency_key: key,
     input_hash: rp.cache_key,
     remote: true,

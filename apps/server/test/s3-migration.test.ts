@@ -51,9 +51,10 @@ test('v2 → v3: actor names back-filled only where one performer plays the part
     ID(21),
   );
 
+  // up to the latest: reading entities needs the later columns too
   const r = await migrate(db, { backupDir: join(root, 'rc') });
-  expect(r.applied).toEqual(['003_style_cast']);
-  expect(userVersion(db)).toBe(3);
+  expect(r.applied[0]).toBe('003_style_cast');
+  expect(userVersion(db)).toBe(LATEST_VERSION);
   expect(LATEST_VERSION).toBe(PROJECT_SCHEMA_VERSION);
 
   const byName = Object.fromEntries(listEntities(db).map((e) => [e.name, e.actor_name]));

@@ -6,6 +6,7 @@ import { redactSecrets } from '../../adapters/llm/redact.ts';
 import { svgToPng } from '../../adapters/render/resvg.ts';
 import type { AppDeps } from '../../deps.ts';
 import { redrawOptions } from './options.ts';
+import type { ModelSettingsDir } from '../../collab/models.ts';
 import { imageOverrides, requireImageClient, USER_AGENT } from './runtime.ts';
 
 /**
@@ -78,9 +79,9 @@ async function freeCheck(cfg: ReturnType<typeof requireImageClient>, warning: st
   };
 }
 
-export async function testImageProvider(deps: AppDeps, paid: boolean): Promise<ProviderTestResult> {
+export async function testImageProvider(deps: AppDeps, paid: boolean, where?: ModelSettingsDir): Promise<ProviderTestResult> {
   if (deps.demo) return { ok: false, models_endpoint: false, model_listed: null, message: '演示模式不会外发任何请求' };
-  const cfg = requireImageClient(deps, { forRedraw: false });
+  const cfg = requireImageClient(deps, { forRedraw: false, where });
   const warning = cfg.warning ? `（注意：${cfg.warning}）` : '';
   if (!paid) return freeCheck(cfg, warning, deps.fetch);
 

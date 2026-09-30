@@ -10,6 +10,37 @@ export const IsoTime = z.iso.datetime({ offset: false });
 export type IsoTime = z.infer<typeof IsoTime>;
 
 export const Origin = z.enum(['ai', 'manual']);
+
+// ---------------------------------------------------------------------------
+// S4 — who did it. On the hosted server every history row records the
+// account that made it; the API returns the name and crew roles as they are
+// now (`left`: no longer in the group). Local single-user rows have no actor.
+// Never carries an email.
+// ---------------------------------------------------------------------------
+
+export const CREW_ROLE_PRESETS = ['导演', '编剧', '制片', '摄影', '美术', '录音', '剪辑', '场记', '灯光', '演员'] as const;
+export const CREW_ROLES_MAX = 6;
+export const CrewRole = z
+  .string()
+  .trim()
+  .min(1)
+  .max(8)
+  .regex(/^[^\s@,，、]+$/, '职务里不能有空格、@ 或逗号');
+export const CrewRoles = z.array(CrewRole).max(CREW_ROLES_MAX);
+export type CrewRoles = z.infer<typeof CrewRoles>;
+
+export const ActorRef = z.object({
+  id: z.string(),
+  name: z.string(),
+  crew_roles: z.array(z.string()),
+  /** no longer in the group */
+  left: z.boolean(),
+});
+export type ActorRef = z.infer<typeof ActorRef>;
+
+/** Whose model a request used: the group's (set by the leader) or the member's own. */
+export const ModelSource = z.enum(['group', 'own']);
+export type ModelSource = z.infer<typeof ModelSource>;
 export type Origin = z.infer<typeof Origin>;
 
 export const ErrorCode = z.enum([

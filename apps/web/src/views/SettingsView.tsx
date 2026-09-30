@@ -9,6 +9,7 @@ import { ErrorNotice } from '../components/ErrorNotice.tsx';
 import { Button, CopyCommand, Notice, Spinner } from '../components/ui.tsx';
 import { Inspector, InspectorGroup, InspectorRow, PageHeader, Panel, Workspace } from '../components/workspace.tsx';
 import { TextProviderPanel } from './TextProviderPanel.tsx';
+import { HostedModels } from './settings/HostedModels.tsx';
 import { ImageProviderPanel } from './settings/ImageProviderPanel.tsx';
 
 /**
@@ -185,16 +186,10 @@ function Environment({ health }: { health: HealthInfo }) {
 
 function Models() {
   const health = useHealth().data;
+  // hosted: the group's model (the leader's), the member's own, and which one they use here
+  if (health?.hosted) return <HostedModels />;
   return (
     <Inspector>
-      {health?.hosted ? (
-        // BYOK per group: the server stores this group's settings and relays its requests
-        <div className="px-3 py-3">
-          <Notice tone="info" title="每个小组用自己的模型服务">
-            填写本组的 base_url、模型名和 key，组里的人共用这一套。服务器只保存它们并转发本组的请求，只能连接公网上的 https 地址。没有配置文本模型时，拆镜和实体抽取可以手工完成。
-          </Notice>
-        </div>
-      ) : null}
       <TextProviderPanel />
       <ImageProviderPanel />
     </Inspector>

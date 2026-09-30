@@ -33,6 +33,7 @@ import { useApplyBreakdown, useDiscardDraft, useDraft, useShots } from '../../li
 import { byNarrative, splitAroundQuote } from '../../lib/shots.ts';
 import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
+import { ActorLabel } from '../../components/ActorLabel.tsx';
 import { Button, Notice, Spinner, Tag } from '../../components/ui.tsx';
 import { EmptyState, Panel } from '../../components/workspace.tsx';
 import { useWorkspace } from './context.ts';
@@ -333,6 +334,7 @@ function DiffBody({
       description={
         <span className="flex flex-wrap gap-x-3 gap-y-0.5">
           <span className="text-graphite-100">草案不会自动写入镜头表：勾选后应用。输出为通用手法建议，未核实。</span>
+          <ActorLabel actor={draft.actor} after="发起" />
           {draft.model ? <span>模型 {draft.model}</span> : null}
           <span className="tabular-nums">{attemptsText(draft.attempts)}</span>
           {usage ? <span className="tabular-nums">{usage}</span> : null}

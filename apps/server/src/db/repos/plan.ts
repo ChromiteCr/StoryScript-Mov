@@ -1,5 +1,6 @@
 import { Plan, TimeWindow } from '@storyscript/contracts';
 import { z } from 'zod';
+import { actorId, actorResolver } from '../../collab/actor.ts';
 import type { DbPort } from '../port.ts';
 
 /**
@@ -20,28 +21,35 @@ interface PlanRow {
   revision: number;
   created_at: string;
   updated_at: string;
+  created_by: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
 }
 
-const COLS = 'id, date, timezone, day_start_utc, result_json, input_hash, status, revision, created_at, updated_at';
+const COLS =
+  'id, date, timezone, day_start_utc, result_json, input_hash, status, revision, created_at, updated_at, created_by, approved_by, approved_at';
 
-function fromRow(r: PlanRow): Plan {
-  return Plan.parse({ ...r, result: JSON.parse(r.result_json) });
+function fromRow(r: PlanRow, who: ReturnType<typeof actorResolver>): Plan {
+  const { created_by, approved_by, ...rest } = r;
+  return Plan.parse({ ...rest, result: JSON.parse(r.result_json), created_by: who(created_by), approved_by: who(approved_by) });
 }
 
 /** Newest shooting date first, then newest created. */
 export function listPlans(db: DbPort): Plan[] {
-  return db.all<PlanRow>(`SELECT ${COLS} FROM plan ORDER BY date DESC, created_at DESC, rowid DESC`).map(fromRow);
+  const who = actorResolver(db);
+  return db.all<PlanRow>(`SELECT ${COLS} FROM plan ORDER BY date DESC, created_at DESC, rowid DESC`).map((r) => fromRow(r, who));
 }
 
 export function getPlan(db: DbPort, id: string): Plan | null {
   const r = db.get<PlanRow>(`SELECT ${COLS} FROM plan WHERE id = ?`, id);
-  return r ? fromRow(r) : null;
+  return r ? fromRow(r, actorResolver(db)) : null;
 }
 
 export function insertPlan(db: DbPort, p: Plan): void {
   const x = Plan.parse(p);
   db.run(
-    `INSERT INTO plan (${COLS}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO plan (id, date, timezone, day_start_utc, result_json, input_hash, status, revision, created_at, updated_at, created_by)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     x.id,
     x.date,
     x.timezone,
@@ -52,6 +60,7 @@ export function insertPlan(db: DbPort, p: Plan): void {
     x.revision,
     x.created_at,
     x.updated_at,
+    actorId(),
   );
 }
 
@@ -66,6 +75,13 @@ export function updatePlanRow(db: DbPort, p: Plan): void {
     x.updated_at,
     x.id,
   );
+  // Whoever approved it approved a plan that no longer exists once it goes back to draft.
+  if (x.status !== 'approved') db.run('UPDATE plan SET approved_by = NULL, approved_at = NULL WHERE id = ?', x.id);
+}
+
+/** Record who approved the plan and when (the current request's account; null locally). */
+export function setPlanApproval(db: DbPort, id: string, at: string): void {
+  db.run('UPDATE plan SET approved_by = ?, approved_at = ? WHERE id = ?', actorId(), at, id);
 }
 
 // ------------------------------------------------------------------- meta ---

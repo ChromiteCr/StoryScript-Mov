@@ -1,4 +1,6 @@
 import type { ImageAttempt } from '../../adapters/image/types.ts';
+import type { ModelSource } from '@storyscript/contracts';
+import { modelDir, OWN_NOT_CONFIGURED, type ModelSettingsDir } from '../../collab/models.ts';
 import { imageClientConfig, type ImageClientConfig } from '../../config/image-provider.ts';
 import type { AppDeps } from '../../deps.ts';
 import { AppError } from '../../http/errors.ts';
@@ -34,10 +36,12 @@ export const USER_AGENT = `storyscript-mov/${APP_VERSION}`;
 export const NOT_CONFIGURED_MESSAGE = '尚未配置图像模型：请在设置中填写图像服务的 base_url、API key 和模型名（或设置 STORYSCRIPT_IMAGE_* 环境变量）';
 
 /** Configured image endpoint, or 409 PROVIDER_NOT_CONFIGURED (nothing is sent). */
-export function requireImageClient(deps: AppDeps, opts: { forRedraw: boolean }): ImageClientConfig {
+export function requireImageClient(deps: AppDeps, opts: { forRedraw: boolean; where?: ModelSettingsDir }): ImageClientConfig & { source: ModelSource | null } {
   if (deps.demo) throw new AppError('PROVIDER_NOT_CONFIGURED', '演示模式不提供 AI 重绘，也不会外发任何请求', 409);
-  const cfg = imageClientConfig(deps.stateDir, deps.env);
-  if (!cfg) throw new AppError('PROVIDER_NOT_CONFIGURED', NOT_CONFIGURED_MESSAGE, 409);
+  const where = opts.where ?? modelDir(deps, 'image');
+  const found = imageClientConfig(where.dir, where.env);
+  if (!found) throw new AppError('PROVIDER_NOT_CONFIGURED', where.source === 'own' ? OWN_NOT_CONFIGURED.image : NOT_CONFIGURED_MESSAGE, 409);
+  const cfg = { ...found, source: where.source };
   if (opts.forRedraw && cfg.blocking) {
     throw new AppError('PROVIDER_NOT_CONFIGURED', `当前图像服务不能用于草图重绘：${cfg.warning}`, 409, { host: cfg.host });
   }

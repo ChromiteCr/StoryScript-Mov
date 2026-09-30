@@ -10,9 +10,10 @@ interface ResourceRow {
   windows_json: string;
   cast_character_ids_json: string;
   confirmed: number;
+  revision: number;
 }
 
-const COLS = 'id, type, name, windows_json, cast_character_ids_json, confirmed';
+const COLS = 'id, type, name, windows_json, cast_character_ids_json, confirmed, revision';
 
 function fromRow(r: ResourceRow): Resource {
   return Resource.parse({
@@ -22,6 +23,7 @@ function fromRow(r: ResourceRow): Resource {
     windows: JSON.parse(r.windows_json),
     cast_character_ids: JSON.parse(r.cast_character_ids_json),
     confirmed: r.confirmed === 1,
+    revision: r.revision,
   });
 }
 
@@ -40,7 +42,7 @@ export function getResource(db: DbPort, id: string): Resource | null {
 export function insertResource(db: DbPort, res: Resource): void {
   const x = Resource.parse(res);
   db.run(
-    `INSERT INTO resource (${COLS}) VALUES (?, ?, ?, ?, ?, ?)`,
+    'INSERT INTO resource (id, type, name, windows_json, cast_character_ids_json, confirmed) VALUES (?, ?, ?, ?, ?, ?)',
     x.id,
     x.type,
     x.name,
@@ -53,7 +55,7 @@ export function insertResource(db: DbPort, res: Resource): void {
 export function updateResourceRow(db: DbPort, res: Resource): void {
   const x = Resource.parse(res);
   db.run(
-    'UPDATE resource SET type = ?, name = ?, windows_json = ?, cast_character_ids_json = ?, confirmed = ? WHERE id = ?',
+    'UPDATE resource SET type = ?, name = ?, windows_json = ?, cast_character_ids_json = ?, confirmed = ?, revision = revision + 1 WHERE id = ?',
     x.type,
     x.name,
     JSON.stringify(x.windows),

@@ -17,6 +17,8 @@ import {
   useTrackedJob,
 } from '../../lib/jobs.ts';
 import { keys, useCancelJob, useJob } from '../../lib/queries.ts';
+import { isOtherActor } from '../../lib/crew.ts';
+import { useMyActorId } from '../../components/AccountMenu.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, IconButton } from '../../components/ui.tsx';
 
@@ -64,6 +66,7 @@ export function JobLine({ slot, onSucceeded, onOpenDraft }: JobLineProps) {
   const tracked = useTrackedJob(slot);
   const job = useJob(tracked?.jobId ?? null);
   const cancel = useCancelJob();
+  const myId = useMyActorId();
   const data = job.data;
 
   useEffect(() => {
@@ -113,6 +116,7 @@ export function JobLine({ slot, onSucceeded, onOpenDraft }: JobLineProps) {
         <span className="font-medium text-graphite-100">
           {JOB_KIND_LABEL[data.kind]} {JOB_STATUS_LABEL[data.status]}
         </span>
+        {data.actor && isOtherActor(data.actor, myId) ? <span className="text-xs text-graphite-300">{data.actor.name}的任务</span> : null}
         <span className="text-xs text-graphite-300 tabular-nums">{attemptsText(data.attempts)}</span>
         {usage ? <span className="text-xs text-graphite-300 tabular-nums">{usage}</span> : null}
         {data.status === 'succeeded' ? <span className="text-xs text-graphite-300">正在打开草案…</span> : null}

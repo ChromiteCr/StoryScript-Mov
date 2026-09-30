@@ -1,6 +1,7 @@
 import { useId, useState, type FormEvent } from 'react';
 import type { Take, TakeRating } from '@storyscript/contracts';
 import { Pencil } from 'lucide-react';
+import { ActorLabel } from '../../components/ActorLabel.tsx';
 import { Button, IconButton, TextInput } from '../../components/ui.tsx';
 import { EmptyState } from '../../components/workspace.tsx';
 import { isApiClientError } from '../../lib/api.ts';
@@ -35,6 +36,7 @@ export function TakeList({ takes, refsById, currentId }: { takes: Take[]; refsBy
                 <RatingBadge rating={t.rating} />
                 {t.camera_label ? <span className="text-xs text-graphite-300">机位 {t.camera_label}</span> : null}
                 <span className="text-xs text-graphite-300 tabular-nums">{clockTime(t.logged_at)}</span>
+                <ActorLabel actor={t.logged_by} before="记录：" className="text-xs text-graphite-300" />
                 {t.revision > 0 ? <span className="text-xs text-graphite-300">已更正 {t.revision} 次</span> : null}
               </div>
               {t.clip_hint ? <p className="truncate font-mono text-xs text-graphite-100">{t.clip_hint}</p> : null}

@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { JobAccepted, Uuid } from './common.ts';
+import { ActorRef, CrewRoles, JobAccepted, ModelSource, Uuid } from './common.ts';
 import { Entity, EntityType } from './entity.ts';
 import { Job } from './job.ts';
 import { CreateProjectInput, Project, RecentProject } from './project.ts';
@@ -12,6 +12,8 @@ import { LinkCandidate, MediaAsset, ProbeNormalized, ShotMediaLink, SourceRoot, 
 import { Constraint, Plan, Resource, ResourceType, Setup, SetupDurations, TimeWindow, Violation } from './plan.ts';
 import { StyleCard, StyleCardInput, StyleDefaults, StyleLevel, StyleLibrary, StyleResearchInput } from './style.ts';
 import { CastApplyInput, CastSuggestion, CastSyncApplyInput, CastSyncPreview } from './cast.ts';
+import { CollabChanges } from './collab.ts';
+import { CommentSummary, CreateCommentInput, ShotComment, UpdateCommentInput } from './comments.ts';
 import { Take, TakeRating } from './take.ts';
 
 /**
@@ -50,6 +52,9 @@ export const HealthInfo = z.object({
   hosted: z.boolean(),
   /** hosted: the signed-in account's group name */
   team_name: z.string().nullable(),
+  /** S4 hosted: whose model this member's AI requests use (null locally); the *_configured flags above follow it */
+  text_model_source: ModelSource.nullable().optional(),
+  image_model_source: ModelSource.nullable().optional(),
 });
 export type HealthInfo = z.infer<typeof HealthInfo>;
 
@@ -107,6 +112,8 @@ export type ImageProviderView = z.infer<typeof ImageProviderView>;
 export const ProvidersView = z.object({
   text: TextProviderView.nullable(),
   image: ImageProviderView.nullable(),
+  /** S4: false for a group member on the hosted server (only the leader changes the group's model) */
+  editable: z.boolean().optional(),
 });
 export type ProvidersView = z.infer<typeof ProvidersView>;
 
@@ -219,6 +226,8 @@ export const ScriptVersionSummary = z.object({
   content_hash: z.string(),
   created_at: z.string(),
   scene_count: z.number().int(),
+  /** S4: who imported it */
+  actor: ActorRef.nullable().optional(),
 });
 
 export const UpdateSceneInput = z.object({
@@ -239,6 +248,8 @@ export const UpdateEntityInput = z.object({
   confirmed: z.boolean().optional(),
   /** S3b: characters only; "" or null clears it */
   actor_name: z.string().max(40).nullable().optional(),
+  /** S4a: the revision the edit started from; a teammate's newer change makes this a 409 */
+  expected_revision: z.number().int().nonnegative().optional(),
 });
 
 export const EntityDraftSelection = z.object({
@@ -380,7 +391,10 @@ export const CreateResourceInput = z.object({
   cast_character_ids: z.array(Uuid),
   confirmed: z.boolean(),
 });
-export const UpdateResourceInput = CreateResourceInput.partial();
+export const UpdateResourceInput = CreateResourceInput.partial().extend({
+  /** S4a: the revision the edit started from; a teammate's newer change makes this a 409 */
+  expected_revision: z.number().int().nonnegative().optional(),
+});
 
 export const CreateSetupInput = z.object({
   location_resource_id: Uuid.nullable(),
@@ -390,7 +404,10 @@ export const CreateSetupInput = z.object({
   durations: SetupDurations,
   estimate_confirmed: z.boolean(),
 });
-export const UpdateSetupInput = CreateSetupInput.partial();
+export const UpdateSetupInput = CreateSetupInput.partial().extend({
+  /** S4a: the revision the edit started from; a teammate's newer change makes this a 409 */
+  expected_revision: z.number().int().nonnegative().optional(),
+});
 
 /** Auto-group active shots into setups: same location resource + camera angle/facing bucket. */
 export const DeriveSetupsInput = z.object({
@@ -622,6 +639,8 @@ export const GroupMember = z.object({
   joined_at: z.string(),
   /** this member is the signed-in account */
   you: z.boolean(),
+  /** S4: 导演、编剧、摄影… (set by the member or the leader) */
+  crew_roles: z.array(z.string()).default([]),
 });
 export type GroupMember = z.infer<typeof GroupMember>;
 export const GroupView = z.object({
@@ -632,6 +651,8 @@ export const GroupView = z.object({
   role: GroupRole,
   members: z.array(GroupMember),
   max_members: z.number().int().positive(),
+  /** S4: which model the signed-in account uses in this group */
+  model_choice: z.object({ text: ModelSource, image: ModelSource }).default({ text: 'group', image: 'group' }),
 });
 export type GroupView = z.infer<typeof GroupView>;
 export const AccountMe = z.object({
@@ -647,6 +668,9 @@ export const AccountMe = z.object({
 export type AccountMe = z.infer<typeof AccountMe>;
 
 export const CreateGroupInput = z.object({ name: DisplayName });
+/** S4 */
+export const CrewRolesInput = z.object({ crew_roles: CrewRoles });
+export const ModelChoiceInput = z.object({ text: ModelSource.optional(), image: ModelSource.optional() });
 /** the code, or the whole …/#join=<code> link pasted */
 export const JoinGroupInput = z.object({ code: z.string().trim().min(4).max(300) });
 export const GroupPreview = z.object({
@@ -687,6 +711,10 @@ export const Api = {
   resetGroupCode: { method: 'POST', path: '/api/v1/groups/:slug/code', output: GroupView },
   removeGroupMember: { method: 'DELETE', path: '/api/v1/groups/:slug/members/:id', output: GroupView },
   disbandGroup: { method: 'POST', path: '/api/v1/groups/:slug/disband', input: DisbandGroupInput },
+  /** S4: a member's crew roles (the member or the leader) */
+  setCrewRoles: { method: 'PUT', path: '/api/v1/groups/:slug/members/:id/crew-roles', input: CrewRolesInput, output: GroupView },
+  /** S4: use the group's model or one's own, in this group */
+  setModelChoice: { method: 'PUT', path: '/api/v1/groups/:slug/model-choice', input: ModelChoiceInput, output: GroupView },
   recentProjects: { method: 'GET', path: '/api/v1/projects/recent', output: z.array(RecentProject) },
   createProject: { method: 'POST', path: '/api/v1/projects', input: CreateProjectInput, output: Project },
   openProject: { method: 'POST', path: '/api/v1/projects/open', input: OpenProjectInput, output: Project },
@@ -698,6 +726,10 @@ export const Api = {
   getProviders: { method: 'GET', path: '/api/v1/settings/providers', output: ProvidersView },
   saveTextProvider: { method: 'PUT', path: '/api/v1/settings/providers/text', input: SaveTextProviderInput, output: ProvidersView },
   testTextProvider: { method: 'POST', path: '/api/v1/settings/providers/text/test', output: ProviderTestResult },
+  // S4 hosted: the signed-in account's own model (never visible to the group)
+  getMyProviders: { method: 'GET', path: '/api/v1/settings/providers/me', output: ProvidersView },
+  saveMyTextProvider: { method: 'PUT', path: '/api/v1/settings/providers/me/text', input: SaveTextProviderInput, output: ProvidersView },
+  testMyTextProvider: { method: 'POST', path: '/api/v1/settings/providers/me/text/test', output: ProviderTestResult },
 
   // M3 — script
   previewScript: { method: 'POST', path: '/api/v1/scripts/preview', input: ScriptInput, output: ScriptPreview },
@@ -728,6 +760,19 @@ export const Api = {
   getDraft: { method: 'GET', path: '/api/v1/drafts/:id', output: DraftDetail },
   applyBreakdown: { method: 'POST', path: '/api/v1/drafts/:id/apply', input: ApplyBreakdownInput, output: ApplyBreakdownResult },
   discardDraft: { method: 'POST', path: '/api/v1/drafts/:id/discard', output: ShotDraft },
+
+  // S4a — teammates' changes and who is online (query: since, epoch, tab, page, focus, hidden)
+  collabChanges: { method: 'GET', path: '/api/v1/collab/changes', output: CollabChanges },
+
+  // S4b — shot comments (hosted server)
+  commentSummary: { method: 'GET', path: '/api/v1/comments/summary', output: CommentSummary },
+  listComments: { method: 'GET', path: '/api/v1/shots/:id/comments', output: z.array(ShotComment) },
+  createComment: { method: 'POST', path: '/api/v1/shots/:id/comments', input: CreateCommentInput, output: ShotComment },
+  markCommentsRead: { method: 'POST', path: '/api/v1/shots/:id/comments/read' },
+  updateComment: { method: 'PATCH', path: '/api/v1/comments/:id', input: UpdateCommentInput, output: ShotComment },
+  deleteComment: { method: 'DELETE', path: '/api/v1/comments/:id', output: ShotComment },
+  resolveComment: { method: 'POST', path: '/api/v1/comments/:id/resolve', output: ShotComment },
+  reopenComment: { method: 'POST', path: '/api/v1/comments/:id/reopen', output: ShotComment },
 
   // S3 — style cards and research
   getStyles: { method: 'GET', path: '/api/v1/styles', output: StyleLibrary },
@@ -801,6 +846,8 @@ export const Api = {
   // M8 — image provider & AI pencil redraw (experimental)
   saveImageProvider: { method: 'PUT', path: '/api/v1/settings/providers/image', input: SaveImageProviderInput, output: ProvidersView },
   testImageProvider: { method: 'POST', path: '/api/v1/settings/providers/image/test', input: TestImageProviderInput, output: ProviderTestResult },
+  saveMyImageProvider: { method: 'PUT', path: '/api/v1/settings/providers/me/image', input: SaveImageProviderInput, output: ProvidersView },
+  testMyImageProvider: { method: 'POST', path: '/api/v1/settings/providers/me/image/test', input: TestImageProviderInput, output: ProviderTestResult },
   requestRedraw: { method: 'POST', path: '/api/v1/boards/:id/redraw', input: RedrawInput, output: JobAccepted },
   listRasters: { method: 'GET', path: '/api/v1/boards/:id/rasters', output: z.array(RasterView) },
   adoptRaster: { method: 'POST', path: '/api/v1/rasters/:id/adopt', output: RasterView },

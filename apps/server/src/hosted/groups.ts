@@ -3,7 +3,7 @@ import type { GroupPreview, GroupView } from '@storyscript/contracts';
 import { AppError } from '../http/errors.ts';
 import { generateJoinCode, normalizeJoinCode, showJoinCode, type HostedConfig } from './config.ts';
 import { LoginLimiter } from './limiter.ts';
-import type { Account, Membership, SiteDb } from './site-db.ts';
+import { crewRolesOf, type Account, type Membership, type SiteDb } from './site-db.ts';
 import type { TeamRuntime } from './teams.ts';
 
 /**
@@ -41,8 +41,11 @@ export class Groups {
       name: team.name,
       join_code: showJoinCode(team.join_code),
       role: m.role,
-      members: site.members(team.slug).map((x) => ({ id: x.id, name: x.name, role: x.role, joined_at: x.joined_at, you: x.id === account.id })),
+      members: site
+        .members(team.slug)
+        .map((x) => ({ id: x.id, name: x.name, role: x.role, joined_at: x.joined_at, you: x.id === account.id, crew_roles: crewRolesOf(x.crew_roles_json) })),
       max_members: config.limits.max_team_members,
+      model_choice: { text: m.text_source ?? 'group', image: m.image_source ?? 'group' },
     };
   }
 
@@ -183,6 +186,28 @@ export class Groups {
     if (memberId === account.id) throw new AppError('VALIDATION_ERROR', '不能移除自己；要离开请用"退出小组"。', 409);
     if (!site.membership(memberId, slug)) throw new AppError('NOT_FOUND', '这个人已经不在小组里了。', 404);
     site.removeMembership(memberId, slug);
+    return this.mustView(account, slug);
+  }
+
+  /** S4: crew roles — the member themself or the leader */
+  setCrewRoles(account: Account, slug: string, memberId: string, roles: readonly string[]): GroupView {
+    const { site } = this.d;
+    const me = this.mustView(account, slug);
+    if (memberId !== account.id && me.role !== 'leader') throw new AppError('FORBIDDEN', '只能改自己的职务；组长可以改所有人的。', 403);
+    if (!site.membership(memberId, slug)) throw new AppError('NOT_FOUND', '这个人已经不在小组里了。', 404);
+    const clean: string[] = [];
+    for (const r of roles) {
+      const t = r.trim();
+      if (t && !clean.includes(t)) clean.push(t);
+    }
+    site.setCrewRoles(memberId, slug, clean);
+    return this.mustView(account, slug);
+  }
+
+  /** S4: in this group, use the group's model or one's own */
+  setModelChoice(account: Account, slug: string, choice: { text?: 'group' | 'own'; image?: 'group' | 'own' }): GroupView {
+    this.mustView(account, slug);
+    this.d.site.setModelChoice(account.id, slug, choice);
     return this.mustView(account, slug);
   }
 

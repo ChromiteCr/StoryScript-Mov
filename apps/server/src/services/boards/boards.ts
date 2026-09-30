@@ -160,7 +160,7 @@ export function regenerateBoard(db: DbPort, shotId: string, now = new Date().toI
     }
     const board = newBoard(shot, spec, prev, false, shot.content_hash, now);
     insertBoard(db, board);
-    return toView(db, board, shot);
+    return toView(db, requireBoard(db, board.id), shot);
   });
 }
 
@@ -172,7 +172,7 @@ export function saveBoard(db: DbPort, boardId: string, input: Input<typeof SaveB
     const latest = requireLatest(db, board, input.expected_revision);
     const next = newBoard(shot, input.spec, latest, true, latest.basis_content_hash, now);
     insertBoard(db, next);
-    return toView(db, next, shot);
+    return toView(db, requireBoard(db, next.id), shot);
   });
 }
 

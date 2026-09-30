@@ -35,6 +35,11 @@ const EXPECTED_TABLES = [
   'kv',
   // S3
   'style',
+  // S4
+  'member',
+  'comment',
+  'comment_mention',
+  'comment_read',
 ];
 
 let root: string;

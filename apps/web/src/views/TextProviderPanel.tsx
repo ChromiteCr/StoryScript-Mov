@@ -1,8 +1,9 @@
 import { useId, useState, type FormEvent, type ReactNode } from 'react';
 import type { ProviderTestResult, TextProviderView } from '@storyscript/contracts';
 import { PlugZap, Save } from 'lucide-react';
-import { useHealth, useProviders, useSaveTextProvider, useTestTextProvider } from '../lib/queries.ts';
+import { useHealth, useSaveTextProvider, useScopedProviders, useTestTextProvider } from '../lib/queries.ts';
 import { SETTING_SOURCE_LABEL } from '../lib/labels.ts';
+import { panelConfigured, type ModelScope } from '../lib/models.ts';
 import { ErrorNotice } from '../components/ErrorNotice.tsx';
 import { Button, Field, Notice, Spinner, TextInput } from '../components/ui.tsx';
 import { InspectorGroup, InspectorRow } from '../components/workspace.tsx';
@@ -83,14 +84,19 @@ interface ProviderFormProps {
   /** owned by the panel so their state survives the form remount after a save */
   save: ReturnType<typeof useSaveTextProvider>;
   test: ReturnType<typeof useTestTextProvider>;
+  scope: ModelScope;
+  /** the group's settings seen by a member: shown, not editable (only the leader edits them) */
+  readOnly: boolean;
 }
 
-function ProviderForm({ view, save, test }: ProviderFormProps) {
+function ProviderForm({ view, save, test, scope, readOnly }: ProviderFormProps) {
   const hosted = useHealth().data?.hosted ?? false;
   const searchHintId = useId();
   // a hosted server only reaches public https services, so the local one is left out there
   const presets = hosted ? PROVIDER_PRESETS.filter((p) => p.base_url.startsWith('https://')) : PROVIDER_PRESETS;
   const fromEnv = view?.source === 'env';
+  /** nothing here can be edited: set by the environment, or the group's and the viewer is not the leader */
+  const locked = fromEnv || readOnly;
 
   const [baseUrl, setBaseUrl] = useState(view?.base_url ?? '');
   const [model, setModel] = useState(view?.model ?? '');
@@ -110,7 +116,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
-    if (fromEnv) return;
+    if (locked) return;
     const next: typeof errors = {};
     if (!validUrl(baseUrl)) next.base_url = '请填写完整的 http(s) 地址，例如 https://api.deepseek.com';
     if (model.trim() === '') next.model = '请填写模型名';
@@ -136,12 +142,18 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
     );
   };
 
-  const where = hosted ? '保存在服务器上本组的设置里，只用来转发本组的请求；组员和其他小组都看不到完整的 key，它也不进入项目文件和导出文件。' : '保存在本机 credentials.json（权限 0600），不进入项目目录和导出文件。';
-  const keyHint = fromEnv
-    ? '来自环境变量 STORYSCRIPT_LLM_API_KEY。'
-    : view?.key_last4
-      ? `只写不读：留空表示沿用已保存的 key。${where}`
-      : `只写不读：${where}`;
+  const where = !hosted
+    ? '保存在本机 credentials.json（权限 0600），不进入项目目录和导出文件。'
+    : scope === 'me'
+      ? '保存在服务器上你自己的账号设置里，只有你看得到；组长和组员都看不到，它也不进入项目文件和导出文件。'
+      : '保存在服务器上本组的设置里，只用来转发本组的请求；组员和其他小组都看不到完整的 key，它也不进入项目文件和导出文件。';
+  const keyHint = readOnly
+    ? '本组的 key 由组长保管，组员看不到。'
+    : fromEnv
+      ? '来自环境变量 STORYSCRIPT_LLM_API_KEY。'
+      : view?.key_last4
+        ? `只写不读：留空表示沿用已保存的 key。${where}`
+        : `只写不读：${where}`;
 
   return (
     <form onSubmit={submit} noValidate className="flex flex-col gap-3">
@@ -162,7 +174,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
             aria-describedby={describedBy}
             aria-invalid={invalid || undefined}
             value={baseUrl}
-            readOnly={fromEnv}
+            readOnly={locked}
             onChange={(e) => setBaseUrl(e.target.value)}
             placeholder="https://api.deepseek.com"
             spellCheck={false}
@@ -177,7 +189,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
           <li key={p.base_url}>
             <button
               type="button"
-              disabled={fromEnv}
+              disabled={locked}
               title={`${p.base_url} · ${p.note}（兼容性以实测为准）`}
               onClick={() => {
                 setBaseUrl(p.base_url);
@@ -215,7 +227,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
             aria-describedby={describedBy}
             aria-invalid={invalid || undefined}
             value={model}
-            readOnly={fromEnv}
+            readOnly={locked}
             onChange={(e) => setModel(e.target.value)}
             spellCheck={false}
             autoComplete="off"
@@ -230,7 +242,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
             id={id}
             aria-describedby={describedBy}
             value={researchModel}
-            readOnly={fromEnv}
+            readOnly={locked}
             maxLength={100}
             onChange={(e) => setResearchModel(e.target.value)}
             placeholder="不填就用上面的模型"
@@ -245,7 +257,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
           <input
             type="checkbox"
             checked={researchSearch}
-            disabled={fromEnv}
+            disabled={locked}
             onChange={(e) => setResearchSearch(e.target.checked)}
             aria-describedby={searchHintId}
             className="size-3.5 accent-graphite-100"
@@ -264,17 +276,17 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
             type="password"
             aria-describedby={describedBy}
             value={key}
-            readOnly={fromEnv}
+            readOnly={locked}
             disabled={clearKey}
             onChange={(e) => setKey(e.target.value)}
-            placeholder={view?.key_last4 ? `已保存，末四位 ${view.key_last4}` : '未设置'}
+            placeholder={readOnly ? '由组长保管' : view?.key_last4 ? `已保存，末四位 ${view.key_last4}` : '未设置'}
             autoComplete="new-password"
             spellCheck={false}
             className="font-mono text-xs disabled:opacity-50"
           />
         )}
       </Field>
-      {!fromEnv && view?.key_last4 ? (
+      {!locked && view?.key_last4 ? (
         <label className="-mt-1 inline-flex items-center gap-1.5 text-xs text-graphite-300">
           <input type="checkbox" checked={clearKey} onChange={(e) => setClearKey(e.target.checked)} className="size-3.5 accent-graphite-100" />
           清除已保存的 key
@@ -284,7 +296,7 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
       {save.isError ? <ErrorNotice error={save.error} context="provider" /> : null}
 
       <div className="flex flex-wrap items-center gap-2">
-        {fromEnv ? null : (
+        {locked ? null : (
           <Button type="submit" variant="primary" busy={save.isPending} disabled={!dirty}>
             {save.isPending ? null : <Save aria-hidden className="size-3.5" />}
             保存
@@ -310,21 +322,29 @@ function ProviderForm({ view, save, test }: ProviderFormProps) {
   );
 }
 
-/** Inspector groups for the text model: state, the form, and what leaves the machine. */
-export function TextProviderPanel() {
-  const providers = useProviders();
+/**
+ * Inspector groups for the text model: state, the form, and what leaves the
+ * machine. scope "me" (hosted server): the signed-in member's own model
+ * instead of the group's. A member sees the group's read-only.
+ */
+export function TextProviderPanel({ scope = 'group' }: { scope?: ModelScope }) {
+  const providers = useScopedProviders(scope);
   const health = useHealth();
-  const save = useSaveTextProvider();
-  const test = useTestTextProvider();
+  const save = useSaveTextProvider(scope);
+  const test = useTestTextProvider(scope);
   const view = providers.data?.text ?? null;
-  const configured = health.data?.text_provider_configured ?? false;
+  const readOnly = scope === 'group' && providers.data?.editable === false;
+  const configured = panelConfigured({ kind: 'text', scope, health: health.data, view, readOnly });
   const demo = health.data?.demo ?? false;
   const host = hostOf(view?.base_url);
+  const mine = scope === 'me';
+  const hosted = health.data?.hosted ?? false;
+  const target = mine ? '你自己配置的地址（在本组选了「我的模型」时）' : hosted ? '本组配置的地址（在本组选了「组的模型」时）' : '你配置的地址';
 
   return (
     <>
       <InspectorGroup
-        title="文本模型"
+        title={mine ? '我的文本模型' : '文本模型'}
         note={
           <p className="text-graphite-300">
             拆镜、实体抽取和风格研究使用 OpenAI 兼容的 chat completions 接口。未配置时这些按钮置灰，手工流程照常可用。
@@ -344,13 +364,13 @@ export function TextProviderPanel() {
               <span className="sr-only">（末四位）</span>
             </span>
           ) : (
-            <span className="text-graphite-300">未设置</span>
+            <span className="text-graphite-300">{readOnly ? '由组长保管' : '未设置'}</span>
           )}
         </InspectorRow>
       </InspectorGroup>
 
       <InspectorGroup
-        title="连接设置"
+        title={mine ? '我的文本模型 · 连接设置' : '连接设置'}
         note={
           providers.isPending ? (
             <Spinner label="正在读取配置…" />
@@ -362,16 +382,18 @@ export function TextProviderPanel() {
               view={view}
               save={save}
               test={test}
+              scope={scope}
+              readOnly={readOnly}
             />
           )
         }
       />
 
       <InspectorGroup
-        title="外发说明"
+        title={mine ? '我的文本模型 · 外发说明' : '外发说明'}
         note={
           <p className="text-graphite-300">
-            只有在你点击 AI 按钮时，才会把相关剧本段落（研究风格时是你输入的参考）发送到你配置的地址
+            只有在你点击 AI 按钮时，才会把相关剧本段落（研究风格时是你输入的参考）发送到{target}
             {host ? (
               <>
                 （当前为 <span className="font-mono text-xs text-graphite-100">{host}</span>）

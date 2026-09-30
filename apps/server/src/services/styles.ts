@@ -11,6 +11,7 @@ import type { DbPort } from '../db/port.ts';
 import { getDraft, setDraftStatus } from '../db/repos/draft.ts';
 import { deleteStyleRow, getStyle, insertStyle, listStyles, readStyleDefaults, updateStyleRow, writeStyleDefaults } from '../db/repos/style.ts';
 import { AppError } from '../http/errors.ts';
+import { assertExpectedRevision } from './revision.ts';
 
 /**
  * S3 style library: the built-in cards (core, read-only) plus the group's own
@@ -43,9 +44,10 @@ export function createStyle(
   reference: string | null = null,
   now = new Date().toISOString(),
 ): StyleCard {
+  const { expected_revision: _ignored, ...fields } = input;
   const card: StyleCard = {
     id: randomUUID(),
-    ...input,
+    ...fields,
     origin,
     reference: origin === 'researched' ? reference : null,
     unverified: origin === 'researched',
@@ -66,9 +68,11 @@ function requireOwnStyle(db: DbPort, id: string): StyleCard {
 export function updateStyle(db: DbPort, id: string, input: StyleCardInput, now = new Date().toISOString()): StyleCard {
   return db.tx(() => {
     const card = requireOwnStyle(db, id);
-    const next: StyleCard = { ...card, ...input, updated_at: now };
+    const { expected_revision, ...fields } = input;
+    assertExpectedRevision(`风格卡「${card.name}」`, card.revision, expected_revision);
+    const next: StyleCard = { ...card, ...fields, updated_at: now };
     updateStyleRow(db, next);
-    return next;
+    return getStyle(db, id)!;
   });
 }
 

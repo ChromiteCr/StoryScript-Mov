@@ -9,15 +9,17 @@ import { api, createProject, importAndBreakdownBookshop, ROOT, signIn, startApp,
 
 /**
  * S4c (demo replay, nothing leaves the machine): the boards page after a
- * renderer upgrade. A project of 12 boards, one edited by hand, every board
- * marked as drawn by an older renderer → the page offers 用新画法重排 11 个分镜
- * → one click → 重排了 11 个，跳过手改的 1 个, every untouched shot has a new
- * version on the current renderer and the edited one is exactly as it was →
- * nothing left to offer, and the API agrees (a second call changes nothing).
- * Then the board editor: the pose list has the four new poses, 换个动作 shows
- * up exactly when core has more than one gesture for the pose and steps through
- * them; the shot editor offers the new props and places; a draft with variety
- * warnings shows them under 镜头变化 without blocking 应用所选.
+ * renderer upgrade. A project of 14 boards (12 in scene 1, 2 made by hand in
+ * scene 2), one of them edited by hand, every board marked as drawn by an older
+ * renderer → the page offers 用新画法重排本场 2 个 and 全部 13 个 → the scene
+ * button lays out the 2 of scene 2 only → the rest is offered as one button →
+ * 重排了 11 个，跳过手改的 1 个: every untouched shot has a new version on the
+ * current renderer and the edited one is exactly as it was → nothing left to
+ * offer, and the API agrees (a further call changes nothing). Then the board
+ * editor: the pose list has the four new poses, 换个动作 shows up exactly when
+ * core has more than one gesture for the pose and steps through them; the shot
+ * editor offers the new props and places; a draft with variety warnings shows
+ * them under 镜头变化 without blocking 应用所选.
  */
 
 const SCENE2 = (JSON.parse(readFileSync(join(ROOT, 'fixtures', 'replay', '01-bookshop.breakdown-v1.scene-2.json'), 'utf8')) as { output_json: BreakdownOutput }).output_json;
@@ -50,21 +52,29 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
   const nav = page.getByRole('navigation', { name: '工作流程' });
   const cards = page.locator('button[data-shot]');
   const oldNotice = page.getByText(/个分镜还是旧画法排的版/);
+  const relayoutButtons = page.getByRole('button', { name: /用新画法重排/ });
   let editedShotId = '';
+  const scene2Shots: string[] = [];
 
-  await test.step('12 boards on the current renderer: nothing to lay out again', async () => {
+  await test.step('14 boards on the current renderer: nothing to lay out again', async () => {
+    // two shots made by hand in scene 2 (fields from the recorded breakdown; their boards are laid out at once)
+    const scenes = (await api<{ scenes: { id: string }[] }>(page, 'GET', '/api/v1/scripts/current')).scenes;
+    for (const shot of SCENE2.shots.slice(0, 2)) {
+      const made = await api<{ id: string }>(page, 'POST', '/api/v1/shots', { scene_id: scenes[1]!.id, fields: shot, manual_note: '补拍' });
+      scene2Shots.push(made.id);
+    }
     await nav.getByRole('link', { name: /分镜/ }).click();
-    await expect(cards).toHaveCount(12);
+    await expect(cards).toHaveCount(14);
     await expect(cards.first().locator('img')).toBeVisible();
     await expect(oldNotice).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /用新画法重排/ })).toHaveCount(0);
+    await expect(relayoutButtons).toHaveCount(0);
     const list = await boardsOf(page);
     expect(list.every((b) => b.version === 1 && b.renderer_version === RENDERER_VERSION)).toBe(true);
   });
 
   await test.step('one board is edited by hand, then the project looks like one from before the upgrade', async () => {
     const list = await boardsOf(page);
-    const target = list.find((b) => b.spec.scene.subjects.length >= 2) ?? list[3]!;
+    const target = list.find((b) => b.scene_id === list[0]!.scene_id && b.spec.scene.subjects.length >= 2) ?? list[3]!;
     editedShotId = target.shot_id;
     const spec: BoardSpec = structuredClone(target.spec);
     spec.camera.focal_mm = 85;
@@ -79,27 +89,53 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
       db.close();
     }
     await page.reload();
-    await expect(cards).toHaveCount(12);
+    await expect(cards).toHaveCount(14);
   });
 
-  await test.step('the notice and one button for the 11 that can be laid out again', async () => {
-    await expect(page.getByText('有 11 个分镜还是旧画法排的版')).toBeVisible();
-    const button = page.getByRole('button', { name: '用新画法重排 11 个分镜（手改过的不动）' });
-    await expect(button).toBeEnabled();
-    // the scene holds all of them: one button, not one per scope
-    await expect(page.getByRole('button', { name: /用新画法重排/ })).toHaveCount(1);
+  await test.step('scene 2 is shown: one button for it, one for everything', async () => {
+    await page.locator(`button[data-shot="${scene2Shots[0]}"]`).click();
+    await expect(page.getByText('有 13 个分镜还是旧画法排的版')).toBeVisible();
+    const here = page.getByRole('button', { name: '用新画法重排本场 2 个分镜（手改过的不动）' });
+    const everything = page.getByRole('button', { name: '用新画法重排全部 13 个分镜（手改过的不动）' });
+    await expect(here).toBeEnabled();
+    await expect(everything).toBeEnabled();
+    await expect(relayoutButtons).toHaveCount(2);
     await page.screenshot({ path: test.info().outputPath('relayout-offer.png') });
 
+    // a phone-sized window: the longest label still fits the screen
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect
+      .poll(async () => {
+        const box = await everything.boundingBox();
+        return box !== null && box.x >= 0 && box.x + box.width <= 390;
+      })
+      .toBe(true);
+    await page.screenshot({ path: test.info().outputPath('relayout-offer-phone.png') });
+    await page.setViewportSize({ width: 1440, height: 900 });
+
+    await here.click();
+    await expect(page.getByText('重排了 2 个，跳过手改的 0 个')).toBeVisible();
+    // only scene 2 changed; what is left is all in scene 1, so one button without a scope
+    await expect(page.getByText('有 11 个分镜还是旧画法排的版')).toBeVisible();
+    await expect(relayoutButtons).toHaveCount(1);
+    for (const id of scene2Shots) expect((await versionsOf(page, id)).map((v) => v.version)).toEqual([1, 2]);
+    expect((await boardsOf(page)).filter((b) => b.version === 2 && !b.user_edited).map((b) => b.shot_id).sort()).toEqual([...scene2Shots].sort());
+    await page.getByRole('button', { name: '知道了' }).click();
+  });
+
+  await test.step('the rest of the project: 11 laid out again, the edited one skipped', async () => {
+    const button = page.getByRole('button', { name: '用新画法重排 11 个分镜（手改过的不动）' });
+    await expect(button).toBeEnabled();
     await button.click();
     await expect(page.getByText('重排了 11 个，跳过手改的 1 个')).toBeVisible();
     await expect(oldNotice).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /用新画法重排/ })).toHaveCount(0);
+    await expect(relayoutButtons).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('relayout-done.png') });
   });
 
   await test.step('the server agrees: new versions on the current renderer, the edited board untouched', async () => {
     const list = await boardsOf(page);
-    expect(list).toHaveLength(12);
+    expect(list).toHaveLength(14);
     for (const b of list) {
       const vs = await versionsOf(page, b.shot_id);
       expect(vs.map((v) => v.version), b.shot_code).toEqual([1, 2]);
@@ -111,20 +147,23 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
         expect(vs[0]!.renderer_version).toBe(OLD_RENDERER);
       }
     }
-    // a second request has nothing to do
+    // a further request has nothing to do
     const again = await api<RelayoutBoardsResult>(page, 'POST', '/api/v1/boards/relayout', { scene_id: null });
-    expect(again).toEqual({ relaid: 0, kept_edited: 1, already_current: 11 });
+    expect(again).toEqual({ relaid: 0, kept_edited: 1, already_current: 13 });
 
     await page.getByRole('button', { name: '知道了' }).click();
     await expect(page.getByText('重排了 11 个')).toHaveCount(0);
     await page.reload();
-    await expect(cards).toHaveCount(12);
+    await expect(cards).toHaveCount(14);
     await expect(oldNotice).toHaveCount(0);
   });
 
   await test.step('the pose list has the four new poses; 换个动作 follows what core offers', async () => {
     const list = await boardsOf(page);
-    const index = list.findIndex((b) => b.shot_id !== editedShotId && b.spec.scene.subjects.length >= 1);
+    // a board whose first person has several gestures, if core offers any (else any board with a person)
+    const withPerson = (b: BoardView) => b.shot_id !== editedShotId && b.spec.scene.subjects.length >= 1;
+    let index = list.findIndex((b) => withPerson(b) && gestureCount(b.spec.scene.subjects[0]!.pose) > 1);
+    if (index < 0) index = list.findIndex(withPerson);
     expect(index).toBeGreaterThanOrEqual(0);
     const board = list[index]!;
     const person = board.spec.scene.subjects[0]!;
@@ -145,6 +184,7 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
       await change.click();
       await expect(page.getByText('有未保存的修改')).toBeVisible();
       await expect(page.getByText(`${((from + 1) % n) + 1} / ${n}`, { exact: true })).toBeVisible();
+      await page.screenshot({ path: test.info().outputPath('gesture.png') });
       await page.getByRole('button', { name: '保存为新版本' }).click();
       await expect(page.getByText('v3 · 手动调整').first()).toBeVisible();
       const saved = (await boardsOf(page))[index]!;
@@ -157,7 +197,7 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
     await expect(page.getByText('有未保存的修改')).toBeVisible();
     await expect(page.getByRole('region', { name: `镜 ${board.shot_code} 分镜稿` }).locator('img').first()).toBeVisible();
     await expect(change).toHaveCount(gestureCount('lie') > 1 ? 1 : 0);
-    await page.keyboard.press('ControlOrMeta+z');
+    await page.getByRole('button', { name: /^撤销：改姿势/ }).click();
     await expect(pose).toHaveValue(person.pose);
   });
 

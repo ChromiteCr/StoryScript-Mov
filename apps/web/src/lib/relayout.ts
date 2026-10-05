@@ -47,6 +47,39 @@ export function relayoutLabel(n: number, scope: 'only' | 'scene' | 'all'): strin
   return `用新画法重排${lead}${n} 个分镜（手改过的不动）`;
 }
 
+export interface RelayoutButton {
+  /** scene id, null = every scene */
+  target: string | null;
+  label: string;
+}
+
+export interface RelayoutOffer {
+  /** boards the buttons together can lay out again */
+  relayable: number;
+  /** of those, how many wear an adopted AI picture */
+  withAiPicture: number;
+  buttons: RelayoutButton[];
+}
+
+/**
+ * What the boards page offers, null when there is nothing to lay out again. One
+ * button when this scene holds all of it (or none of it: the button then covers
+ * the other scenes), two (this scene, every scene) when both are different.
+ */
+export function relayoutOffer(boards: readonly BoardLike[], sceneId: string, version: string = RENDERER_VERSION): RelayoutOffer | null {
+  const all = relayoutCounts(boards, null, version);
+  if (all.relayable === 0) return null;
+  const scene = relayoutCounts(boards, sceneId, version);
+  const both = scene.relayable > 0 && all.relayable > scene.relayable;
+  const buttons: RelayoutButton[] = both
+    ? [
+        { target: sceneId, label: relayoutLabel(scene.relayable, 'scene') },
+        { target: null, label: relayoutLabel(all.relayable, 'all') },
+      ]
+    : [{ target: null, label: relayoutLabel(all.relayable, 'only') }];
+  return { relayable: all.relayable, withAiPicture: all.withAiPicture, buttons };
+}
+
 /** After the server answered: "重排了 5 个，跳过手改的 1 个" */
 export function relayoutResultLine(r: RelayoutBoardsResult): string {
   return `重排了 ${r.relaid} 个，跳过手改的 ${r.kept_edited} 个`;

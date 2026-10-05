@@ -47,7 +47,8 @@ import type { EditorApi } from './useEditor.ts';
 
 /**
  * Right-hand inspector of the board page: everything that is not dragged on
- * the canvas. Person (facing, pose, depth, tone, silhouette, layer), camera
+ * the canvas. Person (facing, pose, 换个动作 for the pose's gesture variants,
+ * depth, tone, silhouette, layer), camera
  * (focal with "keep shot size", height, tilt, roll, aspect, 1.43 guide) and
  * annotations (label text, arrow mode, whole-layer offset). Sliders preview
  * while dragged (the canvas shows structure) and commit one undo step on

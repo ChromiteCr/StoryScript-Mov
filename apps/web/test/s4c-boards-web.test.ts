@@ -5,7 +5,7 @@ import { defaultSelection, parseBreakdownDraft } from '../src/lib/drafts.ts';
 import { gestureOf, nextGesture, setPose, setTone, type GestureTables } from '../src/lib/board-editor.ts';
 import { ENV_LABEL, POSE_LABEL, PROP_LABEL } from '../src/lib/labels.ts';
 import { polishModeNote } from '../src/lib/polish.ts';
-import { relayoutCounts, relayoutLabel, relayoutResultLine } from '../src/lib/relayout.ts';
+import { relayoutCounts, relayoutLabel, relayoutOffer, relayoutResultLine } from '../src/lib/relayout.ts';
 import { isVarietyIssue, splitVariety, VARIETY_BREAKDOWN_HINT, VARIETY_POLISH_HINT, VARIETY_TITLE, varietyLines } from '../src/lib/variety.ts';
 import { renderKey } from '../src/views/boards/images.ts';
 import { overlayKey } from '../src/views/boards/raster-layers.ts';
@@ -54,6 +54,30 @@ describe('relayout: what the button counts', () => {
     expect(relayoutLabel(12, 'only')).toBe('用新画法重排 12 个分镜（手改过的不动）');
     expect(relayoutLabel(4, 'scene')).toBe('用新画法重排本场 4 个分镜（手改过的不动）');
     expect(relayoutLabel(12, 'all')).toBe('用新画法重排全部 12 个分镜（手改过的不动）');
+  });
+
+  it('the offer: nothing when there is nothing to do, one button when this scene holds it all, two when scopes differ', () => {
+    const only = [row(SCENE_A, OLD), row(SCENE_A, OLD), row(SCENE_A, NEW), row(SCENE_A, OLD, true)];
+    expect(relayoutOffer(only.map((r) => ({ ...r, renderer_version: NEW })), SCENE_A, NEW)).toBeNull();
+    expect(relayoutOffer([], SCENE_A, NEW)).toBeNull();
+    // this scene has all of them: one button over every scene
+    expect(relayoutOffer(only, SCENE_A, NEW)).toEqual({
+      relayable: 2,
+      withAiPicture: 0,
+      buttons: [{ target: null, label: '用新画法重排 2 个分镜（手改过的不动）' }],
+    });
+    // another scene has some, this one none: still one button
+    expect(relayoutOffer(only, SCENE_B, NEW)?.buttons).toEqual([{ target: null, label: '用新画法重排 2 个分镜（手改过的不动）' }]);
+    // both scenes have some: this scene first, then every scene
+    const both = [...only, row(SCENE_B, OLD, false, uuid()), row(SCENE_B, OLD)];
+    expect(relayoutOffer(both, SCENE_B, NEW)).toEqual({
+      relayable: 4,
+      withAiPicture: 1,
+      buttons: [
+        { target: SCENE_B, label: '用新画法重排本场 2 个分镜（手改过的不动）' },
+        { target: null, label: '用新画法重排全部 4 个分镜（手改过的不动）' },
+      ],
+    });
   });
 
   it('the result line names both counts', () => {

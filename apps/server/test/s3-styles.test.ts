@@ -163,7 +163,7 @@ describe('breakdown with a style and a level', () => {
     return imported.scenes[0]!.id;
   }
 
-  test('v2 prompt: style and level in the messages; draft marked breakdown-v2', async () => {
+  test('style and level in the messages; draft marked breakdown-v3 (S4c: v3 replaced v2)', async () => {
     const id = await sceneId();
     fake.enqueue(reply.json({ shots: SCENE1.shots.slice(0, 2) }));
     const res = await app.post<{ job_id: string }>(`/api/v1/scenes/${id}/breakdown`, {
@@ -181,17 +181,19 @@ describe('breakdown with a style and a level', () => {
     expect(sent.messages![0]!.content).toContain('【难度：挑战】');
     expect(sent.messages![1]!.content).toContain('【风格】赛道贴地');
     const detail = await app.get<DraftDetail>(`/api/v1/drafts/${job.result_ref}`);
-    expect(detail.data.draft.prompt_version).toBe('breakdown-v2');
+    expect(detail.data.draft.prompt_version).toBe('breakdown-v3');
   });
 
-  test('old-style requests (no style, no level) still send breakdown-v1', async () => {
+  test('old-style requests (no style, no level) send breakdown-v3 at 稳妥 (S4c; v1 is --demo only)', async () => {
     const id = await sceneId();
     fake.enqueue(reply.json({ shots: SCENE1.shots.slice(0, 2) }));
     const res = await app.post<{ job_id: string }>(`/api/v1/scenes/${id}/breakdown`, { technique_id: null, reference_note: null, max_shots: 8, target_seconds: null });
     const job = await waitJob(app, res.data.job_id);
     const detail = await app.get<DraftDetail>(`/api/v1/drafts/${job.result_ref}`);
-    expect(detail.data.draft.prompt_version).toBe('breakdown-v1');
-    expect(fake.chatRequests()[0]!.body!.messages![0]!.content).toContain('宁可少而准');
+    expect(detail.data.draft.prompt_version).toBe('breakdown-v3');
+    const system = fake.chatRequests()[0]!.body!.messages![0]!.content;
+    expect(system).toContain('【难度：稳妥】');
+    expect(system).toContain('宁可少而准');
   });
 
   test('an unknown style is a 400 before anything is sent', async () => {

@@ -3,7 +3,7 @@ import { PolishMode, type Shot, type StyleLevel } from '@storyscript/contracts';
 import { POLISH_MODE_HINT, POLISH_MODE_LABEL } from '@storyscript/core';
 import { Sparkles } from 'lucide-react';
 import { isJobInFlight, POLISH_SLOT, trackJob, useTrackedJob } from '../../lib/jobs.ts';
-import { polishAiReason, polishOutgoingSentence, POLISH_MAX } from '../../lib/polish.ts';
+import { polishAiReason, polishModeNote, polishOutgoingSentence, POLISH_MAX } from '../../lib/polish.ts';
 import { useJob, useShots } from '../../lib/queries.ts';
 import { useRequestPolish } from '../../lib/queries-polish.ts';
 import { useStyles } from '../../lib/queries-style.ts';
@@ -17,15 +17,16 @@ import { LevelRow, StyleSelectRow } from './StyleControls.tsx';
 /** 润色要求: free text the model gets as data (contract limit 500). */
 const INSTRUCTION_MAX = 500;
 
-/** 方式: three toggle buttons and the chosen one's hint (same layout as the style controls' rows). */
-function ModeRow({ value, onChange, disabled }: { value: PolishMode; onChange: (mode: PolishMode) => void; disabled?: boolean }) {
+/** 方式: one toggle button per way (PolishMode.options) and the chosen one's hint (same layout as the style controls' rows). */
+function ModeRow({ value, shots, onChange, disabled }: { value: PolishMode; shots: number; onChange: (mode: PolishMode) => void; disabled?: boolean }) {
   const labelId = useId();
+  const note = polishModeNote(value, shots);
   return (
     <div className="grid grid-cols-[72px_minmax(0,1fr)] items-start gap-x-2 gap-y-0.5">
       <span id={labelId} className="text-xs leading-6 text-graphite-300">
         方式
       </span>
-      <div role="group" aria-labelledby={labelId} className="flex gap-1">
+      <div role="group" aria-labelledby={labelId} className="flex flex-wrap gap-1">
         {PolishMode.options.map((m) => (
           <button
             key={m}
@@ -43,12 +44,13 @@ function ModeRow({ value, onChange, disabled }: { value: PolishMode; onChange: (
         ))}
       </div>
       <p className="col-start-2 text-xs text-graphite-300">{POLISH_MODE_HINT[value]}</p>
+      {note ? <p className="col-start-2 text-xs text-graphite-300">{note}</p> : null}
     </div>
   );
 }
 
 /**
- * AI 润色 request (S3a): which shots, how (细化 / 优化 / 重写), the user's
+ * AI 润色 request (S3a): which shots, how (细化 / 优化 / 重写 / 丰富变化), the user's
  * wish, the style and difficulty. Submitting starts one job followed in the
  * shot table (POLISH_SLOT); its result is a draft, never a write.
  */
@@ -135,7 +137,7 @@ export function PolishDialog({ shotIds, onClose }: { shotIds: readonly string[];
         ) : null}
         {tooMany ? <Notice tone="warn" title={`一次最多润色 ${POLISH_MAX} 个镜头`}>先取消几个再来。</Notice> : null}
 
-        <ModeRow value={mode} onChange={setMode} disabled={request.isPending} />
+        <ModeRow value={mode} shots={targets.length} onChange={setMode} disabled={request.isPending} />
 
         <Field
           label="润色要求（可不填）"

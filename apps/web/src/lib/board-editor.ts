@@ -3,7 +3,9 @@ import {
   arrowWorldHeights,
   cameraBasis,
   DEPTH_FACTOR,
+  effectiveGesture,
   frameSize,
+  gestureCount,
   LOOK_WIDE_PENCIL,
   NEAR_M,
   placeArrow,
@@ -194,7 +196,40 @@ export function setFacing8(spec: BoardSpec, id: string, rel: Facing8): BoardSpec
 
 export function setPose(spec: BoardSpec, id: string, pose: Pose): BoardSpec {
   return withSubject(spec, id, (s) => {
+    if (s.pose !== pose && s.gesture != null) s.gesture = null; // a gesture belongs to its pose: back to the seed's pick
     s.pose = pose;
+  });
+}
+
+/** How a pose's gesture variants are read: core's tables, or others injected by a test. */
+export interface GestureTables {
+  count(pose: Pose): number;
+  effective(s: { id: string; pose: Pose; gesture?: number | null }, seed: number): number;
+}
+/** BoardSubject.gesture is 0…15 in the contract */
+const GESTURE_MAX = 15;
+const CORE_GESTURES: GestureTables = { count: gestureCount, effective: effectiveGesture };
+
+/** Which variant a person is drawn with, out of how many; null when the pose has only one (nothing to change). */
+export function gestureOf(spec: BoardSpec, id: string, tables: GestureTables = CORE_GESTURES): { index: number; count: number } | null {
+  const s = spec.scene.subjects.find((x) => x.id === id);
+  if (!s) return null;
+  const count = Math.min(tables.count(s.pose), GESTURE_MAX + 1);
+  if (count <= 1) return null;
+  const index = tables.effective(s, spec.seed);
+  return { index: ((index % count) + count) % count, count };
+}
+
+/**
+ * 换个动作: the next gesture variant of the person's pose, wrapping around,
+ * starting from the one they are drawn with now (so the first click always
+ * changes the picture). Unchanged when the pose has a single variant.
+ */
+export function nextGesture(spec: BoardSpec, id: string, tables: GestureTables = CORE_GESTURES): BoardSpec {
+  const g = gestureOf(spec, id, tables);
+  if (!g) return spec;
+  return withSubject(spec, id, (s) => {
+    s.gesture = (g.index + 1) % g.count;
   });
 }
 

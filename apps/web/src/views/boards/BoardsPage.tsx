@@ -22,6 +22,7 @@ import { EmptyState, PageHeader, Panel, Workspace } from '../../components/works
 import { BoardInspector } from './BoardInspector.tsx';
 import { BoardMain } from './BoardMain.tsx';
 import { BoardPrint, type PrintKind } from './BoardPrint.tsx';
+import { RelayoutBar } from './RelayoutBar.tsx';
 import { ShotStrip, type SceneGroup } from './ShotStrip.tsx';
 import { useBoardEditor } from './useEditor.ts';
 
@@ -392,6 +393,7 @@ function BoardsWorkbench({
       onKeep={onKeep}
       keeping={keep.isPending}
       staleError={regen.error ?? keep.error}
+      relayout={<RelayoutBar boards={list} sceneId={current.scene_id} />}
     />
   );
 

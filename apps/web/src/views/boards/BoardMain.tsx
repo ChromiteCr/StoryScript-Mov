@@ -49,6 +49,8 @@ export interface BoardMainProps {
   onKeep: () => void;
   keeping: boolean;
   staleError: unknown;
+  /** S4c: the "用新画法重排" notice, above everything else in the panel */
+  relayout?: ReactNode;
 }
 
 function Topview({ spec }: { spec: BoardView['spec'] }) {
@@ -229,6 +231,7 @@ export function BoardMain(p: BoardMainProps) {
       </PanelToolbar>
 
       <div className="flex flex-col gap-3 p-3">
+        {p.relayout}
         {editor.conflict && !readOnly && !isRevisionConflict(p.saveError) ? (
           <Notice tone="warn" title={`这个镜头的分镜已有更新的版本 v${editor.conflict.version}`}>
             <p>你在这里的修改还没有保存。载入最新版本会放弃这些修改。</p>

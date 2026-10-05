@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import type { BoardSpec, RenderMode } from '@storyscript/contracts';
-import { contentHash, renderBoard, structureHash } from '@storyscript/core';
+import { contentHash, PICTURE_VERSION, renderBoard, structureHash } from '@storyscript/core';
 
 /**
  * Board pictures in the browser: core renderBoard → SVG string → Blob URL →
  * <img> (CSP: img-src 'self' blob:, and no markup is injected into the page).
  *
- * Cache: key = mode + structure_hash (picture layer) + overlay hash + code, so
- * an unchanged board is never rendered twice. LRU over blob URLs; the
+ * Cache: key = mode + PICTURE_VERSION + structure_hash (picture layer) +
+ * overlay hash + code, so an unchanged board is never rendered twice. The
+ * picture version is in the key because structure_hash is deliberately
+ * independent of how the pictures are drawn: new drawing code (S4c figures and
+ * sets) never serves a picture the old code made. LRU over blob URLs; the
  * oldest URLs are revoked. Drag previews use a separate transient URL that is
  * revoked as soon as the next frame replaces it (never cached).
  * Thumbnails render lazily (IntersectionObserver) through a queue that runs
@@ -26,7 +29,7 @@ const cache = new Map<string, string>();
 
 export function renderKey(r: RenderRequest): string {
   const overlay = r.overlay !== false;
-  return [r.mode, structureHash(r.spec), overlay ? contentHash(r.spec.overlay) : 'no-overlay', r.code ?? ''].join('|');
+  return [r.mode, PICTURE_VERSION, structureHash(r.spec), overlay ? contentHash(r.spec.overlay) : 'no-overlay', r.code ?? ''].join('|');
 }
 
 export function renderSvg(r: RenderRequest): string {

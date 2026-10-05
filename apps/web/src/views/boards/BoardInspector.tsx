@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import type { BoardArrow, BoardSpec, FrameFormat, Pose, ShotFields, Silhouette } from '@storyscript/contracts';
+import { Pose, type BoardArrow, type BoardSpec, type FrameFormat, type ShotFields, type Silhouette } from '@storyscript/contracts';
 import { lintBoard } from '@storyscript/core';
 import { CircleAlert, TriangleAlert } from 'lucide-react';
 import {
@@ -8,6 +8,8 @@ import {
   FACING8,
   FOCAL_MAX,
   FOCAL_MIN,
+  gestureOf,
+  nextGesture,
   setArrowMode,
   setAspect,
   setCameraHeight,
@@ -53,7 +55,7 @@ import type { EditorApi } from './useEditor.ts';
  * ones are about the version being edited, 本版 / 全部 filters the threads.
  */
 
-const POSES = Object.keys(POSE_LABEL) as Pose[];
+const POSES = Pose.options;
 const SILHOUETTES = Object.keys(SILHOUETTE_LABEL) as Silhouette[];
 const BANDS: DepthBand[] = ['fg', 'mg', 'bg'];
 
@@ -168,6 +170,7 @@ export function BoardInspector({ editor, readOnly, fields, keepSize, onKeepSize,
   const end = (label: string) => () => editor.endPreview(label);
 
   const facing = subject ? facing8Of(spec, subject.id) : null;
+  const gesture = subject ? gestureOf(spec, subject.id) : null;
   const band = subject ? depthBandOf(spec, subject.id) : null;
   const issues = fields ? lintBoard(spec, fields, { scene_sides: sceneSides }) : [];
   const off = spec.overlay.offset;
@@ -222,6 +225,18 @@ export function BoardInspector({ editor, readOnly, fields, keepSize, onKeepSize,
                 ))}
               </SelectInput>
             </InspectorRow>
+            {gesture && subject ? (
+              <InspectorRow label="手势">
+                <div className="flex items-center gap-2">
+                  <Button size="sm" disabled={readOnly} onClick={() => commit('换个动作', (s) => nextGesture(s, subject.id))} title="在这个姿势的几种手势里换下一种（插兜、抱臂、叉腰……）">
+                    换个动作
+                  </Button>
+                  <span className="text-xs text-graphite-300 tabular-nums" aria-label={`第 ${gesture.index + 1} 种，共 ${gesture.count} 种`}>
+                    {gesture.index + 1} / {gesture.count}
+                  </span>
+                </div>
+              </InspectorRow>
+            ) : null}
             <InspectorRow label="景深">
               <SelectInput
                 aria-label="景深"

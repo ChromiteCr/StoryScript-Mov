@@ -1,5 +1,5 @@
 import type { BoardSpec } from '@storyscript/contracts';
-import { contentHash, frameSize, renderBoard, structureHash } from '@storyscript/core';
+import { contentHash, frameSize, PICTURE_VERSION, renderBoard, structureHash } from '@storyscript/core';
 
 /**
  * Layers drawn over an AI raster (FR-12): the vector annotation layer on its
@@ -31,13 +31,13 @@ export function renderOverlayOnly(spec: BoardSpec, code: string | null): string 
   return overlayOnlySvg(renderBoard(spec, 'pencil', { overlay: true, code }), spec);
 }
 
-// Blob URLs of overlay-only renders, keyed like images.ts (picture hash +
-// overlay hash + code). Small LRU; the oldest URLs are revoked.
+// Blob URLs of overlay-only renders, keyed like images.ts (picture version +
+// picture hash + overlay hash + code). Small LRU; the oldest URLs are revoked.
 const MAX_URLS = 24;
 const cache = new Map<string, string>();
 
 export function overlayKey(spec: BoardSpec, code: string | null): string {
-  return ['overlay-only', structureHash(spec), contentHash(spec.overlay), spec.frame.aspect, code ?? ''].join('|');
+  return ['overlay-only', PICTURE_VERSION, structureHash(spec), contentHash(spec.overlay), spec.frame.aspect, code ?? ''].join('|');
 }
 
 export function overlayOnlyUrl(spec: BoardSpec, code: string | null): string {

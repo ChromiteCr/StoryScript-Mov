@@ -17,6 +17,7 @@ import {
 import { useApplyPolish } from '../../lib/queries-polish.ts';
 import { useStyles } from '../../lib/queries-style.ts';
 import { useDiscardDraft, useDraft, useShots } from '../../lib/queries.ts';
+import { isVarietyIssue, VARIETY_POLISH_HINT } from '../../lib/variety.ts';
 import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { ActorLabel } from '../../components/ActorLabel.tsx';
@@ -24,6 +25,7 @@ import { Button, Notice, Spinner, Tag } from '../../components/ui.tsx';
 import { Panel } from '../../components/workspace.tsx';
 import { ClaimList } from './DraftDiffDialog.tsx';
 import { useWorkspace } from './context.ts';
+import { VarietyNotice } from './VarietyNotice.tsx';
 
 /**
  * Polish draft review (S3a, INV-03): one card per shot, 改前 (the shot as it
@@ -64,6 +66,8 @@ function ItemCard({ item, checked, disabled, claims, onToggle }: { item: PolishI
   const scene = item.shot ? ws.script.scenes.find((s) => s.id === item.shot?.scene_id) : undefined;
   const inputId = `polish-item-${item.index}`;
   const blockedId = `${inputId}-blocked`;
+  // variety warnings (S4c) are listed once, under 「镜头变化」 above the cards
+  const warnings = item.warnings.filter((x) => !isVarietyIssue(x));
 
   return (
     <li
@@ -119,7 +123,7 @@ function ItemCard({ item, checked, disabled, claims, onToggle }: { item: PolishI
             </p>
           ) : null}
 
-          {item.errors.length > 0 || item.warnings.length > 0 || item.blockedReason ? (
+          {item.errors.length > 0 || warnings.length > 0 || item.blockedReason ? (
             <ul id={item.blockedReason ? blockedId : undefined} className="mt-2 flex flex-col gap-1">
               {item.errors.map((x, i) => (
                 <li key={`e${i}`} className="flex items-start gap-1.5 text-xs text-graphite-100">
@@ -127,7 +131,7 @@ function ItemCard({ item, checked, disabled, claims, onToggle }: { item: PolishI
                   <span className="min-w-0 pt-0.5 break-words">{x.message}</span>
                 </li>
               ))}
-              {item.warnings.map((x, i) => (
+              {warnings.map((x, i) => (
                 <li key={`w${i}`} className="flex items-start gap-1.5 text-xs text-graphite-100">
                   <Tag tone="warn">提示</Tag>
                   <span className="min-w-0 pt-0.5 break-words">{x.message}</span>
@@ -166,6 +170,7 @@ function DiffBody({ detail, onClose, onRefresh, refreshing }: { detail: DraftDet
   const pending = draft.status === 'pending';
   const busy = apply.isPending || discard.isPending;
   const blocked = items.filter((i) => !i.selectable).length;
+  const otherDraftIssues = parsed.draftIssues.filter((x) => !isVarietyIssue(x));
   const conflict = isRevisionConflict(apply.error);
   const usage = usageText(draft.usage);
   const { scope } = parsed;
@@ -266,9 +271,10 @@ function DiffBody({ detail, onClose, onRefresh, refreshing }: { detail: DraftDet
         >
           <div className="mx-auto flex w-full max-w-5xl flex-col gap-2">
             {!pending ? <Notice tone="info" title={`这份草案已${DRAFT_STATUS_LABEL[draft.status]}，不能再应用。`} /> : null}
-            {parsed.draftIssues.length > 0 ? (
+            <VarietyNotice issues={draft.issues} hint={VARIETY_POLISH_HINT} />
+            {otherDraftIssues.length > 0 ? (
               <ul className="flex flex-col gap-1">
-                {parsed.draftIssues.map((x, i) => (
+                {otherDraftIssues.map((x, i) => (
                   <li key={i} className="flex items-start gap-1.5 text-sm text-graphite-100">
                     <Tag tone={x.level === 'error' ? 'danger' : 'warn'}>{x.level === 'error' ? '错误' : '提示'}</Tag>
                     <span className="min-w-0 break-words">{x.message}</span>

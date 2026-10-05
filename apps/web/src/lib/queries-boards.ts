@@ -99,6 +99,19 @@ export function useRegenerateBoard() {
   });
 }
 
+/**
+ * S4c 用新画法重排: lay out again every board of the scene (null = all) that an
+ * older renderer drew and nobody edited. The list, and the shown shot's
+ * versions, are refetched: new versions replace the old as the newest.
+ */
+export function useRelayoutBoards() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (sceneId: string | null) => saving(() => api.call('relayoutBoards', { scene_id: sceneId })),
+    onSuccess: () => qc.invalidateQueries({ queryKey: boardKeys.all }),
+  });
+}
+
 export function isRevisionConflict(e: unknown): boolean {
   return isApiClientError(e) && e.code === 'REVISION_CONFLICT';
 }

@@ -5,7 +5,10 @@
  * (buildFrameScene), so the composition is identical.
  *
  * Tone rules (docs/PLAN.md, 分镜管线 step 5):
- *  - people by depth band: fg 3 / mg 2 / bg 1 (tone_override wins);
+ *  - people by depth band: fg 3 / mg 2 / bg 1 (tone_override wins), each part
+ *    offset by its material (S4c): skin −1, hair +1, clothing by the
+ *    character's wardrobe −½ / 0 / +½, shoes +1; a foreground figure takes
+ *    only 0.3 of the offsets, so it stays a near-black silhouette;
  *  - boxes by face vs light: lit top 0 (paper), lit side 1, side 2, away 3
  *    (environment shell: lit 0, else 1);
  *  - ground: near → far 2 → 1 → 0 in laid-in blocks (aerial perspective), sky 0;
@@ -21,7 +24,8 @@
 import type { BoardProp, BoardSpec } from '@storyscript/contracts';
 import { NEAR_M, projectPoint, projectPolygon, toCamera, unprojectToPlane } from './camera.ts';
 import { clamp, clipPolygon, clipPolygonRect, convexHull, DEG, dot3, lerp, mix2, polygonArea, type V2, type V3 } from './math.ts';
-import { poseTopY } from './puppets.ts';
+import { CLOTH_OFFSET, type FigureStyle } from './puppet-style.ts';
+import { poseTopY, type PuppetMaterial } from './puppets.ts';
 import { fillPolygon, makeGrid, type Grid } from './raster.ts';
 import { buildFrameScene, propWorldBoxes, type FrameScene, type PropItem, type SubjectItem } from './scene.ts';
 
@@ -53,14 +57,29 @@ export interface PlanEdge {
 
 /**
  * One toned patch of a figure, in painter order: the lit side of a puppet
- * part at the figure's tone ('body'), or the part in shade ('shade', one tone
- * darker — form shading per limb). The head is one form like the rest: no
- * face plane, no features; the facing reads from a faint guide line.
+ * part at its tone ('body'), or the part in shade ('shade', one tone darker —
+ * form shading per limb). A part's tone is the figure's band tone plus its
+ * material's offset (`base`, fractional).
  */
 export interface FigureRegion {
   pts: V2[];
   tone: number;
   kind: 'body' | 'shade';
+  /** the part's own (lit) tone */
+  base: number;
+  material: PuppetMaterial;
+  /** index of the puppet part in SubjectItem.parts */
+  part: number;
+}
+
+/** How much of the material offsets a figure in each depth band takes. */
+export const MATERIAL_WEIGHT: Record<DepthBand, number> = { fg: 0.3, mg: 1, bg: 1 };
+
+/** Tone (0..3) of a figure part: band tone + material offset (+1 for a far-side limb). */
+export function figurePartTone(bandTone: number, band: DepthBand, material: PuppetMaterial, style: FigureStyle, far = false): number {
+  const off =
+    material === 'skin' ? -1 : material === 'hair' || material === 'shoe' ? 1 : CLOTH_OFFSET[material === 'top' ? style.top : style.bottom];
+  return clamp(bandTone + off * MATERIAL_WEIGHT[band] + (far ? 1 : 0), 0, 3);
 }
 
 export type PlanItem =
@@ -301,6 +320,22 @@ export function orientAll(polys: readonly V2[][]): V2[][] {
 function shadowPolygon(spec: BoardSpec, scene: FrameScene, id: string, L: V3): V2[] {
   const s = spec.scene.subjects.find((q) => q.id === id);
   if (!s) return [];
+  if (s.pose === 'lie') {
+    // along the body: from under the head (the subject's point) back to the feet
+    const Y = s.yaw_deg * DEG;
+    const F: V2 = [Math.sin(Y), -Math.cos(Y)];
+    const Hm = s.height_m;
+    const cx = s.x - F[0] * 0.45 * Hm;
+    const cz = s.z - F[1] * 0.45 * Hm;
+    const pts: V3[] = [];
+    for (let i = 0; i < 24; i++) {
+      const a = (2 * Math.PI * i) / 24;
+      const u = Math.cos(a) * 0.56 * Hm;
+      const v = Math.sin(a) * 0.17 * Hm;
+      pts.push([cx + F[0] * u - F[1] * v, 0.002, cz + F[1] * u + F[0] * v]);
+    }
+    return projectPolygon(scene.basis, pts).map((p) => [p[0] * scene.W, p[1] * scene.H] as V2);
+  }
   const h = s.height_m * poseTopY(s.pose);
   let gx = -L[0];
   let gz = -L[2];
@@ -471,9 +506,11 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
       const shadow = fit(shadowPolygon(spec, scene, it.id, L));
       if (shadow.length >= 3) items.push({ type: 'shadow', key: `shadow:${it.id}`, owner: it.id, pts: shadow, tone: shadowTone });
       const tone = s?.tone ?? 2;
-      // silhouette parts only: the face plane is not drawn (it read as a visor)
-      const filled = it.parts.filter((p) => p.fill !== 'none' && p.silhouette);
-      const parts = orientAll(filled.map((p) => fit(p.pts)));
+      const band = s?.band ?? 'mg';
+      // the outline is the union of the silhouette parts; the face plane (not a
+      // silhouette part) is toned as skin inside it
+      const parts = orientAll(it.parts.filter((p) => p.fill !== 'none' && p.silhouette).map((p) => fit(p.pts)));
+      const filled = it.parts.map((p, k) => ({ p, k })).filter(({ p }) => p.fill !== 'none');
       // Per draw group (a whole limb, the torso, the head — puppets.ts): every
       // part's shade first, then the lit sides on top. Inside a group the lit
       // sides hide the seams, so a limb shades as one form (no knee / elbow
@@ -481,26 +518,27 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
       const regions: FigureRegion[] = [];
       let i = 0;
       while (i < filled.length) {
-        const group = filled[i]!.group;
+        const group = filled[i]!.p.group;
         let j = i;
-        while (j < filled.length && filled[j]!.group === group) j++;
+        while (j < filled.length && filled[j]!.p.group === group) j++;
         const shade: FigureRegion[] = [];
         const lit: FigureRegion[] = [];
-        for (const p of filled.slice(i, j)) {
+        for (const { p, k } of filled.slice(i, j)) {
           const pts = orientAll([fit(p.pts)])[0];
           if (!pts) continue;
           // far-side limbs sit in the figure's own shadow: one tone darker, no split
-          const base = p.far ? Math.min(3, tone + 1) : tone;
+          const base = figurePartTone(tone, band, p.material, it.style, p.far);
+          const r = { base, material: p.material, part: k };
           if (base < 3) {
-            shade.push({ pts, tone: base + 1, kind: 'shade' });
+            shade.push({ pts, tone: Math.min(3, base + 1), kind: 'shade', ...r });
             const l = litSide(pts, [lx, ly], SHADE_SHIFT);
-            if (l.length >= 3) lit.push({ pts: orientAll([l])[0] ?? l, tone: base, kind: 'body' });
-          } else lit.push({ pts, tone: base, kind: 'body' });
+            if (l.length >= 3) lit.push({ pts: orientAll([l])[0] ?? l, tone: base, kind: 'body', ...r });
+          } else lit.push({ pts, tone: base, kind: 'body', ...r });
         }
         regions.push(...shade, ...lit);
         i = j;
       }
-      items.push({ type: 'subject', key: `subject:${it.id}`, item: it, band: s?.band ?? 'mg', tone, parts, regions });
+      items.push({ type: 'subject', key: `subject:${it.id}`, item: it, band, tone, parts, regions });
     }
   }
   return {

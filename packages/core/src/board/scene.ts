@@ -17,8 +17,23 @@ import {
   type CameraBasis,
 } from './camera.ts';
 import { isEnvProp, relativeYaw, STREET } from './layout.ts';
-import { DEG, dot3, sub3, type V2, type V3 } from './math.ts';
-import { buildPuppet, facingBucket, poseTopY, TOP_GLYPH, ellipse, capsule, type PuppetFill, type PuppetView } from './puppets.ts';
+import { cross3, DEG, dot3, sub3, type V2, type V3 } from './math.ts';
+import { figureStyleFor, type FigureStyle } from './puppet-style.ts';
+import {
+  buildPuppet,
+  capsule,
+  effectiveGesture,
+  ellipse,
+  facingBucket,
+  HEAD,
+  LIE_AXIS_Y,
+  poseTopY,
+  TOP_GLYPH,
+  type PuppetFill,
+  type PuppetLineKind,
+  type PuppetMaterial,
+  type PuppetView,
+} from './puppets.ts';
 
 export const FRAME_W = 1840;
 
@@ -54,6 +69,7 @@ export interface PropItem {
 export interface PuppetPrim {
   pts: V2[];
   fill: PuppetFill;
+  material: PuppetMaterial;
   stroke: boolean;
   silhouette: boolean;
   /** draw group (see puppets.ts): outlines of a group go under its fills */
@@ -72,9 +88,13 @@ export interface SubjectItem {
   view: PuppetView | 'top';
   mirror: boolean;
   parts: PuppetPrim[];
-  lines: { pts: V2[]; after: number; key: string }[];
+  lines: { pts: V2[]; after: number; key: string; kind: PuppetLineKind }[];
   /** projected head-top → feet length in px (stroke scaling) */
   heightPx: number;
+  /** projected head height in px (which face details are drawn) */
+  headPx: number;
+  /** the character's look (hair, clothing values) */
+  style: FigureStyle;
   /** frame-px bbox of the silhouette */
   bbox: { x0: number; y0: number; x1: number; y1: number } | null;
   head: V2 | null;
@@ -355,27 +375,33 @@ export function projectProp(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: n
 
 const TOP_VIEW_ELEVATION_DEG = 62;
 
-export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis, W: number, H: number, order: number): SubjectItem {
+export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis, W: number, H: number, order: number, seed = 0): SubjectItem {
   const px = toPx(W, H);
   const Hm = s.height_m;
   const topY = poseTopY(s.pose) * Hm;
   const refC = toCamera(b, [s.x, topY * 0.5, s.z]);
   const horiz = Math.hypot(s.x - cam.x, s.z - cam.z);
   const elev = Math.atan2(cam.y - topY * 0.6, horiz) / DEG;
-  const base: Omit<SubjectItem, 'view' | 'mirror' | 'parts' | 'lines' | 'heightPx' | 'bbox' | 'head' | 'foot'> = {
+  const style = figureStyleFor(s);
+  const lying = s.pose === 'lie';
+  const base: Omit<SubjectItem, 'view' | 'mirror' | 'parts' | 'lines' | 'heightPx' | 'headPx' | 'bbox' | 'head' | 'foot'> = {
     type: 'subject',
     id: s.id,
     badge: s.badge,
     label: s.label,
     depth: refC[2],
     order,
+    style,
   };
   const headP = projectPoint(b, [s.x, topY, s.z]);
   const footP = projectPoint(b, [s.x, 0, s.z]);
   const head: V2 | null = headP.visible ? px([headP.x, headP.y]) : null;
   const foot: V2 | null = footP.visible ? px([footP.x, footP.y]) : null;
+  // the head's height (2·ry) on screen, at the head centre's depth
+  const headZ = toCamera(b, [s.x, topY - HEAD.ry * Hm, s.z])[2];
+  const headPx = headZ > NEAR_M ? ((b.f * 2 * HEAD.ry * Hm) / headZ / b.sh) * H : H;
 
-  if (elev > TOP_VIEW_ELEVATION_DEG) {
+  if (!lying && elev > TOP_VIEW_ELEVATION_DEG) {
     // Overhead glyph on horizontal planes: shoulders ellipse + head circle + nose.
     const Y = s.yaw_deg * DEG;
     const F: V3 = [Math.sin(Y), 0, -Math.cos(Y)];
@@ -393,40 +419,79 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
       g.nose.map((q) => [q[0] * Hm, q[1] * Hm] as V2),
     );
     const parts: PuppetPrim[] = [];
-    const ref = (s.pose === 'point' ? [capsule([0, 0], [-0.2 * Hm, 0.3 * Hm], 0.03 * Hm, 0.022 * Hm)] : []).map((poly) =>
+    const ref = (s.pose === 'point' || s.pose === 'reach' ? [capsule([0, 0], [-0.2 * Hm, 0.3 * Hm], 0.03 * Hm, 0.022 * Hm)] : []).map((poly) =>
       plane(topY * 0.8, poly),
     );
-    const prim = (pts: V2[], group: string, fill: PuppetFill = 'body'): PuppetPrim => ({ pts, fill, stroke: true, silhouette: true, group, far: false });
-    for (const r of ref) if (r.length >= 3) parts.push(prim(r, 'arm'));
-    if (shoulders.length >= 3) parts.push(prim(shoulders, 'torso'));
-    if (nose.length >= 3) parts.push(prim(nose, 'head'));
-    if (headPoly.length >= 3) parts.push(prim(headPoly, 'head', 'hair'));
+    const prim = (pts: V2[], group: string, material: PuppetMaterial, fill: PuppetFill = 'body'): PuppetPrim => ({
+      pts,
+      fill,
+      material,
+      stroke: true,
+      silhouette: true,
+      group,
+      far: false,
+    });
+    for (const r of ref) if (r.length >= 3) parts.push(prim(r, 'arm', 'top'));
+    if (shoulders.length >= 3) parts.push(prim(shoulders, 'torso', 'top'));
+    if (nose.length >= 3) parts.push(prim(nose, 'head', 'skin'));
+    if (headPoly.length >= 3) parts.push(prim(headPoly, 'head', 'hair', 'hair'));
     const all = parts.flatMap((p) => p.pts);
     const bbox = bboxOf(all);
     const span = bbox ? Math.max(bbox.x1 - bbox.x0, bbox.y1 - bbox.y0) : 0;
-    return { ...base, view: 'top', mirror: false, parts, lines: [], heightPx: span * 2.2, bbox, head, foot };
+    return { ...base, view: 'top', mirror: false, parts, lines: [], heightPx: span * 2.2, headPx, bbox, head, foot };
   }
 
-  const rel = relativeYaw(s, cam);
-  const { view, mirror } = facingBucket(rel);
-  const shape = buildPuppet(s.pose, view, mirror, s.silhouette);
-  // Billboard plane: vertical, perpendicular to the camera → subject line.
-  let lx: number;
-  let lz: number;
-  if (horiz > 1e-6) {
-    lx = (s.z - cam.z) / horiz;
-    lz = -(s.x - cam.x) / horiz;
+  let view: PuppetView;
+  let mirror: boolean;
+  let toWorld: (q: V2) => V3;
+  let lengthPx = 0;
+  if (lying) {
+    // A lying figure's billboard turns about its long axis (puppets.ts, LIE_AXIS_Y):
+    // the plane holds the axis and faces the camera; its facing is the angle
+    // between the face (world up) and the camera around that axis.
+    const Y = s.yaw_deg * DEG;
+    const Fh: V3 = [Math.sin(Y), 0, -Math.cos(Y)];
+    const U: V3 = [0, 1, 0];
+    const Ls = cross3(U, Fh);
+    const ax = LIE_AXIS_Y * Hm;
+    let r = cross3(Fh, sub3([s.x, ax, s.z], b.pos));
+    const rl = Math.hypot(r[0], r[1], r[2]);
+    r = rl > 1e-6 ? [r[0] / rl, r[1] / rl, r[2] / rl] : Ls;
+    const bucket = facingBucket(Math.atan2(dot3(r, U), dot3(r, Ls)) / DEG);
+    view = bucket.view;
+    // a lying drawing has its head toward +x unmirrored: that is the mirrored facing
+    mirror = !bucket.mirror;
+    const k = bucket.mirror ? 1 : -1;
+    toWorld = (q: V2): V3 => {
+      const along = k * q[0] * Hm;
+      const across = -k * (q[1] - LIE_AXIS_Y) * Hm;
+      return [s.x + Fh[0] * along + r[0] * across, ax + r[1] * across, s.z + Fh[2] * along + r[2] * across];
+    };
+    const p0 = projectPoint(b, [s.x, ax, s.z]);
+    const p1 = projectPoint(b, [s.x - Fh[0] * 0.93 * Hm, ax, s.z - Fh[2] * 0.93 * Hm]);
+    if (p0.visible && p1.visible) lengthPx = Math.hypot((p0.x - p1.x) * W, (p0.y - p1.y) * H);
   } else {
-    lx = b.right[0];
-    lz = b.right[2];
+    const rel = relativeYaw(s, cam);
+    ({ view, mirror } = facingBucket(rel));
+    // Billboard plane: vertical, perpendicular to the camera → subject line.
+    let lx: number;
+    let lz: number;
+    if (horiz > 1e-6) {
+      lx = (s.z - cam.z) / horiz;
+      lz = -(s.x - cam.x) / horiz;
+    } else {
+      lx = b.right[0];
+      lz = b.right[2];
+    }
+    toWorld = (q: V2): V3 => [s.x + q[0] * Hm * lx, q[1] * Hm, s.z + q[0] * Hm * lz];
   }
-  const toWorld = (q: V2): V3 => [s.x + q[0] * Hm * lx, q[1] * Hm, s.z + q[0] * Hm * lz];
+  const shape = buildPuppet(s.pose, view, mirror, s.silhouette, { gesture: effectiveGesture(s, seed), style });
   const parts: PuppetPrim[] = [];
   // idxMap[i] = index in `parts` of shape part i (or of the last part drawn before it)
   const idxMap: number[] = [];
   for (const p of shape.parts) {
     const pts = projectPolygon(b, p.pts.map(toWorld)).map(px);
-    if (pts.length >= 3) parts.push({ pts, fill: p.fill, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far });
+    if (pts.length >= 3) parts.push({ pts, fill: p.fill, material: p.material, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far });
     idxMap.push(parts.length - 1);
   }
   const lines = shape.lines
@@ -440,12 +505,12 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
         }
       }
       const after = shape.lineAfter[i] ?? -1;
-      return { pts: runs, after: after >= 0 ? (idxMap[after] ?? parts.length - 1) : parts.length - 1, key: l.key };
+      return { pts: runs, after: after >= 0 ? (idxMap[after] ?? parts.length - 1) : parts.length - 1, key: l.key, kind: l.kind };
     })
     .filter((l) => l.pts.length >= 2);
-  const heightPx = head && foot ? Math.hypot(head[0] - foot[0], head[1] - foot[1]) : 0;
+  const heightPx = lying ? lengthPx : head && foot ? Math.hypot(head[0] - foot[0], head[1] - foot[1]) : 0;
   const bbox = bboxOf(parts.filter((p) => p.silhouette).flatMap((p) => p.pts));
-  return { ...base, view, mirror, parts, lines, heightPx: heightPx || estimateHeightPx(b, refC, Hm, H), bbox, head, foot };
+  return { ...base, view, mirror, parts, lines, heightPx: heightPx || estimateHeightPx(b, refC, Hm, H), headPx, bbox, head, foot };
 }
 
 function estimateHeightPx(b: CameraBasis, refC: V3, Hm: number, H: number): number {
@@ -594,7 +659,7 @@ export function buildFrameScene(spec: BoardSpec): FrameScene {
     }
   }
   spec.scene.subjects.forEach((s) => {
-    const item = projectSubject(s, cam, b, W, H, order++);
+    const item = projectSubject(s, cam, b, W, H, order++, spec.seed);
     if (item.parts.length) items.push(item);
   });
   // Painter order: environment shell first, then z_override (larger = later), then far → near.

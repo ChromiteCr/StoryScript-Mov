@@ -19,7 +19,8 @@ import { clamp, DEG, type V2, type V3 } from './math.ts';
 import { arrowPx, badgePlacement, FONT } from './overlay-geom.ts';
 import { renderPencil } from './pencil.ts';
 import type { PencilLook } from './pencil-look.ts';
-import { buildPuppet, poseTopY, type PuppetView } from './puppets.ts';
+import { DEFAULT_FIGURE_STYLE, type FigureStyle } from './puppet-style.ts';
+import { buildPuppet, detailVisible, HEAD, poseTopY, type PuppetView } from './puppets.ts';
 import { buildFrameScene, frameSize, propWorldOrigin, type FrameScene, type PropItem, type SubjectItem } from './scene.ts';
 import { attrs, el, gray, num, polyPath, text } from './svg.ts';
 
@@ -52,6 +53,7 @@ const C = {
   mark: gray(178),
   horizon: gray(140),
   hair: gray(189),
+  shoe: gray(150),
   inner: gray(96),
   guide: gray(140),
   halo: gray(255),
@@ -150,9 +152,12 @@ function subjectSvg(it: SubjectItem): string {
   // 2. per group (back → front): outlines first, fills on top. Inside a group the
   //    fills hide the segment seams (one continuous limb, no knee circles); a
   //    nearer group still draws its contour over a farther one.
+  const faceW = clamp(it.headPx * 0.028, 0.7, 2.4);
   const linesAfter = (i: number) => {
     for (const l of it.lines) {
-      if (l.after === i) g.push(el('path', { d: polyPath(l.pts, false), fill: 'none', stroke: C.inner, 'stroke-width': inner, 'stroke-linecap': 'round' }));
+      if (l.after !== i || !detailVisible(l.kind, it.headPx, it.heightPx, 0.8)) continue;
+      const w = l.kind === 'cloth' ? inner * 0.8 : l.kind === 'faceMinor' ? faceW * 0.7 : faceW;
+      g.push(el('path', { d: polyPath(l.pts, false), fill: 'none', stroke: C.inner, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
     }
   };
   let i = 0;
@@ -167,7 +172,7 @@ function subjectSvg(it: SubjectItem): string {
     for (let k = i; k < j; k++) {
       const p = it.parts[k]!;
       if (p.fill !== 'none') {
-        const fill = p.fill === 'hair' ? C.hair : p.far ? C.paperFar : C.paper;
+        const fill = p.fill === 'hair' || p.material === 'hair' ? C.hair : p.material === 'shoe' ? C.shoe : p.far ? C.paperFar : C.paper;
         g.push(el('path', { d: polyPath(p.pts), fill, stroke: 'none' }));
       }
     }
@@ -707,11 +712,11 @@ export function renderPuppetPreview(
   view: PuppetView,
   mirror: boolean,
   silhouette: Silhouette,
-  opts: { width?: number; height?: number; background?: boolean } = {},
+  opts: { width?: number; height?: number; background?: boolean; gesture?: number; style?: FigureStyle } = {},
 ): string {
   const W = opts.width ?? 120;
   const H = opts.height ?? 220;
-  const shape = buildPuppet(pose, view, mirror, silhouette);
+  const shape = buildPuppet(pose, view, mirror, silhouette, { gesture: opts.gesture, style: opts.style });
   // Centre the figure's horizontal extent (a pointing arm reaches far to one
   // side) and shrink only when it still would not fit the cell.
   let minX = 0;
@@ -731,9 +736,11 @@ export function renderPuppetPreview(
     order: 0,
     view,
     mirror,
-    parts: shape.parts.map((p) => ({ pts: p.pts.map(px), fill: p.fill, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far })),
-    lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1, key: l.key })),
+    parts: shape.parts.map((p) => ({ pts: p.pts.map(px), fill: p.fill, material: p.material, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far })),
+    lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1, key: l.key, kind: l.kind })),
     heightPx: figure,
+    headPx: figure * 2 * HEAD.ry,
+    style: opts.style ?? DEFAULT_FIGURE_STYLE,
     bbox: null,
     head: null,
     foot: null,

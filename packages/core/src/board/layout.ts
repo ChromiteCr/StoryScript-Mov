@@ -94,6 +94,16 @@ export const FACING_REL: Record<Facing, number> = {
   '3q_left': -45,
 };
 
+/** Which third a facing puts a single on (look room in front of the face); null: no side. */
+const FACING_SIDE: Record<Facing, ScreenPos | null> = {
+  camera: null,
+  away: null,
+  screen_right: 'L',
+  '3q_right': 'L',
+  screen_left: 'R',
+  '3q_left': 'R',
+};
+
 /** Street layout constants shared with the renderer (road markings). */
 export const STREET = { roadHalf: 4, walkHalf: 6, blockDepth: 8, blockLen: 10, gap: 2 } as const;
 
@@ -257,7 +267,9 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   const wallMount = isInsert && !listed && !hasTable && shot.props.includes('wall');
   const featuredKind: PropKind | null = isInsert ? (listed ?? (hasTable || wallMount ? 'box' : (shot.props[0] ?? 'box'))) : null;
   const featuredDims = featuredKind === 'box' ? (wallMount ? INSERT_WALL_ITEM : INSERT_ITEM) : featuredKind ? PROP_SIZE[featuredKind] : null;
-  const supportTop = isInsert && hasTable && featuredKind !== 'table' ? PROP_SIZE.table.h : wallMount ? INSERT_WALL_ITEM_BOTTOM : 0;
+  // S4c: a phone / cup / book on its own still sits on something (a table the layout adds)
+  const autoSupport = isInsert && !hasTable && !wallMount && featuredKind !== null && TABLETOP_ITEMS.has(featuredKind);
+  const supportTop = isInsert && (hasTable || autoSupport) && featuredKind !== 'table' ? PROP_SIZE.table.h : wallMount ? INSERT_WALL_ITEM_BOTTOM : 0;
   const insertCenterY = featuredDims ? supportTop + Math.min(featuredDims.h, 0.6) / 2 : null;
 
   // ---- camera ---------------------------------------------------------------
@@ -400,8 +412,16 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
     }
     case 'single':
     default: {
+      // S4c: a single holds its side of the scene axis (or the side its facing
+      // gives it) on a third, looking across the frame toward the partner with
+      // the look room in front; shot / reverse singles then alternate L and R.
+      // Only a lone person with neither stays centred.
+      const lead = subs[0];
+      const leadSide = lead && !lead.spec.screen ? (sideOf(lead.alias) ?? FACING_SIDE[lead.spec.facing ?? 'camera']) : null;
+      const off = shot.shot_size === 'ECU' ? 0.08 : shot.shot_size === 'CU' ? 0.12 : 1 / 6;
+      const leadFx = lead ? fxOf(lead, leadSide === 'L' ? 0.5 - off : leadSide === 'R' ? 0.5 + off : 0.5) : 0.5;
       subs.forEach((s, i) => {
-        const fx = fxOf(s, i === 0 ? 0.5 : i % 2 ? 0.72 : 0.28);
+        const fx = i === 0 ? leadFx : fxOf(s, leadFx < 0.5 ? 0.72 : leadFx > 0.5 ? 0.28 : i % 2 ? 0.72 : 0.28);
         const fallback: Facing = fx < 0.45 ? '3q_right' : fx > 0.55 ? '3q_left' : 'camera';
         put(s, fx, depthOf(s, i === 0 ? 'mg' : 'bg'), relOf(s, fallback), poseOf(s));
       });
@@ -429,16 +449,27 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   const wallH = 3;
   let backZ: number | null = null;
   let roomHalf = 0;
+  const maxAbsX = subjects.reduce((m, s) => Math.max(m, Math.abs(s.x)), 0);
+  const deskRows = env === 'classroom' ? 2 + (rngFor(ctx.seed, 'env-classroom-rows')() < 0.5 ? 1 : 0) : 0;
+  const zEnd = Math.max(focusZ, 10) + 45;
+  /** a room of env walls: back wall at `back`, side walls at ±half */
+  const room = (back: number, half: number, h: number): [number, number] => {
+    envProps.push(box(`${ENV_PREFIX}wall-back`, 'wall', 0, back + 0.1, 0, { w: half * 2 + 0.4, h, d: 0.2 }));
+    const sideLen = back + 2;
+    envProps.push(box(`${ENV_PREFIX}wall-left`, 'wall', -half - 0.1, sideLen / 2 - 2, 0, { w: sideLen, h, d: 0.2 }, 90));
+    envProps.push(box(`${ENV_PREFIX}wall-right`, 'wall', half + 0.1, sideLen / 2 - 2, 0, { w: sideLen, h, d: 0.2 }, 90));
+    return [back, half];
+  };
   if (env === 'interior') {
-    backZ = Math.max(maxZ + 2.2, focusZ + 2.5);
-    roomHalf = Math.max(3.5, 0.45 * frameWidthAt(focusZ));
-    envProps.push(box(`${ENV_PREFIX}wall-back`, 'wall', 0, backZ + 0.1, 0, { w: roomHalf * 2 + 0.4, h: wallH, d: 0.2 }));
-    const sideLen = backZ + 2;
-    envProps.push(box(`${ENV_PREFIX}wall-left`, 'wall', -roomHalf - 0.1, sideLen / 2 - 2, 0, { w: sideLen, h: wallH, d: 0.2 }, 90));
-    envProps.push(box(`${ENV_PREFIX}wall-right`, 'wall', roomHalf + 0.1, sideLen / 2 - 2, 0, { w: sideLen, h: wallH, d: 0.2 }, 90));
+    [backZ, roomHalf] = room(Math.max(maxZ + 2.2, focusZ + 2.5), Math.max(3.5, 0.45 * frameWidthAt(focusZ)), wallH);
+  } else if (env === 'classroom') {
+    // the first row of desks stands level with the people, the others behind them, then the blackboard wall
+    const lastRow = focusZ + 0.15 + (deskRows - 1) * DESK_PITCH;
+    [backZ, roomHalf] = room(Math.max(maxZ + 2.2, lastRow + 2.1), Math.max(4.2, 0.45 * frameWidthAt(focusZ), maxAbsX + 1.2), wallH);
+  } else if (env === 'corridor') {
+    [backZ, roomHalf] = room(Math.max(focusZ + 12, maxZ + 8, 16), Math.max(CORRIDOR.half, maxAbsX + 0.5), CORRIDOR.h);
   } else if (env === 'street') {
     const erng = rngFor(ctx.seed, 'env-street');
-    const zEnd = Math.max(focusZ, 10) + 45;
     let k = 0;
     for (const side of [-1, 1]) {
       for (let z = -4; z < zEnd; z += STREET.blockLen + STREET.gap) {
@@ -449,6 +480,9 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
         );
       }
     }
+    // S4c: the kerbs along both sides of the road
+    for (const side of [-1, 1])
+      envProps.push(box(`${ENV_PREFIX}kerb-${side < 0 ? 0 : 1}`, 'wall', side * (STREET.roadHalf + 0.1), (zEnd - 4) / 2, 0, { w: 0.2, h: 0.13, d: zEnd + 4 }));
   }
 
   const want = shot.props.slice();

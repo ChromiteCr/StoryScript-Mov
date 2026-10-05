@@ -326,7 +326,7 @@ function shadowPolygon(spec: BoardSpec, scene: FrameScene, id: string, L: V3): V
   return projectPolygon(scene.basis, pts).map((p) => [p[0] * scene.W, p[1] * scene.H] as V2);
 }
 
-const CASTS_SHADOW = new Set<BoardProp['kind']>(['table', 'chair', 'car', 'box']);
+const CASTS_SHADOW = new Set<BoardProp['kind']>(['table', 'chair', 'car', 'box', 'bed', 'sofa', 'shelf', 'bag']);
 
 /**
  * Cast shadow of a set prop on the plane it stands on (a box on a table
@@ -456,7 +456,8 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
         .map((f) => {
           const k = seen.get(f.sub) ?? 0;
           seen.set(f.sub, k + 1);
-          return { pts: fit(f.pts), tone: tones.get(f.sub)?.[k] ?? 2, sub: f.sub };
+          // billboards (trees, the horizon band) and a blackboard carry a fixed tone
+          return { pts: fit(f.pts), tone: f.tone ?? tones.get(f.sub)?.[k] ?? 2, sub: f.sub };
         })
         .filter((f) => f.pts.length >= 3);
       // furniture-scale set props cast a shadow; walls and buildings do not (their

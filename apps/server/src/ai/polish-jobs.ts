@@ -5,6 +5,7 @@ import {
   normalizeBreakdownJson,
   POLISH_PROMPT_VERSION,
   polishRepairErrors,
+  polishVarietyIssues,
   shotOneLine,
   validatePolish,
   type PolishPromptShot,
@@ -24,7 +25,7 @@ import { projectContext, resolveAi } from './runtime.ts';
 
 /**
  * S3a polish: 1–12 existing shots (any scenes of the current script) are
- * rewritten, improved or refined one-for-one by the group's model, with the
+ * rewritten, improved, refined or varied (S4c) one-for-one by the group's model, with the
  * style and level the user chose. One remote job, at most 3 outbound
  * requests, counted against the daily cap; the result is a draft reviewed
  * shot by shot (services/polish.ts applies it).
@@ -154,6 +155,8 @@ export function startPolish(deps: AppDeps, request: PolishRequest): Job {
       });
       const parsed = res.value ?? res.last_parsed ?? null;
       const issues = parsed ? validatePolish(parsed, vctx).issues : [];
+      // S4c 丰富变化: the result read as one passage, its variety warnings on the draft
+      if (parsed && request.mode === 'vary') issues.push(...polishVarietyIssues(parsed, vctx.refs));
       return outcome(db, res, {
         kind: 'polish',
         scope: { ...scope },

@@ -10,7 +10,7 @@ import {
   type ShotDraft,
 } from '@storyscript/contracts';
 import {
-  BREAKDOWN_PROMPT_VERSION,
+  analyzeVariety,
   breakdownPromptVersion,
   breakdownRepairErrors,
   buildBreakdownMessages,
@@ -21,6 +21,7 @@ import {
   normalizeEntitiesJson,
   normalizeForMatch,
   validateBreakdown,
+  varietyHints,
   type BreakdownValidationContext,
 } from '@storyscript/core';
 import { sceneReplayKey, scriptReplayKey } from '../adapters/llm/replay-chat.ts';
@@ -76,7 +77,7 @@ export function outcome<T>(
         scope: draft.scope,
         model: draft.model,
         prompt_version: draft.prompt_version,
-        raw_output: res.raw_outputs.at(-1) ?? null,
+        raw_output: res.value_raw ?? res.raw_outputs.at(-1) ?? null,
         parsed: draft.parsed,
         issues: draft.issues,
         attempts: res.attempts,
@@ -192,6 +193,19 @@ export function breakdownContext(db: DbPort, sceneId: string, request: Breakdown
   return { scene, version: latest, techniques, roster, paragraphs, vctx, style };
 }
 
+/**
+ * S4c refine round of a breakdown: hints only when the shots are severely
+ * monotone (analyzeVariety), and the new answer is kept only if it scores
+ * higher. Used inside the step's 3 attempts, so it never adds a request.
+ */
+export const breakdownRefine = {
+  refine: (p: BreakdownOutput): string[] => {
+    const v = analyzeVariety(p.shots);
+    return v.severe ? varietyHints(v) : [];
+  },
+  refineBetter: (next: BreakdownOutput, prev: BreakdownOutput): boolean => analyzeVariety(next.shots).score > analyzeVariety(prev.shots).score,
+};
+
 export function startBreakdown(deps: AppDeps, sceneId: string, input: z.input<typeof BreakdownRequest>): Job {
   const request = BreakdownRequest.parse(input);
   const { project, jobs } = projectContext(deps);
@@ -210,12 +224,16 @@ export function startBreakdown(deps: AppDeps, sceneId: string, input: z.input<ty
     target_seconds: request.target_seconds,
     style: promptStyle(style),
     level: request.level,
+    demo: deps.demo,
   };
-  const messages = buildBreakdownMessages(promptInput);
-  const promptVersion = breakdownPromptVersion(promptInput);
-  if (deps.demo && promptVersion !== BREAKDOWN_PROMPT_VERSION) {
+  // --demo replays v1 recordings: a style or a braver level has nothing to replay
+  if (deps.demo && (promptInput.style || request.level !== 'steady')) {
     throw new AppError('VALIDATION_ERROR', '演示模式只回放录好的拆镜：请把风格设为「不指定」、难度设为「稳妥」。', 409);
   }
+  const messages = buildBreakdownMessages(promptInput);
+  const promptVersion = breakdownPromptVersion(promptInput);
+  // S4c: a severely monotone answer gets one more round (never in --demo: replay has one answer)
+  const refine = deps.demo || ai.chat.kind === 'replay' ? undefined : breakdownRefine;
   const scope: BreakdownScope = { scene_id: scene.id, script_version_id: version.id, request };
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
@@ -236,12 +254,13 @@ export function startBreakdown(deps: AppDeps, sceneId: string, input: z.input<ty
           const v = validateBreakdown(p, vctx);
           return { ok: v.error_count === 0, errors: breakdownRepairErrors(v) };
         },
+        ...refine,
         signal: ctx.signal,
         meta: { prompt_version: promptVersion, replay_key: sceneReplayKey(scene.heading) },
         onAttempt: ctx.markSent,
       });
       const parsed = res.value ?? res.last_parsed ?? null;
-      const issues = parsed ? validateBreakdown(parsed, vctx).issues : [];
+      const issues = parsed ? [...validateBreakdown(parsed, vctx).issues, ...analyzeVariety(parsed.shots).issues] : [];
       return outcome(db, res, {
         kind: 'breakdown',
         scope: { ...scope },

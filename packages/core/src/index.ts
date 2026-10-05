@@ -28,6 +28,7 @@ export * from './shots/normalize.ts';
 export * from './shots/validate.ts';
 export * from './shots/hash.ts';
 export * from './shots/eval-score.ts';
+export * from './shots/variety.ts';
 export { padControlSvg, rasterPostSvg, RASTER_LEVELS, RASTER_POST_VERSION, type Box as ControlBox, type RasterPostInput } from './board/control.ts';
 
 // S1b: in-browser media facts

@@ -26,6 +26,7 @@
  *   viewer) → shins of those legs → coat/skirt → near arms → head
  */
 import type { Pose, Silhouette } from '@storyscript/contracts';
+import { rngFor } from '../util/random.ts';
 import { DEG, chaikin, clamp, convexHull, type V2, wrapDeg } from './math.ts';
 
 export const JOINTS = [
@@ -343,6 +344,23 @@ export const POSE_TABLES: Record<Pose, { front: JointTable; side: JointTable }> 
   reach: { front: POINT_FRONT, side: POINT_SIDE },
   phone: { front: STAND_FRONT, side: STAND_SIDE },
 };
+
+/**
+ * S4c gesture variants (hands in pockets, arms crossed …) per pose. The figures
+ * track replaces this stub with the real variant tables.
+ */
+export function gestureCount(pose: Pose): number {
+  void pose;
+  return 1;
+}
+
+/** The variant a subject is drawn with: its own `gesture`, else one picked from the board seed. */
+export function effectiveGesture(s: { id: string; pose: Pose; gesture?: number | null }, seed: number): number {
+  const n = gestureCount(s.pose);
+  if (n <= 1) return 0;
+  if (s.gesture !== undefined && s.gesture !== null) return ((s.gesture % n) + n) % n;
+  return Math.floor(rngFor(seed, `gesture:${s.id}`)() * n) % n;
+}
 
 /** Head ellipse half-axes (front width, side depth, height) in stature units (1 : 7.5). */
 export const HEAD = { rxFront: 0.052, rxSide: 0.061, ry: 0.0667 } as const;

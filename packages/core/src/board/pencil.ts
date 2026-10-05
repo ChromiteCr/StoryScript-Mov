@@ -42,6 +42,12 @@ import { hatchMark, resample, splitLoop, sym, taperedStroke, type Rng } from './
 import { attrs, el, gray, num, polyPath } from './svg.ts';
 
 export const PENCIL_VERSION = 'pencil-1';
+/**
+ * S4c: version of how a board is drawn (figures, sets). Picture caches key on
+ * it; structureHash deliberately does not, so a renderer upgrade never marks
+ * adopted AI redraws as stale.
+ */
+export const PICTURE_VERSION = 'picture-s4c';
 
 export interface PencilRenderOptions {
   width?: number;

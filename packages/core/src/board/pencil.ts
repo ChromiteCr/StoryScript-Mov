@@ -67,7 +67,76 @@ export interface PencilRenderOptions {
  */
 export function structureHash(spec: BoardSpec, look: PencilLook = DEFAULT_PENCIL_LOOK): string {
   const movers = spec.overlay.arrows.filter((a) => a.kind === 'subject_move');
-  return contentHash({ v: PENCIL_VERSION, frame: spec.frame, camera: spec.camera, scene: spec.scene, seed: spec.seed, movers, look });
+  // Frozen inputs (S4c): the v1 version string, the v1 default look, and only
+  // the look fields v1 had; an unset gesture (absent or null) hashes as absent.
+  const hashLook = look === DEFAULT_PENCIL_LOOK ? LOOK_HASH_V1 : pickV1(look);
+  const subjects = spec.scene.subjects.map((s) => (s.gesture === null || s.gesture === undefined ? omitGesture(s) : s));
+  const scene = { ...spec.scene, subjects };
+  return contentHash({ v: PENCIL_VERSION, frame: spec.frame, camera: spec.camera, scene, seed: spec.seed, movers, look: hashLook });
+}
+
+function omitGesture<T extends { gesture?: unknown }>(s: T): Omit<T, 'gesture'> {
+  const { gesture: _g, ...rest } = s;
+  return rest;
+}
+
+/**
+ * The default look as structureHash v1 saw it. Never edit: the picture may
+ * change (PICTURE_VERSION), the hash of an existing board may not.
+ */
+export const LOOK_HASH_V1 = Object.freeze({
+  angle: 38,
+  cross: 108,
+  paperTone: '#F3F0E8',
+  outline: { fg: 2.2, mg: 1.4, bg: 0.9 },
+  hatch: {
+    spacing: [9, 6, 7],
+    width: [1.6, 1.5, 1.5],
+    opacity: [0.72, 0.78, 0.8],
+    ink: [64, 48, 30],
+    patchMin: 5,
+    patchMax: 12,
+    endJitter: 3,
+    slant: 1.6,
+    segMin: 40,
+    segMax: 120,
+    gapMin: 2,
+    gapMax: 6,
+    bow: 0.018,
+    jitter: 0.15,
+    wobble: 1.2,
+  },
+  maskBlur: 1.2,
+  smudge: { blur: 2, opacity: 0.5, ink: 48 },
+  fill: [0, 0.2, 0.34, 0.5],
+  figure: [0.06, 0.26, 0.44, 0.82],
+  shade: 0.6,
+  litHatch: 0.5,
+  contour: {
+    scale: 1,
+    ink: 28,
+    opacity: 0.88,
+    second: 0.6,
+    offset: 1,
+    secondOpacity: 0.5,
+    secondWobble: 0.9,
+    overshoot: 0.03,
+    litBreak: 0.15,
+    lit: 0.7,
+    shade: 1.5,
+  },
+  construction: { stroke: '#8a8a8a', opacity: 0.35, width: 0.6 },
+  grain: 1,
+  tooth: 0.5,
+  vignette: 0.12,
+});
+
+/** A non-default look restricted to the fields the v1 hash had (later look fields never enter it). */
+function pickV1(look: PencilLook): Record<string, unknown> {
+  const src = look as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(LOOK_HASH_V1)) out[k] = src[k];
+  return out;
 }
 
 function svgOpen(W: number, H: number, width: number | undefined): string {

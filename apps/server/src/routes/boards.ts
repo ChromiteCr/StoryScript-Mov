@@ -1,10 +1,10 @@
 import type { Hono } from 'hono';
 import { z } from 'zod';
-import { Api, Board, BoardRevisionInput, BoardView, SaveBoardInput } from '@storyscript/contracts';
+import { Api, Board, BoardRevisionInput, BoardView, RelayoutBoardsInput, RelayoutBoardsResult, SaveBoardInput } from '@storyscript/contracts';
 import type { AppDeps } from '../deps.ts';
 import { idParam, respond } from '../http/respond.ts';
 import { parseBody } from '../http/validate.ts';
-import { keepBoard, listBoards, regenerateBoard, saveBoard, shotBoardVersions } from '../services/boards/boards.ts';
+import { keepBoard, listBoards, regenerateBoard, relayoutBoards, saveBoard, shotBoardVersions } from '../services/boards/boards.ts';
 
 /**
  * Boards (FR-04, contracts M4). Layout runs here (core layoutBoard); the
@@ -19,6 +19,12 @@ export function registerBoardRoutes(app: Hono, deps: AppDeps): void {
   app.get(Api.shotBoardVersions.path, (c) => respond(c, z.array(Board), shotBoardVersions(db(), idParam(c))));
 
   app.post(Api.regenerateBoard.path, (c) => respond(c, BoardView, regenerateBoard(db(), idParam(c)), 201));
+
+  // S4c: lay every board of the scene (or the project) out again with the current renderer
+  app.post(Api.relayoutBoards.path, async (c) => {
+    const input = await parseBody(c, RelayoutBoardsInput);
+    return respond(c, RelayoutBoardsResult, relayoutBoards(db(), input));
+  });
 
   app.patch(Api.saveBoard.path, async (c) => {
     const id = idParam(c);

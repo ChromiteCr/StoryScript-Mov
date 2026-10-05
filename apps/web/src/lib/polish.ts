@@ -109,6 +109,15 @@ export function canPolish(count: number, ai: AiGateLike): boolean {
   return count > 0 && polishBlockedReason(count, ai) === null;
 }
 
+/**
+ * A caution under the chosen way's hint, or null. 丰富变化 (S4c) tunes the shots
+ * as one passage, so with a single shot there is nothing to vary against.
+ */
+export function polishModeNote(mode: PolishMode, shots: number): string | null {
+  if (mode === 'vary' && shots < 2) return '丰富变化要对照前后的镜头才有意义：勾选同一场里相邻的几个镜头效果最好，只选一个时和“优化”差不多。';
+  return null;
+}
+
 /** "将发送这 3 个镜头的内容和出处段落、角色名单（2 人）、风格说明（惊悚压迫）、你写的润色要求到" */
 export function polishOutgoingSentence(a: { shots: number; characters: number; styleName: string | null; hasInstruction: boolean }): string {
   const items = [`这 ${a.shots} 个镜头的内容和出处段落`, `角色名单（${a.characters} 人）`];

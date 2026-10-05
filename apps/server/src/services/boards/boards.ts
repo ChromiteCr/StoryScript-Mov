@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { z } from 'zod';
-import type { Board, BoardRevisionInput, BoardSpec, BoardView, SaveBoardInput, Shot } from '@storyscript/contracts';
+import type { Board, BoardRevisionInput, BoardSpec, BoardView, RelayoutBoardsInput, RelayoutBoardsResult, SaveBoardInput, Shot } from '@storyscript/contracts';
 import { layoutBoard, RENDERER_VERSION } from '@storyscript/core';
 import type { DbPort } from '../../db/port.ts';
 import { adoptedRasterId, getBoard, insertBoard, latestBoard, latestBoardsByShot, listShotBoards, updateBoardBasis } from '../../db/repos/board.ts';
 import { listActiveShots } from '../../db/repos/shot.ts';
 import { AppError } from '../../http/errors.ts';
-import { requireShot } from '../shots.ts';
+import { requireScene, requireShot } from '../shots.ts';
 import { layoutContextFor, projectBoardContext, type ProjectBoardContext } from './context.ts';
 
 /**
@@ -16,7 +16,9 @@ import { layoutContextFor, projectBoardContext, type ProjectBoardContext } from 
  *  - save stores the user's edited spec as a new version (user_edited=true) and
  *    keeps the parent's basis_content_hash, so a stale board stays stale;
  *  - keep re-baselines the newest version on the shot's current content_hash
- *    ("保留我的调整"), bumping its revision.
+ *    ("保留我的调整"), bumping its revision;
+ *  - relayout (S4c) lays out every shot whose newest version was drawn by an
+ *    older renderer and that nobody edited by hand, in one transaction.
  * A board is stale when basis_content_hash ≠ shot.content_hash. Board edits
  * never touch the shot (INV-09 precondition: the structure layer stays apart).
  * Every write happens inside db.tx and returns only after it committed.
@@ -185,5 +187,44 @@ export function keepBoard(db: DbPort, boardId: string, input: Input<typeof Board
     const next: Board = { ...latest, basis_content_hash: shot.content_hash, revision: latest.revision + 1 };
     updateBoardBasis(db, next.id, next.basis_content_hash, next.revision);
     return toView(db, next, shot);
+  });
+}
+
+/**
+ * S4c "用新画法重排": a new auto-laid-out version (same as regenerate) for each
+ * live shot whose newest board is not hand-edited and was laid out by an older
+ * renderer, so the new sets and compositions reach existing projects. An edited
+ * newest board is kept as it is (kept_edited), one already on the current
+ * renderer is skipped (already_current). Only `board` rows are inserted: the AI
+ * redraws (board_raster) of earlier versions are never touched. scene_id null
+ * = every scene. A shot the layout cannot handle is left out of all three counts
+ * (ensureBoard skips it the same way).
+ */
+export function relayoutBoards(db: DbPort, input: Input<typeof RelayoutBoardsInput>, now = new Date().toISOString()): RelayoutBoardsResult {
+  return db.tx(() => {
+    if (input.scene_id !== null) requireScene(db, input.scene_id);
+    const pc = projectBoardContext(db);
+    const out: RelayoutBoardsResult = { relaid: 0, kept_edited: 0, already_current: 0 };
+    for (const shot of listActiveShots(db)) {
+      if (input.scene_id !== null && shot.scene_id !== input.scene_id) continue;
+      const prev = latestBoard(db, shot.id);
+      if (prev?.user_edited) {
+        out.kept_edited += 1;
+        continue;
+      }
+      if (prev && prev.renderer_version === RENDERER_VERSION) {
+        out.already_current += 1;
+        continue;
+      }
+      let spec: BoardSpec;
+      try {
+        spec = layoutFor(shot, pc);
+      } catch {
+        continue;
+      }
+      insertBoard(db, newBoard(shot, spec, prev, false, shot.content_hash, now));
+      out.relaid += 1;
+    }
+    return out;
   });
 }

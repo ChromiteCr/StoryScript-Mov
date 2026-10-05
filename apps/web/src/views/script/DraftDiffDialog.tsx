@@ -31,18 +31,22 @@ import {
 } from '../../lib/labels.ts';
 import { useApplyBreakdown, useDiscardDraft, useDraft, useShots } from '../../lib/queries.ts';
 import { byNarrative, splitAroundQuote } from '../../lib/shots.ts';
+import { isVarietyIssue, VARIETY_BREAKDOWN_HINT } from '../../lib/variety.ts';
 import { Dialog } from '../../components/Dialog.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { ActorLabel } from '../../components/ActorLabel.tsx';
 import { Button, Notice, Spinner, Tag } from '../../components/ui.tsx';
 import { EmptyState, Panel } from '../../components/workspace.tsx';
 import { useWorkspace } from './context.ts';
+import { VarietyNotice } from './VarietyNotice.tsx';
 
 /**
  * Draft diff view (FR-03, INV-03): the scene's current shots on the left
  * (locked ones marked "不会被改动"), the model's items on the right as cards
  * to tick. Items with an error cannot be ticked; applying sends the ticked
- * indices with expected_revisions for every shot it may archive.
+ * indices with expected_revisions for every shot it may archive. The variety
+ * warnings (S4c, codes VARIETY_*) sit together under 「镜头变化」 and never
+ * block anything.
  */
 
 const CLAIM_NOTE = '含具体影片/年份等断言，未核实';
@@ -98,7 +102,8 @@ function ItemCard({ item, checked, code, disabled, onToggle }: { item: Breakdown
   const technique = f.technique_id ? (TECHNIQUES.find((t) => t.id === f.technique_id)?.name ?? f.technique_id) : null;
   const inputId = `draft-item-${item.index}`;
   const errors = item.issues.filter((x) => x.level === 'error');
-  const warnings = item.issues.filter((x) => x.level === 'warning');
+  // variety warnings are listed once, under 「镜头变化」 above the cards
+  const warnings = item.issues.filter((x) => x.level === 'warning' && !isVarietyIssue(x));
 
   return (
     <li
@@ -306,6 +311,7 @@ function DiffBody({
   };
   const after = keptShotCount(current, replace) + selected.size;
   const errorItems = items.filter((i) => !i.selectable).length;
+  const otherDraftIssues = parsed.draftIssues.filter((x) => !isVarietyIssue(x));
 
   const doApply = () => {
     const body = buildApplyBreakdownInput({ items, selected, replaceExisting: replace, currentShots: current });
@@ -425,9 +431,10 @@ function DiffBody({
         >
           <div className="flex flex-col gap-2">
             {!pending ? <Notice tone="info" title={`这份草案已${DRAFT_STATUS_LABEL[draft.status]}，不能再应用。`} /> : null}
-            {parsed.draftIssues.length > 0 ? (
+            <VarietyNotice issues={draft.issues} hint={VARIETY_BREAKDOWN_HINT} />
+            {otherDraftIssues.length > 0 ? (
               <ul className="flex flex-col gap-1">
-                {parsed.draftIssues.map((x, i) => (
+                {otherDraftIssues.map((x, i) => (
                   <li key={i} className="flex items-start gap-1.5 text-sm text-graphite-100">
                     <Tag tone={x.level === 'error' ? 'danger' : 'warn'}>{x.level === 'error' ? '错误' : '提示'}</Tag>
                     <span className="min-w-0 break-words">{x.message}</span>

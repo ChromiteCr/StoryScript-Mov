@@ -2,7 +2,8 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, join } from 'node:path';
 import { BreakdownOutput, EntitiesOutput, ScriptFormat, type ShotFields } from '@storyscript/contracts';
 import {
-  BREAKDOWN_PROMPT_VERSION,
+  analyzeVariety,
+  breakdownPromptVersion,
   breakdownRepairErrors,
   breakdownSummary,
   buildBreakdownMessages,
@@ -24,6 +25,7 @@ import {
 import type { ChatPort, TextClientConfig } from '../adapters/llm/chat.ts';
 import { sceneReplayKey, scriptReplayKey, writeReplayRecord } from '../adapters/llm/replay-chat.ts';
 import { structuredCall, type StructuredCallResult, type StructuredUsage } from '../adapters/llm/structured.ts';
+import { breakdownRefine } from '../ai/jobs.ts';
 import { MemoryCapabilityCache, type CapabilityCache } from '../config/capability-cache.ts';
 
 /**
@@ -50,6 +52,12 @@ export interface EvalOptions {
   backoffMs?: number;
   /** only these fixture files (default: all in expected.json) */
   only?: string[];
+  /**
+   * ask breakdown-v1 like --demo, the version the replay recordings answer
+   * (default: when the transport is a ReplayChat). Otherwise the product's
+   * request: breakdown-v3 with its refine round (S4c).
+   */
+  demo?: boolean;
   log?: (line: string) => void;
 }
 
@@ -89,6 +97,9 @@ export async function runBreakdownEval(opts: EvalOptions): Promise<EvalResult> {
   let calls = 0;
   const recorded: string[] = [];
   const techniques = TECHNIQUES.map((t) => ({ id: t.id, name: t.name, shot_grammar: t.shot_grammar }));
+  const demo = opts.demo ?? opts.chat.kind === 'replay';
+  const breakdownVersion = breakdownPromptVersion({ demo });
+  const variety: { score: number; severe: boolean; refined: boolean }[] = [];
 
   const account = <T>(res: StructuredCallResult<T>) => {
     calls += res.attempts;
@@ -98,7 +109,7 @@ export async function runBreakdownEval(opts: EvalOptions): Promise<EvalResult> {
     usage.unknown_calls += res.usage.unknown_calls;
   };
   const record = (prompt_version: string, key: string, label: string, res: StructuredCallResult<unknown>) => {
-    const raw = res.raw_outputs.at(-1);
+    const raw = res.value_raw ?? res.raw_outputs.at(-1);
     if (!opts.recordDir || raw === undefined || (res.value === undefined && res.last_parsed === undefined)) return;
     recorded.push(writeReplayRecord(opts.recordDir, { prompt_version, key, output: raw, label }));
   };
@@ -154,6 +165,7 @@ export async function runBreakdownEval(opts: EvalOptions): Promise<EvalResult> {
           frame_format: '2.39',
           max_shots: EVAL_MAX_SHOTS,
           target_seconds: null,
+          demo,
         }),
         schema: BreakdownOutput,
         jsonSchemaName: 'breakdown',
@@ -162,12 +174,17 @@ export async function runBreakdownEval(opts: EvalOptions): Promise<EvalResult> {
           const v = validateBreakdown(p, vctx);
           return { ok: v.error_count === 0, errors: breakdownRepairErrors(v) };
         },
-        meta: { prompt_version: BREAKDOWN_PROMPT_VERSION, replay_key: key },
+        ...(demo ? {} : breakdownRefine),
+        meta: { prompt_version: breakdownVersion, replay_key: key },
       });
       account(res);
-      record(BREAKDOWN_PROMPT_VERSION, key, `${stem}.scene-${idx + 1}`, res);
+      record(breakdownVersion, key, `${stem}.scene-${idx + 1}`, res);
       if (res.error) failures.push(`场 ${scene.display_no}：${res.error.code} ${res.error.message}`);
       const shots: ShotFields[] = res.value?.shots ?? res.last_parsed?.shots ?? [];
+      if (shots.length) {
+        const v = analyzeVariety(shots);
+        variety.push({ score: v.score, severe: v.severe, refined: res.refine?.adopted ?? false });
+      }
       const expected = exp.breakdown.find((b) => b.scene === scene.display_no);
       if (expected) scores.push(scoreSceneBreakdown(exp.file, expected, shots, { paragraphs, aliases }));
       log(`  场 ${scene.display_no}：${shots.length} 个镜头，外发 ${res.attempts} 次${res.error ? `（${res.error.code}）` : ''}`);
@@ -201,7 +218,8 @@ export async function runBreakdownEval(opts: EvalOptions): Promise<EvalResult> {
     `# 拆镜评测：${opts.client.model}（${opts.date}）`,
     '',
     '- 期望清单：`fixtures/scripts/expected.json`（在任何真实模型调用之前提交）',
-    `- 提示词版本：${BREAKDOWN_PROMPT_VERSION}、${ENTITIES_PROMPT_VERSION}；每场镜头上限 ${EVAL_MAX_SHOTS}；手法：全部内置手法可选`,
+    `- 提示词版本：${breakdownVersion}、${ENTITIES_PROMPT_VERSION}；每场镜头上限 ${EVAL_MAX_SHOTS}；手法：全部内置手法可选`,
+    `- 镜头变化：${variety.length} 场平均 ${variety.length ? (variety.reduce((n, v) => n + v.score, 0) / variety.length).toFixed(2) : '—'}，单一 ${variety.filter((v) => v.severe).length} 场，调整一轮后采用 ${variety.filter((v) => v.refined).length} 场`,
     `- 外发次数：${calls}；用量：prompt ${usage.prompt} / completion ${usage.completion} / total ${usage.total}` +
       (usage.unknown_calls ? `（另有 ${usage.unknown_calls} 次响应未返回用量，记为未知）` : ''),
     '',

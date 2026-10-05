@@ -2,7 +2,7 @@ import { setTimeout as delay } from 'node:timers/promises';
 import type { z } from 'zod';
 import type { StructuredMode } from '@storyscript/contracts';
 import type { CapabilityCache } from '../../config/capability-cache.ts';
-import { ChatError, type ChatPort, type ChatRequestMeta, type LlmMessage, type ResponseFormat, type TextClientConfig } from './chat.ts';
+import { ChatError, type ChatPort, type ChatRequestMeta, type ChatResponse, type LlmMessage, type ResponseFormat, type TextClientConfig } from './chat.ts';
 import { parseModelJson, toStrictJsonSchema, zodIssuesForRepair } from './json.ts';
 import { OpenAIChat } from './openai-chat.ts';
 import { redactSecrets } from './redact.ts';
@@ -19,6 +19,10 @@ import { redactSecrets } from './redact.ts';
  *   finish_reason=length stops immediately (asking for a smaller scope).
  *   repair round: the previous raw output and its error list go back to the
  *   model as assistant + user messages.
+ *   refine round (S4c, optional): a valid output the caller still has hints
+ *   for goes back once more, if an attempt is left. The answer replaces the
+ *   original only when it parses, validates and the caller says it is better;
+ *   any failure of that round keeps the original (it is not retried).
  *
  * Keys never appear in results, errors or logs.
  */
@@ -46,8 +50,19 @@ export interface StructuredUsage {
   unknown_calls: number;
 }
 
+export interface StructuredRefineOutcome {
+  hints: string[];
+  adopted: boolean;
+  /** why the refined answer was not kept (null when adopted) */
+  reason: string | null;
+}
+
 export interface StructuredCallResult<T> {
   value?: T;
+  /** raw text `value` was parsed from (after a rejected refine round it is not the last raw output) */
+  value_raw?: string;
+  /** S4c: the refine round, when one was sent */
+  refine?: StructuredRefineOutcome;
   /** last zod-valid output that still failed business validation */
   last_parsed?: T;
   /** business-validation errors of `last_parsed` */
@@ -86,6 +101,13 @@ export interface StructuredCallOptions<T> {
    * clearly about response_format.
    */
   extraBody?: Record<string, unknown> | null;
+  /**
+   * S4c: hints for one more round on a valid output (empty: done). Sent only
+   * while an attempt is left; at most one refine round per call.
+   */
+  refine?: (value: T) => string[];
+  /** whether the refined output should replace the original (default: any valid one does) */
+  refineBetter?: (refined: T, original: T) => boolean;
 }
 
 export const DEFAULT_MAX_ATTEMPTS = 3;
@@ -127,6 +149,17 @@ function repairMessages(raw: string, errors: readonly string[]): LlmMessage[] {
     {
       role: 'user',
       content: `上一次输出有以下问题：\n${errors.map((e) => `- ${e}`).join('\n')}\n\n请只输出修正后的完整 JSON，不要输出解释或代码块标记。`,
+    },
+  ];
+}
+
+function refineMessages(raw: string, hints: readonly string[]): LlmMessage[] {
+  const echoed = raw.length > MAX_RAW_ECHO ? `${raw.slice(0, MAX_RAW_ECHO)}…` : raw;
+  return [
+    { role: 'assistant', content: echoed },
+    {
+      role: 'user',
+      content: `上一次输出可以用，但还可以改进：\n${hints.map((h) => `- ${h}`).join('\n')}\n\n请在保留原有剧情内容、台词和出处原文的前提下调整这些地方，只输出调整后的完整 JSON，不要输出解释或代码块标记。`,
     },
   ];
 }
@@ -177,8 +210,8 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
     }
   };
 
-  while (attempts < maxAttempts) {
-    if (signal?.aborted) return cancelled();
+  /** one outbound request in the current mode: the step's messages plus `tail` */
+  const send = (tail: readonly LlmMessage[]) => {
     const base = mode === 'json_schema' ? opts.messages.map((m) => ({ ...m })) : withSchemaInstruction(opts.messages, schemaText);
     const response_format: ResponseFormat | undefined =
       mode === 'json_schema'
@@ -186,19 +219,86 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
         : mode === 'json_object'
           ? { type: 'json_object' }
           : undefined;
-
     attempts++;
     opts.onAttempt?.(attempts);
+    return chat.complete({
+      model: client.model,
+      messages: [...base, ...tail],
+      ...(response_format ? { response_format } : {}),
+      ...(extraBody ? { extra_body: extraBody } : {}),
+      signal,
+      meta: opts.meta,
+    });
+  };
+
+  const addUsage = (res: ChatResponse) => {
+    if (res.usage) {
+      usage.prompt += res.usage.prompt_tokens ?? 0;
+      usage.completion += res.usage.completion_tokens ?? 0;
+      usage.total += res.usage.total_tokens ?? (res.usage.prompt_tokens ?? 0) + (res.usage.completion_tokens ?? 0);
+    } else {
+      usage.unknown_calls++;
+    }
+  };
+
+  /** zod + business validation of one raw output; the parsed value or what is wrong with it */
+  const check = (content: string): { ok: true; value: T } | { ok: false; problem: string; errors: string[]; parsed?: T } => {
+    let json: unknown;
+    try {
+      json = parseModelJson(content);
+    } catch (err) {
+      const problem = (err as Error).message;
+      return { ok: false, problem, errors: [problem] };
+    }
+    const parsed = schema.safeParse(opts.preprocess ? opts.preprocess(json) : json);
+    if (!parsed.success) {
+      const errors = zodIssuesForRepair(parsed.error);
+      return { ok: false, problem: `输出不符合 JSON Schema：${errors.slice(0, 3).join('；')}`, errors };
+    }
+    if (opts.validate) {
+      const v = opts.validate(parsed.data);
+      if (!v.ok) return { ok: false, problem: `输出未通过校验：${v.errors.slice(0, 3).join('；')}`, errors: v.errors, parsed: parsed.data };
+    }
+    return { ok: true, value: parsed.data };
+  };
+
+  /**
+   * The optional refine round on a valid output: one request, never
+   * repaired or retried. Anything short of a valid, better answer keeps the
+   * original; only cancellation ends the step without a value.
+   */
+  const finish = async (value: T, raw: string): Promise<StructuredCallResult<T>> => {
+    if (cache && cache.get(client.base_url, client.model) !== mode) cache.set(client.base_url, client.model, mode);
+    const hints = opts.refine && attempts < maxAttempts ? opts.refine(value) : [];
+    if (hints.length === 0) return result({ value, value_raw: raw });
+    if (signal?.aborted) return cancelled();
+    const keep = (reason: string) => result({ value, value_raw: raw, refine: { hints, adopted: false, reason: redactSecrets(reason, secrets) } });
     let res;
     try {
-      res = await chat.complete({
-        model: client.model,
-        messages: [...base, ...repair],
-        ...(response_format ? { response_format } : {}),
-        ...(extraBody ? { extra_body: extraBody } : {}),
-        signal,
-        meta: opts.meta,
-      });
+      res = await send(refineMessages(raw, hints));
+    } catch (err) {
+      const ce = err instanceof ChatError ? err : new ChatError('network', err instanceof Error ? err.message : String(err));
+      if (ce.kind === 'abort' || signal?.aborted) return cancelled();
+      return keep(ce.kind === 'http' && ce.status !== null ? `调整这一轮请求失败（HTTP ${ce.status}）` : `调整这一轮请求失败：${ce.message}`);
+    }
+    addUsage(res);
+    const content = res.content ?? '';
+    raw_outputs.push(content);
+    if (signal?.aborted) return cancelled();
+    if ((res.refusal && res.refusal.trim()) || res.finish_reason === 'content_filter') return keep('模型拒绝了调整');
+    if (res.finish_reason === 'length') return keep('调整后的输出被截断');
+    if (!content.trim()) return keep('调整后模型返回了空内容');
+    const c = check(content);
+    if (!c.ok) return keep(c.problem);
+    if (opts.refineBetter && !opts.refineBetter(c.value, value)) return keep('调整后的结果没有更好');
+    return result({ value: c.value, value_raw: content, refine: { hints, adopted: true, reason: null } });
+  };
+
+  while (attempts < maxAttempts) {
+    if (signal?.aborted) return cancelled();
+    let res;
+    try {
+      res = await send(repair);
     } catch (err) {
       const ce = err instanceof ChatError ? err : new ChatError('network', err instanceof Error ? err.message : String(err));
       if (ce.kind === 'abort' || signal?.aborted) return cancelled();
@@ -238,13 +338,7 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
       continue;
     }
 
-    if (res.usage) {
-      usage.prompt += res.usage.prompt_tokens ?? 0;
-      usage.completion += res.usage.completion_tokens ?? 0;
-      usage.total += res.usage.total_tokens ?? (res.usage.prompt_tokens ?? 0) + (res.usage.completion_tokens ?? 0);
-    } else {
-      usage.unknown_calls++;
-    }
+    addUsage(res);
     const content = res.content ?? '';
     raw_outputs.push(content);
     if (res.refusal && res.refusal.trim()) return fail('PROVIDER_REFUSED', `模型拒绝回答：${res.refusal.trim()}`);
@@ -257,33 +351,17 @@ export async function structuredCall<T>(opts: StructuredCallOptions<T>): Promise
       continue;
     }
 
-    let json: unknown;
-    try {
-      json = parseModelJson(content);
-    } catch (err) {
-      lastProblem = (err as Error).message;
-      repair = repairMessages(content, [lastProblem]);
-      continue;
-    }
-    const parsed = schema.safeParse(opts.preprocess ? opts.preprocess(json) : json);
-    if (!parsed.success) {
-      const errors = zodIssuesForRepair(parsed.error);
-      lastProblem = `输出不符合 JSON Schema：${errors.slice(0, 3).join('；')}`;
-      repair = repairMessages(content, errors);
-      continue;
-    }
-    if (opts.validate) {
-      const v = opts.validate(parsed.data);
-      if (!v.ok) {
-        last_parsed = parsed.data;
-        last_errors = v.errors;
-        lastProblem = `输出未通过校验：${v.errors.slice(0, 3).join('；')}`;
-        repair = repairMessages(content, v.errors);
-        continue;
+    const c = check(content);
+    if (!c.ok) {
+      if (c.parsed !== undefined) {
+        last_parsed = c.parsed;
+        last_errors = c.errors;
       }
+      lastProblem = c.problem;
+      repair = repairMessages(content, c.errors);
+      continue;
     }
-    if (cache && cache.get(client.base_url, client.model) !== mode) cache.set(client.base_url, client.model, mode);
-    return result({ value: parsed.data });
+    return finish(c.value, content);
   }
 
   return fail('ATTEMPTS_EXHAUSTED', `已外发 ${attempts} 次仍未得到合格输出（最后一次：${lastProblem || '未知原因'}）`, true);

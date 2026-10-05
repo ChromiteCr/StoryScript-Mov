@@ -98,6 +98,10 @@ const POSE = table({
   sit: ['sitting', 'seated', '坐'],
   point: ['pointing', '指'],
   crouch: ['crouching', 'squat', 'squatting', '蹲'],
+  lie: ['lying', 'lying down', 'lie down', 'laying', 'prone', 'supine', '躺', '躺着', '卧'],
+  kneel: ['kneeling', 'on knees', 'on one knee', '跪', '跪着', '跪下'],
+  reach: ['reaching', 'reach out', 'reaching out', '伸手'],
+  phone: ['on phone', 'on the phone', 'phoning', 'calling', 'phone call', '打电话', '接电话'],
 });
 const PROP = table({
   door: ['doors', '门'],
@@ -109,11 +113,23 @@ const PROP = table({
   stairs: ['stair', 'staircase', 'steps', '楼梯'],
   window: ['windows', '窗'],
   box: ['boxes', 'crate', '箱'],
+  bed: ['beds', '床'],
+  sofa: ['sofas', 'couch', 'couches', 'settee', '沙发'],
+  shelf: ['shelves', 'bookshelf', 'bookshelves', 'bookcase', 'shelving', '书架', '货架', '架子'],
+  lamp: ['lamps', 'floor lamp', 'desk lamp', 'street lamp', 'streetlight', 'lamp post', '灯', '台灯', '路灯'],
+  tree: ['trees', '树'],
+  phone: ['phones', 'mobile', 'mobile phone', 'cellphone', 'cell phone', 'smartphone', 'telephone', '手机', '电话'],
+  cup: ['cups', 'mug', 'mugs', 'teacup', 'coffee cup', '杯', '杯子', '茶杯'],
+  book: ['books', 'diary', '书', '本子', '日记本'],
+  bag: ['bags', 'backpack', 'handbag', 'schoolbag', 'satchel', '包', '书包', '背包'],
 });
 const ENV = table({
   open: ['outdoor', 'outdoors', 'exterior', 'ext', 'outside', '室外', '外景'],
   interior: ['indoor', 'indoors', 'inside', 'int', '室内', '内景'],
   street: ['road', '街道', '街'],
+  nature: ['forest', 'woods', 'woodland', 'wilderness', 'countryside', 'mountain', '野外', '树林', '森林', '山林', '郊外'],
+  corridor: ['hallway', 'passage', 'passageway', 'hall way', '走廊', '过道', '楼道'],
+  classroom: ['class room', '教室'],
 });
 const SUBJECT_MOTION = table({
   none: ['static', 'still', 'no motion', '无'],

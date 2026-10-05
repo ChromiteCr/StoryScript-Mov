@@ -585,15 +585,16 @@ export const BoardRevisionInput = z.object({ expected_revision: z.number().int()
 
 /**
  * S4c: lay the project's boards out again with the current renderer. Only a
- * shot whose newest board nobody edited by hand gets a new version; edited
- * boards are counted and left alone. scene_id null = every scene.
+ * shot whose newest board nobody edited by hand and that wears no adopted AI
+ * picture gets a new version; the others are counted and left alone.
+ * scene_id null = every scene.
  */
 export const RelayoutBoardsInput = z.object({ scene_id: Uuid.nullable().default(null) });
 export type RelayoutBoardsInput = z.infer<typeof RelayoutBoardsInput>;
 export const RelayoutBoardsResult = z.object({
   /** new versions laid out */
   relaid: z.number().int().nonnegative(),
-  /** newest board was edited by hand: left alone */
+  /** newest board was edited by hand or wears an adopted AI picture: left alone */
   kept_edited: z.number().int().nonnegative(),
   /** already laid out by the current renderer */
   already_current: z.number().int().nonnegative(),

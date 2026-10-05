@@ -208,7 +208,8 @@ export function relayoutBoards(db: DbPort, input: Input<typeof RelayoutBoardsInp
     for (const shot of listActiveShots(db)) {
       if (input.scene_id !== null && shot.scene_id !== input.scene_id) continue;
       const prev = latestBoard(db, shot.id);
-      if (prev?.user_edited) {
+      // hand edits and an adopted AI picture are the user's choices: a new version would hide them
+      if (prev && (prev.user_edited || adoptedRasterId(db, prev.id) !== null)) {
         out.kept_edited += 1;
         continue;
       }

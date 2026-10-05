@@ -10,9 +10,9 @@ import { Button, Notice } from '../../components/ui.tsx';
  * sets and compositions (the figures themselves need no relayout: they are
  * drawn at render time). The notice offers one button for the shown shot's
  * scene and one for every scene (relayoutOffer), counts only what the server
- * would lay out (hand-edited boards and boards already on the current renderer
- * are not counted), and after the answer says how many were laid out and how
- * many edited ones were left alone. The mutation refetches the list, so the
+ * would lay out (hand-edited boards, boards wearing an adopted AI picture and
+ * boards already on the current renderer are not counted), and after the
+ * answer says how many were laid out and how many were left alone. The mutation refetches the list, so the
  * notice disappears once nothing is left; the result line stays until
  * dismissed.
  */
@@ -39,8 +39,7 @@ export function RelayoutBar({ boards, sceneId }: { boards: readonly BoardView[];
       {result}
       {offer ? (
         <Notice tone="info" title={`有 ${offer.relayable} 个分镜还是旧画法排的版`} role="note">
-          <p>新画法会补上门窗、课桌、树这些布景，单人镜头也按视线放在三分线上。重排会给分镜新排一个版本，旧版本留在版本历史里，手改过的分镜不动。</p>
-          {offer.withAiPicture > 0 ? <p>其中 {offer.withAiPicture} 个已采用 AI 图：重排后当前版本显示铅笔稿，AI 图留在旧版本里。</p> : null}
+          <p>新画法会补上门窗、课桌、树这些布景，单人镜头也按视线放在三分线上。重排会给分镜新排一个版本，旧版本留在版本历史里；手改过的和用了 AI 图的分镜不动。</p>
           <div className="mt-2 flex flex-wrap gap-2">
             {offer.buttons.map((b) => {
               // the pressed button spins, the other waits (variables is the scene id, null = every scene)

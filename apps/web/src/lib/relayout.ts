@@ -6,7 +6,8 @@ import { RENDERER_VERSION } from '@storyscript/core';
  * it can be tested with any renderer version. The count is the server's own
  * rule (services/boards relayoutBoards), applied to the list the page already
  * has: the newest board of every live shot is skipped when it was edited by
- * hand or already drawn by the current renderer.
+ * hand, wears an adopted AI picture, or was already drawn by the current
+ * renderer.
  */
 
 type BoardLike = Pick<BoardView, 'scene_id' | 'renderer_version' | 'user_edited' | 'adopted_raster_id'>;
@@ -14,25 +15,20 @@ type BoardLike = Pick<BoardView, 'scene_id' | 'renderer_version' | 'user_edited'
 export interface RelayoutCounts {
   /** would get a new version */
   relayable: number;
-  /** of those, how many wear an adopted AI picture (it stays with the old version) */
-  withAiPicture: number;
-  /** newest board edited by hand: left alone */
-  edited: number;
+  /** newest board edited by hand or wearing an adopted AI picture: left alone */
+  kept: number;
   /** already laid out by the current renderer */
   current: number;
 }
 
 /** sceneId null = every scene */
 export function relayoutCounts(boards: readonly BoardLike[], sceneId: string | null, version: string = RENDERER_VERSION): RelayoutCounts {
-  const out: RelayoutCounts = { relayable: 0, withAiPicture: 0, edited: 0, current: 0 };
+  const out: RelayoutCounts = { relayable: 0, kept: 0, current: 0 };
   for (const b of boards) {
     if (sceneId !== null && b.scene_id !== sceneId) continue;
-    if (b.user_edited) out.edited += 1;
+    if (b.user_edited || b.adopted_raster_id) out.kept += 1;
     else if (b.renderer_version === version) out.current += 1;
-    else {
-      out.relayable += 1;
-      if (b.adopted_raster_id) out.withAiPicture += 1;
-    }
+    else out.relayable += 1;
   }
   return out;
 }
@@ -44,7 +40,7 @@ export function relayoutCounts(boards: readonly BoardLike[], sceneId: string | n
  */
 export function relayoutLabel(n: number, scope: 'only' | 'scene' | 'all'): string {
   const lead = scope === 'scene' ? '本场 ' : scope === 'all' ? '全部 ' : ' ';
-  return `用新画法重排${lead}${n} 个分镜（手改过的不动）`;
+  return `用新画法重排${lead}${n} 个分镜（手改过和用了 AI 图的不动）`;
 }
 
 export interface RelayoutButton {
@@ -56,8 +52,6 @@ export interface RelayoutButton {
 export interface RelayoutOffer {
   /** boards the buttons together can lay out again */
   relayable: number;
-  /** of those, how many wear an adopted AI picture */
-  withAiPicture: number;
   buttons: RelayoutButton[];
 }
 
@@ -77,10 +71,10 @@ export function relayoutOffer(boards: readonly BoardLike[], sceneId: string, ver
         { target: null, label: relayoutLabel(all.relayable, 'all') },
       ]
     : [{ target: null, label: relayoutLabel(all.relayable, 'only') }];
-  return { relayable: all.relayable, withAiPicture: all.withAiPicture, buttons };
+  return { relayable: all.relayable, buttons };
 }
 
-/** After the server answered: "重排了 5 个，跳过手改的 1 个" */
+/** After the server answered: "重排了 5 个，跳过手改过和用了 AI 图的 1 个" */
 export function relayoutResultLine(r: RelayoutBoardsResult): string {
-  return `重排了 ${r.relaid} 个，跳过手改的 ${r.kept_edited} 个`;
+  return `重排了 ${r.relaid} 个，跳过手改过和用了 AI 图的 ${r.kept_edited} 个`;
 }

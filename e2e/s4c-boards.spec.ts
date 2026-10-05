@@ -13,7 +13,7 @@ import { api, createProject, importAndBreakdownBookshop, ROOT, signIn, startApp,
  * scene 2), one of them edited by hand, every board marked as drawn by an older
  * renderer → the page offers 用新画法重排本场 2 个 and 全部 13 个 → the scene
  * button lays out the 2 of scene 2 only → the rest is offered as one button →
- * 重排了 11 个，跳过手改的 1 个: every untouched shot has a new version on the
+ * 重排了 11 个，跳过手改过和用了 AI 图的 1 个: every untouched shot has a new version on the
  * current renderer and the edited one is exactly as it was → nothing left to
  * offer, and the API agrees (a further call changes nothing). Then the board
  * editor: the pose list has the four new poses, 换个动作 shows up exactly when
@@ -95,8 +95,8 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
   await test.step('scene 2 is shown: one button for it, one for everything', async () => {
     await page.locator(`button[data-shot="${scene2Shots[0]}"]`).click();
     await expect(page.getByText('有 13 个分镜还是旧画法排的版')).toBeVisible();
-    const here = page.getByRole('button', { name: '用新画法重排本场 2 个分镜（手改过的不动）' });
-    const everything = page.getByRole('button', { name: '用新画法重排全部 13 个分镜（手改过的不动）' });
+    const here = page.getByRole('button', { name: '用新画法重排本场 2 个分镜（手改过和用了 AI 图的不动）' });
+    const everything = page.getByRole('button', { name: '用新画法重排全部 13 个分镜（手改过和用了 AI 图的不动）' });
     await expect(here).toBeEnabled();
     await expect(everything).toBeEnabled();
     await expect(relayoutButtons).toHaveCount(2);
@@ -114,7 +114,7 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
     await page.setViewportSize({ width: 1440, height: 900 });
 
     await here.click();
-    await expect(page.getByText('重排了 2 个，跳过手改的 0 个')).toBeVisible();
+    await expect(page.getByText('重排了 2 个，跳过手改过和用了 AI 图的 0 个')).toBeVisible();
     // only scene 2 changed; what is left is all in scene 1, so one button without a scope
     await expect(page.getByText('有 11 个分镜还是旧画法排的版')).toBeVisible();
     await expect(relayoutButtons).toHaveCount(1);
@@ -124,10 +124,10 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
   });
 
   await test.step('the rest of the project: 11 laid out again, the edited one skipped', async () => {
-    const button = page.getByRole('button', { name: '用新画法重排 11 个分镜（手改过的不动）' });
+    const button = page.getByRole('button', { name: '用新画法重排 11 个分镜（手改过和用了 AI 图的不动）' });
     await expect(button).toBeEnabled();
     await button.click();
-    await expect(page.getByText('重排了 11 个，跳过手改的 1 个')).toBeVisible();
+    await expect(page.getByText('重排了 11 个，跳过手改过和用了 AI 图的 1 个')).toBeVisible();
     await expect(oldNotice).toHaveCount(0);
     await expect(relayoutButtons).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('relayout-done.png') });

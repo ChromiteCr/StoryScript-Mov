@@ -34,15 +34,15 @@ describe('relayout: what the button counts', () => {
     row(SCENE_B, NEW),
   ];
 
-  it('counts old and not hand-edited; an edited board is never counted, whatever its renderer', () => {
-    expect(relayoutCounts(list, null, NEW)).toEqual({ relayable: 3, withAiPicture: 1, edited: 2, current: 2 });
-    expect(relayoutCounts(list, SCENE_A, NEW)).toEqual({ relayable: 2, withAiPicture: 1, edited: 1, current: 1 });
-    expect(relayoutCounts(list, SCENE_B, NEW)).toEqual({ relayable: 1, withAiPicture: 0, edited: 1, current: 1 });
+  it('counts old, not hand-edited and without an adopted AI picture; kept boards never count, whatever their renderer', () => {
+    expect(relayoutCounts(list, null, NEW)).toEqual({ relayable: 2, kept: 3, current: 2 });
+    expect(relayoutCounts(list, SCENE_A, NEW)).toEqual({ relayable: 1, kept: 2, current: 1 });
+    expect(relayoutCounts(list, SCENE_B, NEW)).toEqual({ relayable: 1, kept: 1, current: 1 });
   });
 
   it('is zero when every board is on the current renderer, and for an unknown scene', () => {
     expect(relayoutCounts(list.map((r) => ({ ...r, renderer_version: NEW })), null, NEW).relayable).toBe(0);
-    expect(relayoutCounts(list, uuid(), NEW)).toEqual({ relayable: 0, withAiPicture: 0, edited: 0, current: 0 });
+    expect(relayoutCounts(list, uuid(), NEW)).toEqual({ relayable: 0, kept: 0, current: 0 });
     expect(relayoutCounts([], null, NEW).relayable).toBe(0);
   });
 
@@ -51,9 +51,9 @@ describe('relayout: what the button counts', () => {
   });
 
   it('the labels say what is covered; the single button has the plain wording', () => {
-    expect(relayoutLabel(12, 'only')).toBe('用新画法重排 12 个分镜（手改过的不动）');
-    expect(relayoutLabel(4, 'scene')).toBe('用新画法重排本场 4 个分镜（手改过的不动）');
-    expect(relayoutLabel(12, 'all')).toBe('用新画法重排全部 12 个分镜（手改过的不动）');
+    expect(relayoutLabel(12, 'only')).toBe('用新画法重排 12 个分镜（手改过和用了 AI 图的不动）');
+    expect(relayoutLabel(4, 'scene')).toBe('用新画法重排本场 4 个分镜（手改过和用了 AI 图的不动）');
+    expect(relayoutLabel(12, 'all')).toBe('用新画法重排全部 12 个分镜（手改过和用了 AI 图的不动）');
   });
 
   it('the offer: nothing when there is nothing to do, one button when this scene holds it all, two when scopes differ', () => {
@@ -63,26 +63,24 @@ describe('relayout: what the button counts', () => {
     // this scene has all of them: one button over every scene
     expect(relayoutOffer(only, SCENE_A, NEW)).toEqual({
       relayable: 2,
-      withAiPicture: 0,
-      buttons: [{ target: null, label: '用新画法重排 2 个分镜（手改过的不动）' }],
+      buttons: [{ target: null, label: '用新画法重排 2 个分镜（手改过和用了 AI 图的不动）' }],
     });
     // another scene has some, this one none: still one button
-    expect(relayoutOffer(only, SCENE_B, NEW)?.buttons).toEqual([{ target: null, label: '用新画法重排 2 个分镜（手改过的不动）' }]);
+    expect(relayoutOffer(only, SCENE_B, NEW)?.buttons).toEqual([{ target: null, label: '用新画法重排 2 个分镜（手改过和用了 AI 图的不动）' }]);
     // both scenes have some: this scene first, then every scene
     const both = [...only, row(SCENE_B, OLD, false, uuid()), row(SCENE_B, OLD)];
     expect(relayoutOffer(both, SCENE_B, NEW)).toEqual({
-      relayable: 4,
-      withAiPicture: 1,
+      relayable: 3,
       buttons: [
-        { target: SCENE_B, label: '用新画法重排本场 2 个分镜（手改过的不动）' },
-        { target: null, label: '用新画法重排全部 4 个分镜（手改过的不动）' },
+        { target: SCENE_B, label: '用新画法重排本场 1 个分镜（手改过和用了 AI 图的不动）' },
+        { target: null, label: '用新画法重排全部 3 个分镜（手改过和用了 AI 图的不动）' },
       ],
     });
   });
 
   it('the result line names both counts', () => {
-    expect(relayoutResultLine({ relaid: 11, kept_edited: 1, already_current: 0 })).toBe('重排了 11 个，跳过手改的 1 个');
-    expect(relayoutResultLine({ relaid: 0, kept_edited: 0, already_current: 12 })).toBe('重排了 0 个，跳过手改的 0 个');
+    expect(relayoutResultLine({ relaid: 11, kept_edited: 1, already_current: 0 })).toBe('重排了 11 个，跳过手改过和用了 AI 图的 1 个');
+    expect(relayoutResultLine({ relaid: 0, kept_edited: 0, already_current: 12 })).toBe('重排了 0 个，跳过手改过和用了 AI 图的 0 个');
   });
 
   it('the contract: no scene means every scene, the route and the result schema', () => {

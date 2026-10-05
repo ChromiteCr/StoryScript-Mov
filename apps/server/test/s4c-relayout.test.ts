@@ -147,7 +147,7 @@ describe('S4c relayoutBoards', () => {
     expect(view.spec.camera).not.toEqual(versionsOf(shots.a)[0]!.spec.camera);
   });
 
-  test('archived shots are left out; AI redraw rows are never touched', async () => {
+  test('archived shots are left out; a board with an adopted AI picture is kept; AI redraw rows are never touched', async () => {
     makeOld(shots.d, shots.e);
     const v1 = latestBoard(db(), shots.d.id)!;
     db().run(
@@ -162,16 +162,14 @@ describe('S4c relayoutBoards', () => {
     expect(arch.status, arch.text).toBe(200);
 
     const res = await relayout(scenes[1]!.id);
-    expect(res.data).toEqual({ relaid: 1, kept_edited: 0, already_current: 0 });
+    expect(res.data).toEqual({ relaid: 0, kept_edited: 1, already_current: 0 });
     expect(versionNumbers(shots.e)).toEqual([1]);
     expect(latestBoard(db(), shots.e.id)!.renderer_version).toBe(OLD);
-    expect(versionNumbers(shots.d)).toEqual([1, 2]);
-
+    // the adopted picture stays on the current version
+    expect(versionNumbers(shots.d)).toEqual([1]);
     expect(rasterRows()).toEqual(rastersBefore);
-    // the new version starts without an adopted picture; the old one keeps its own
     const view = (await boards()).find((b) => b.shot_id === shots.d.id)!;
-    expect(view).toMatchObject({ version: 2, adopted_raster_id: null });
-    expect((await app.get<Board[]>(`/api/v1/shots/${shots.d.id}/boards`)).data.map((b) => b.id)).toContain(v1.id);
+    expect(view).toMatchObject({ version: 1, adopted_raster_id: '00000000-0000-4000-8000-0000000000aa' });
   });
 
   test('a shot without a board gets its first one; all of it commits or none', async () => {

@@ -337,6 +337,11 @@ export const POSE_TABLES: Record<Pose, { front: JointTable; side: JointTable }> 
   sit: { front: SIT_FRONT, side: SIT_SIDE },
   point: { front: POINT_FRONT, side: POINT_SIDE },
   crouch: { front: CROUCH_FRONT, side: CROUCH_SIDE },
+  // S4c placeholders (replaced by hand-authored tables)
+  lie: { front: STAND_FRONT, side: STAND_SIDE },
+  kneel: { front: CROUCH_FRONT, side: CROUCH_SIDE },
+  reach: { front: POINT_FRONT, side: POINT_SIDE },
+  phone: { front: STAND_FRONT, side: STAND_SIDE },
 };
 
 /** Head ellipse half-axes (front width, side depth, height) in stature units (1 : 7.5). */

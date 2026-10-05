@@ -111,6 +111,7 @@ export const AREA_OF: Record<WriteRoute, readonly CollabArea[] | 'ignore'> = {
   reviewLink: ['media', 'takes'],
   addCoverageDecision: ['takes', 'media'],
   regenerateBoard: ['boards'],
+  relayoutBoards: ['boards'],
   saveBoard: ['boards'],
   keepBoard: ['boards'],
   saveImageProvider: ['settings'],

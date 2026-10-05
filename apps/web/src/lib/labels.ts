@@ -96,6 +96,10 @@ export const POSE_LABEL: Record<Pose, string> = {
   sit: '坐',
   point: '指向',
   crouch: '蹲',
+  lie: '躺',
+  kneel: '跪',
+  reach: '伸手',
+  phone: '打电话',
 };
 
 export const PROP_LABEL: Record<PropKind, string> = {
@@ -108,12 +112,24 @@ export const PROP_LABEL: Record<PropKind, string> = {
   stairs: '楼梯',
   window: '窗',
   box: '箱子',
+  bed: '床',
+  sofa: '沙发',
+  shelf: '书架',
+  lamp: '灯',
+  tree: '树',
+  phone: '手机',
+  cup: '杯子',
+  book: '书',
+  bag: '包',
 };
 
 export const ENV_LABEL: Record<EnvKind, string> = {
   open: '开阔外景',
   interior: '室内',
   street: '街道',
+  nature: '野外（树林、山坡）',
+  corridor: '走廊',
+  classroom: '教室',
 };
 
 export const SUBJECT_MOTION_LABEL: Record<SubjectMotion, string> = {

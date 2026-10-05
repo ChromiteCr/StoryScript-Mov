@@ -12,18 +12,20 @@ import { formatLevelBlock, formatStyleBlock, type BreakdownStyle, type ChatMessa
 
 export const POLISH_PROMPT_VERSION = 'polish-v1';
 
-export const POLISH_MODE_LABEL: Record<PolishMode, string> = { refine: '细化', improve: '优化', rewrite: '重写' };
+export const POLISH_MODE_LABEL: Record<PolishMode, string> = { refine: '细化', improve: '优化', rewrite: '重写', vary: '丰富变化' };
 
 export const POLISH_MODE_HINT: Record<PolishMode, string> = {
   refine: '构图不变，补充动作、拍法说明、站位和器材。',
   improve: '可以改景别、角度、镜头和运动，让镜头更好地服务剧情和风格。',
   rewrite: '同一段剧本、同样的角色，重新设计这个镜头。',
+  vary: '把选中的镜头当作一段来调：景别、角度、运动和构图有层次，不再千篇一律。',
 };
 
 const MODE_RULES: Record<PolishMode, string> = {
   refine: `【方式：细化】保持 shot_size、angle、lens、movement、template 和 subjects 的人物不变；把 action、camera_notes、subjects 的站位朝向、props、assumptions 写得更具体、更可拍。`,
   improve: `【方式：优化】可以改 shot_size、angle、lens、focal_mm、movement、template 和构图，让镜头更好地服务叙事作用和风格；保留这个镜头要讲的内容。`,
   rewrite: `【方式：重写】同一段剧本、同样出场的角色，可以完全重新设计这个镜头（景别、角度、运动、动作描述都可以换），但它仍然只是一个镜头。`,
+  vary: `【方式：丰富变化】把这些镜头当作连续的一段来设计：让景别有远有近（交代、对话、特写、插入），角度和运动有理由地变化，人物的站位、朝向和动作不要每个镜头都一样；保留每个镜头的叙事作用和台词。`,
 };
 
 export interface PolishPromptShot {

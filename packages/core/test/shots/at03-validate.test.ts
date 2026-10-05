@@ -216,7 +216,7 @@ describe('AT-03 lenient normalisation before zod', () => {
   });
 
   test('no semantic guessing: unknown values stay and fail zod', () => {
-    const out = normalizeBreakdownJson({ shots: [{ ...shot(), shot_size: 'cinematic', props: ['lamp'], subject_motion: undefined }] });
+    const out = normalizeBreakdownJson({ shots: [{ ...shot(), shot_size: 'cinematic', props: ['piano'], subject_motion: undefined }] });
     const r = BreakdownOutput.safeParse(out);
     expect(r.success).toBe(false);
     const paths = r.error!.issues.map((i) => i.path.join('.'));

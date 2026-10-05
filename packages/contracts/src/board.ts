@@ -39,6 +39,11 @@ export const BoardSubject = z.object({
   tone_override: Tone.nullable(),
   /** manual painter-order override; larger draws later (in front) */
   z_override: z.number().nullable(),
+  /**
+   * S4c: which variant of the pose (hands in pockets, arms crossed …). Absent
+   * or null: picked from the board seed, so two people never look cloned.
+   */
+  gesture: z.number().int().min(0).max(15).nullable().optional(),
 });
 export type BoardSubject = z.infer<typeof BoardSubject>;
 

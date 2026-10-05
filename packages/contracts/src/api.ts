@@ -313,7 +313,8 @@ export type BreakdownRequest = z.infer<typeof BreakdownRequest>;
 // ------------------------------------------------------------- S3a polish --
 
 /** 细化 keeps the framing and adds detail; 优化 may change framing; 重写 redesigns the shot. */
-export const PolishMode = z.enum(['refine', 'improve', 'rewrite']);
+/** S4c vary: treat the selected shots as one passage and give them variety */
+export const PolishMode = z.enum(['refine', 'improve', 'rewrite', 'vary']);
 export type PolishMode = z.infer<typeof PolishMode>;
 
 export const POLISH_MAX_SHOTS = 12;
@@ -582,6 +583,23 @@ export const SaveBoardInput = z.object({
 });
 export const BoardRevisionInput = z.object({ expected_revision: z.number().int().nonnegative() });
 
+/**
+ * S4c: lay the project's boards out again with the current renderer. Only a
+ * shot whose newest board nobody edited by hand gets a new version; edited
+ * boards are counted and left alone. scene_id null = every scene.
+ */
+export const RelayoutBoardsInput = z.object({ scene_id: Uuid.nullable().default(null) });
+export type RelayoutBoardsInput = z.infer<typeof RelayoutBoardsInput>;
+export const RelayoutBoardsResult = z.object({
+  /** new versions laid out */
+  relaid: z.number().int().nonnegative(),
+  /** newest board was edited by hand: left alone */
+  kept_edited: z.number().int().nonnegative(),
+  /** already laid out by the current renderer */
+  already_current: z.number().int().nonnegative(),
+});
+export type RelayoutBoardsResult = z.infer<typeof RelayoutBoardsResult>;
+
 // ---------------------------------------------------------------- M8 -------
 
 export const SaveImageProviderInput = z.object({
@@ -842,6 +860,7 @@ export const Api = {
   regenerateBoard: { method: 'POST', path: '/api/v1/shots/:id/boards', output: BoardView },
   saveBoard: { method: 'PATCH', path: '/api/v1/boards/:id', input: SaveBoardInput, output: BoardView },
   keepBoard: { method: 'POST', path: '/api/v1/boards/:id/keep', input: BoardRevisionInput, output: BoardView },
+  relayoutBoards: { method: 'POST', path: '/api/v1/boards/relayout', input: RelayoutBoardsInput, output: RelayoutBoardsResult },
 
   // M8 — image provider & AI pencil redraw (experimental)
   saveImageProvider: { method: 'PUT', path: '/api/v1/settings/providers/image', input: SaveImageProviderInput, output: ProvidersView },

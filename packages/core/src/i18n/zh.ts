@@ -79,6 +79,10 @@ export const ZH_POSE: Record<Pose, string> = {
   sit: '坐',
   point: '指',
   crouch: '蹲',
+  lie: '躺',
+  kneel: '跪',
+  reach: '伸手',
+  phone: '打电话',
 };
 
 export const ZH_PROP_KIND: Record<PropKind, string> = {
@@ -91,9 +95,25 @@ export const ZH_PROP_KIND: Record<PropKind, string> = {
   stairs: '楼梯',
   window: '窗',
   box: '箱',
+  bed: '床',
+  sofa: '沙发',
+  shelf: '书架',
+  lamp: '灯',
+  tree: '树',
+  phone: '手机',
+  cup: '杯',
+  book: '书',
+  bag: '包',
 };
 
-export const ZH_ENV_KIND: Record<EnvKind, string> = { open: '开阔地', interior: '室内', street: '街道' };
+export const ZH_ENV_KIND: Record<EnvKind, string> = {
+  open: '开阔地',
+  interior: '室内',
+  street: '街道',
+  nature: '野外',
+  corridor: '走廊',
+  classroom: '教室',
+};
 
 export const ZH_SUBJECT_MOTION: Record<SubjectMotion, string> = {
   none: '无',

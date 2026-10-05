@@ -140,11 +140,47 @@ const ZH_MOVE: Record<Movement, string> = {
   dolly_zoom: '变焦推拉',
 };
 
-const EN_POSE: Record<Pose, string> = { stand: 'standing', walk: 'walking', run: 'running', sit: 'sitting', point: 'pointing', crouch: 'crouching' };
-const ZH_POSE: Record<Pose, string> = { stand: '站立', walk: '行走', run: '奔跑', sit: '坐着', point: '伸手指向', crouch: '蹲下' };
+const EN_POSE: Record<Pose, string> = {
+  stand: 'standing',
+  walk: 'walking',
+  run: 'running',
+  sit: 'sitting',
+  point: 'pointing',
+  crouch: 'crouching',
+  lie: 'lying down',
+  kneel: 'kneeling',
+  reach: 'reaching out',
+  phone: 'talking on a phone',
+};
+const ZH_POSE: Record<Pose, string> = {
+  stand: '站立',
+  walk: '行走',
+  run: '奔跑',
+  sit: '坐着',
+  point: '伸手指向',
+  crouch: '蹲下',
+  lie: '躺着',
+  kneel: '跪着',
+  reach: '伸手去拿',
+  phone: '打电话',
+};
 
-const EN_ENV: Record<EnvKind, string> = { open: 'open exterior landscape', interior: 'interior room', street: 'city street' };
-const ZH_ENV: Record<EnvKind, string> = { open: '开阔的外景', interior: '室内', street: '城市街道' };
+const EN_ENV: Record<EnvKind, string> = {
+  open: 'open exterior landscape',
+  interior: 'interior room',
+  street: 'city street',
+  nature: 'woods and hills',
+  corridor: 'long indoor corridor',
+  classroom: 'school classroom',
+};
+const ZH_ENV: Record<EnvKind, string> = {
+  open: '开阔的外景',
+  interior: '室内',
+  street: '城市街道',
+  nature: '树林和山坡',
+  corridor: '室内走廊',
+  classroom: '学校教室',
+};
 
 const EN_PROP: Record<PropKind, string> = {
   door: 'door',
@@ -156,6 +192,15 @@ const EN_PROP: Record<PropKind, string> = {
   stairs: 'stairs',
   window: 'window',
   box: 'box',
+  bed: 'bed',
+  sofa: 'sofa',
+  shelf: 'bookshelf',
+  lamp: 'lamp',
+  tree: 'tree',
+  phone: 'mobile phone',
+  cup: 'cup',
+  book: 'book',
+  bag: 'bag',
 };
 const ZH_PROP: Record<PropKind, string> = {
   door: '门',
@@ -167,6 +212,15 @@ const ZH_PROP: Record<PropKind, string> = {
   stairs: '楼梯',
   window: '窗',
   box: '箱子',
+  bed: '床',
+  sofa: '沙发',
+  shelf: '书架',
+  lamp: '灯',
+  tree: '树',
+  phone: '手机',
+  cup: '杯子',
+  book: '书',
+  bag: '包',
 };
 
 const EN_SCREEN = { left: 'screen left', center: 'screen center', right: 'screen right' } as const;

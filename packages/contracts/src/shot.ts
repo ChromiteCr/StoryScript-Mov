@@ -43,13 +43,53 @@ export type DepthPlane = z.infer<typeof DepthPlane>;
 export const Facing = z.enum(['camera', 'away', 'screen_left', 'screen_right', '3q_left', '3q_right']);
 export type Facing = z.infer<typeof Facing>;
 
-export const Pose = z.enum(['stand', 'walk', 'run', 'sit', 'point', 'crouch']);
+export const Pose = z.enum([
+  'stand',
+  'walk',
+  'run',
+  'sit',
+  'point',
+  'crouch',
+  // S4c: more of what people do in a scene
+  'lie',
+  'kneel',
+  'reach',
+  'phone',
+]);
 export type Pose = z.infer<typeof Pose>;
 
-export const PropKind = z.enum(['door', 'table', 'chair', 'car', 'wall', 'building', 'stairs', 'window', 'box']);
+export const PropKind = z.enum([
+  'door',
+  'table',
+  'chair',
+  'car',
+  'wall',
+  'building',
+  'stairs',
+  'window',
+  'box',
+  // S4c: furniture, a tree and the small things an insert is about
+  'bed',
+  'sofa',
+  'shelf',
+  'lamp',
+  'tree',
+  'phone',
+  'cup',
+  'book',
+  'bag',
+]);
 export type PropKind = z.infer<typeof PropKind>;
 
-export const EnvKind = z.enum(['open', 'interior', 'street']);
+export const EnvKind = z.enum([
+  'open',
+  'interior',
+  'street',
+  // S4c: the places school shorts are shot in
+  'nature',
+  'corridor',
+  'classroom',
+]);
 export type EnvKind = z.infer<typeof EnvKind>;
 
 export const SubjectMotion = z.enum(['none', 'l2r', 'r2l', 'toward', 'away']);

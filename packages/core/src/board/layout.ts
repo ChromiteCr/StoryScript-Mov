@@ -65,6 +65,15 @@ export const PROP_SIZE: Record<PropKind, { w: number; h: number; d: number }> = 
   stairs: { w: 1.2, h: 1.0, d: 2.0 },
   window: { w: 1.2, h: 1.2, d: 0.1 },
   box: { w: 0.5, h: 0.5, d: 0.5 },
+  bed: { w: 1.5, h: 0.55, d: 2.0 },
+  sofa: { w: 2.0, h: 0.85, d: 0.9 },
+  shelf: { w: 1.0, h: 1.9, d: 0.35 },
+  lamp: { w: 0.4, h: 1.6, d: 0.4 },
+  tree: { w: 3.0, h: 6.0, d: 3.0 },
+  phone: { w: 0.075, h: 0.01, d: 0.15 },
+  cup: { w: 0.09, h: 0.11, d: 0.09 },
+  book: { w: 0.17, h: 0.03, d: 0.24 },
+  bag: { w: 0.4, h: 0.32, d: 0.18 },
 };
 
 export const SCREEN_X: Record<ScreenPos, number> = { L: 1 / 3, C: 0.5, R: 2 / 3 };

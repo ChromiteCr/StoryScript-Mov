@@ -149,10 +149,10 @@ describe('AI 润色 button', () => {
     expect(PolishRequest.safeParse({ shot_ids: ids, mode: 'refine', instruction: 'x'.repeat(501), style_id: null, level: 'steady' }).success).toBe(false);
   });
 
-  it('labels: the job, the slot and the three ways', () => {
+  it('labels: the job, the slot and the four ways', () => {
     expect(JOB_KIND_LABEL.polish_shots).toBe('AI 润色');
     expect(POLISH_SLOT).toBe('polish');
-    expect(POLISH_MODE_LABEL).toEqual({ refine: '细化', improve: '优化', rewrite: '重写' });
+    expect(POLISH_MODE_LABEL).toEqual({ refine: '细化', improve: '优化', rewrite: '重写', vary: '丰富变化' });
   });
 });
 

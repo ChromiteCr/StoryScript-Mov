@@ -40,7 +40,8 @@ export function relayoutCounts(boards: readonly BoardLike[], sceneId: string | n
  */
 export function relayoutLabel(n: number, scope: 'only' | 'scene' | 'all'): string {
   const lead = scope === 'scene' ? '本场 ' : scope === 'all' ? '全部 ' : ' ';
-  return `用新画法重排${lead}${n} 个分镜（手改过和用了 AI 图的不动）`;
+  // what is left alone is said once, in the notice above the buttons
+  return `用新画法重排${lead}${n} 个分镜`;
 }
 
 export interface RelayoutButton {

@@ -95,8 +95,8 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
   await test.step('scene 2 is shown: one button for it, one for everything', async () => {
     await page.locator(`button[data-shot="${scene2Shots[0]}"]`).click();
     await expect(page.getByText('有 13 个分镜还是旧画法排的版')).toBeVisible();
-    const here = page.getByRole('button', { name: '用新画法重排本场 2 个分镜（手改过和用了 AI 图的不动）' });
-    const everything = page.getByRole('button', { name: '用新画法重排全部 13 个分镜（手改过和用了 AI 图的不动）' });
+    const here = page.getByRole('button', { name: '用新画法重排本场 2 个分镜' });
+    const everything = page.getByRole('button', { name: '用新画法重排全部 13 个分镜' });
     await expect(here).toBeEnabled();
     await expect(everything).toBeEnabled();
     await expect(relayoutButtons).toHaveCount(2);
@@ -124,7 +124,7 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
   });
 
   await test.step('the rest of the project: 11 laid out again, the edited one skipped', async () => {
-    const button = page.getByRole('button', { name: '用新画法重排 11 个分镜（手改过和用了 AI 图的不动）' });
+    const button = page.getByRole('button', { name: '用新画法重排 11 个分镜' });
     await expect(button).toBeEnabled();
     await button.click();
     await expect(page.getByText('重排了 11 个，跳过手改过和用了 AI 图的 1 个')).toBeVisible();

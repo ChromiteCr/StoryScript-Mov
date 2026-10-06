@@ -51,9 +51,9 @@ describe('relayout: what the button counts', () => {
   });
 
   it('the labels say what is covered; the single button has the plain wording', () => {
-    expect(relayoutLabel(12, 'only')).toBe('用新画法重排 12 个分镜（手改过和用了 AI 图的不动）');
-    expect(relayoutLabel(4, 'scene')).toBe('用新画法重排本场 4 个分镜（手改过和用了 AI 图的不动）');
-    expect(relayoutLabel(12, 'all')).toBe('用新画法重排全部 12 个分镜（手改过和用了 AI 图的不动）');
+    expect(relayoutLabel(12, 'only')).toBe('用新画法重排 12 个分镜');
+    expect(relayoutLabel(4, 'scene')).toBe('用新画法重排本场 4 个分镜');
+    expect(relayoutLabel(12, 'all')).toBe('用新画法重排全部 12 个分镜');
   });
 
   it('the offer: nothing when there is nothing to do, one button when this scene holds it all, two when scopes differ', () => {
@@ -63,17 +63,17 @@ describe('relayout: what the button counts', () => {
     // this scene has all of them: one button over every scene
     expect(relayoutOffer(only, SCENE_A, NEW)).toEqual({
       relayable: 2,
-      buttons: [{ target: null, label: '用新画法重排 2 个分镜（手改过和用了 AI 图的不动）' }],
+      buttons: [{ target: null, label: '用新画法重排 2 个分镜' }],
     });
     // another scene has some, this one none: still one button
-    expect(relayoutOffer(only, SCENE_B, NEW)?.buttons).toEqual([{ target: null, label: '用新画法重排 2 个分镜（手改过和用了 AI 图的不动）' }]);
+    expect(relayoutOffer(only, SCENE_B, NEW)?.buttons).toEqual([{ target: null, label: '用新画法重排 2 个分镜' }]);
     // both scenes have some: this scene first, then every scene
     const both = [...only, row(SCENE_B, OLD, false, uuid()), row(SCENE_B, OLD)];
     expect(relayoutOffer(both, SCENE_B, NEW)).toEqual({
       relayable: 3,
       buttons: [
-        { target: SCENE_B, label: '用新画法重排本场 1 个分镜（手改过和用了 AI 图的不动）' },
-        { target: null, label: '用新画法重排全部 3 个分镜（手改过和用了 AI 图的不动）' },
+        { target: SCENE_B, label: '用新画法重排本场 1 个分镜' },
+        { target: null, label: '用新画法重排全部 3 个分镜' },
       ],
     });
   });

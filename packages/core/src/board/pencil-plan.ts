@@ -533,8 +533,10 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
           const base = figurePartTone(tone, band, p.material, it.style, p.far);
           const r = { base, material: p.material, part: k };
           if (base < 3) {
-            // skin turns from the light softly: a full step reads as a stubble mask
-            shade.push({ pts, tone: Math.min(3, base + (p.material === 'skin' ? 0.5 : 0.8)), kind: 'shade', ...r });
+            // skin turns from the light softly (a full step reads as a stubble mask);
+            // so do sleeves, whose shade lies between arm and body like a strap
+            const step = p.material === 'skin' || p.group.startsWith('arm') ? 0.5 : 0.8;
+            shade.push({ pts, tone: Math.min(3, base + step), kind: 'shade', ...r });
             // the torso is a broad, flat form: a narrow turn into shade, or it reads as a strap
             const l = litSide(pts, [lx, ly], p.group === 'torso' ? SHADE_SHIFT * 0.45 : SHADE_SHIFT);
             if (l.length >= 3) lit.push({ pts: orientAll([l])[0] ?? l, tone: base, kind: 'body', ...r });

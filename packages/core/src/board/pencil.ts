@@ -6,13 +6,15 @@
  *  1. paper ground;
  *  2. painter pass (same order as structure): flat graphite tone per region
  *     (opaque, so nearer shapes hide what is behind) with each shape's
- *     tapered contour drawn right after its fill;
+ *     tapered contour drawn right after its fill; people carry their face,
+ *     hair and clothing marks (S4c) between their own regions, so a nearer
+ *     limb still covers them;
  *  3. construction lines (horizon, vanishing lines, vertical convergence);
  *  4. a blurred graphite smudge under the darkest tone;
  *  5. three frame-wide hatch fields T1 / T2 / T3 in one direction (T3
  *     crossing), each masked by the blurred union of its tone and darker —
  *     one consistent hand, not per-object hachure;
- *  6. head-direction guides, paper grain, vignette, frame line;
+ *  6. paper grain, vignette, frame line;
  *  7. the annotation layer (optional, separate group).
  *
  * Every random quantity comes from rngFor(spec.seed, elementKey), so editing
@@ -29,6 +31,7 @@ import { DEFAULT_PENCIL_LOOK, paperLevel, type PencilLook } from './pencil-look.
 import { pencilOverlaySvg } from './pencil-overlay.ts';
 import {
   buildPencilPlan,
+  figurePartTone,
   groundValueAt,
   toneRaster,
   type DepthBand,
@@ -36,6 +39,7 @@ import {
   type PencilPlan,
   type PlanItem,
 } from './pencil-plan.ts';
+import { detailVisible, type PuppetMaterial } from './puppets.ts';
 import { bandBox, dilate, fillPolygon, makeGrid, sample, traceLoops, type Grid } from './raster.ts';
 import type { SubjectItem } from './scene.ts';
 import { hatchMark, resample, splitLoop, sym, taperedStroke, type Rng } from './strokes.ts';
@@ -67,7 +71,76 @@ export interface PencilRenderOptions {
  */
 export function structureHash(spec: BoardSpec, look: PencilLook = DEFAULT_PENCIL_LOOK): string {
   const movers = spec.overlay.arrows.filter((a) => a.kind === 'subject_move');
-  return contentHash({ v: PENCIL_VERSION, frame: spec.frame, camera: spec.camera, scene: spec.scene, seed: spec.seed, movers, look });
+  // Frozen inputs (S4c): the v1 version string, the v1 default look, and only
+  // the look fields v1 had; an unset gesture (absent or null) hashes as absent.
+  const hashLook = look === DEFAULT_PENCIL_LOOK ? LOOK_HASH_V1 : pickV1(look);
+  const subjects = spec.scene.subjects.map((s) => (s.gesture === null || s.gesture === undefined ? omitGesture(s) : s));
+  const scene = { ...spec.scene, subjects };
+  return contentHash({ v: PENCIL_VERSION, frame: spec.frame, camera: spec.camera, scene, seed: spec.seed, movers, look: hashLook });
+}
+
+function omitGesture<T extends { gesture?: unknown }>(s: T): Omit<T, 'gesture'> {
+  const { gesture: _g, ...rest } = s;
+  return rest;
+}
+
+/**
+ * The default look as structureHash v1 saw it. Never edit: the picture may
+ * change (PICTURE_VERSION), the hash of an existing board may not.
+ */
+export const LOOK_HASH_V1 = Object.freeze({
+  angle: 38,
+  cross: 108,
+  paperTone: '#F3F0E8',
+  outline: { fg: 2.2, mg: 1.4, bg: 0.9 },
+  hatch: {
+    spacing: [9, 6, 7],
+    width: [1.6, 1.5, 1.5],
+    opacity: [0.72, 0.78, 0.8],
+    ink: [64, 48, 30],
+    patchMin: 5,
+    patchMax: 12,
+    endJitter: 3,
+    slant: 1.6,
+    segMin: 40,
+    segMax: 120,
+    gapMin: 2,
+    gapMax: 6,
+    bow: 0.018,
+    jitter: 0.15,
+    wobble: 1.2,
+  },
+  maskBlur: 1.2,
+  smudge: { blur: 2, opacity: 0.5, ink: 48 },
+  fill: [0, 0.2, 0.34, 0.5],
+  figure: [0.06, 0.26, 0.44, 0.82],
+  shade: 0.6,
+  litHatch: 0.5,
+  contour: {
+    scale: 1,
+    ink: 28,
+    opacity: 0.88,
+    second: 0.6,
+    offset: 1,
+    secondOpacity: 0.5,
+    secondWobble: 0.9,
+    overshoot: 0.03,
+    litBreak: 0.15,
+    lit: 0.7,
+    shade: 1.5,
+  },
+  construction: { stroke: '#8a8a8a', opacity: 0.35, width: 0.6 },
+  grain: 1,
+  tooth: 0.5,
+  vignette: 0.12,
+});
+
+/** A non-default look restricted to the fields the v1 hash had (later look fields never enter it). */
+function pickV1(look: PencilLook): Record<string, unknown> {
+  const src = look as unknown as Record<string, unknown>;
+  const out: Record<string, unknown> = {};
+  for (const k of Object.keys(LOOK_HASH_V1)) out[k] = src[k];
+  return out;
 }
 
 function svgOpen(W: number, H: number, width: number | undefined): string {
@@ -431,7 +504,6 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
   const body: string[] = [];
   const defsLocal: string[] = [];
   const toneMap: string[] = [el('rect', { x: 0, y: 0, width: W, height: H, fill: gray(0) })];
-  const guides: string[] = [];
   const gp = plan.ground;
   if (gp) {
     body.push(el('path', { d: polyPath(gp.poly), fill: contourOnly ? paper : `url(#${ids.gf})`, 'data-el': 'ground' }));
@@ -470,11 +542,35 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
 
   for (const it of plan.items) body.push(itemSvg(it));
 
+  /** figure darkness at a fractional tone (piecewise linear over look.figure) */
+  function figureAt(v: number): number {
+    const t = clamp(v, 0, 3);
+    const i = Math.min(2, Math.floor(t));
+    return lerp(look.figure[i] as number, look.figure[i + 1] as number, t - i);
+  }
   function figureDark(r: FigureRegion): number {
-    const t = clamp(r.tone, 0, 3);
     // the shade is part-way from the lit tone to the next darker one; the hatch carries the rest
-    if (r.kind === 'shade') return lerp(look.figure[t - 1] as number, look.figure[t] as number, look.shade);
-    return look.figure[t] as number;
+    return figureAt(r.kind === 'shade' ? lerp(r.base, r.tone, look.shade) : r.base);
+  }
+  /** lit-side tone the hatch masks see: a little lighter than the fill; faces stay clear of the lightest hatch */
+  function litHatchTone(r: FigureRegion): number {
+    return r.tone - (r.material === 'skin' ? 1 : look.litHatch);
+  }
+
+  /**
+   * One face / hair / clothing mark: a thin tapered pencil stroke, graphite on
+   * light parts and paper-light on dark ones (hair, dark cloth).
+   */
+  function detailMark(l: SubjectItem['lines'][number], s: SubjectItem, bandTone: number, band: DepthBand, rng: Rng): string {
+    if (!inFrame(l.pts, W, H, 0)) return '';
+    const on: PuppetMaterial = l.kind === 'face' || l.kind === 'faceMinor' ? 'skin' : l.kind === 'hair' ? 'hair' : (s.parts[l.after]?.material ?? 'top');
+    const dark = figureAt(figurePartTone(bandTone, band, on, s.style)) > 0.5;
+    const face = clamp(s.headPx * 0.026, 0.6, 2.6);
+    const w0 = l.kind === 'face' ? face : l.kind === 'faceMinor' ? face * 0.7 : l.kind === 'hair' ? face * 0.8 : clamp(s.heightPx * 0.0022, 0.5, 1.6);
+    const d = taperedStroke(l.pts, { w0, rng, overshoot: 0.02, wobble: Math.min(0.3, w0 * 0.2) });
+    if (!d) return '';
+    const o = l.kind === 'cloth' ? 0.5 : l.kind === 'hair' ? 0.45 : 0.8;
+    return el('path', { d, fill: dark ? paper : ink, 'fill-opacity': clamp((dark ? o * 0.75 : o) * (1 + sym(rng) * 0.1), 0.05, 1), 'data-mark': l.key });
   }
 
   function itemSvg(it: PlanItem): string {
@@ -519,38 +615,48 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       if (it.parts.length) {
         if (contourOnly) g.push(el('path', { d: it.parts.map((p) => polyPath(p)).join(''), fill: paper }));
         else {
-          // painter-ordered toned regions; consecutive regions of one grey share a path
+          // painter-ordered toned regions; consecutive regions of one grey share a
+          // path; a group's detail marks follow its regions
           let d = '';
           let cur = '';
           const flush = () => {
             if (d) g.push(el('path', { d, fill: cur }));
             d = '';
           };
-          for (const r of it.regions) {
+          const marks = it.band === 'fg' ? [] : s.lines.filter((l) => detailVisible(l.kind, s.headPx, s.heightPx));
+          const groupOf = (k: number) => s.parts[k]?.group ?? '';
+          const done = new Set<number>();
+          const lrng = rngFor(spec.seed, `marks:${it.key}`);
+          const emit = (group: string | null) => {
+            for (let k = 0; k < marks.length; k++) {
+              const l = marks[k]!;
+              if (done.has(k) || (group !== null && groupOf(l.after) !== group)) continue;
+              done.add(k);
+              const svg = detailMark(l, s, it.tone, it.band, lrng);
+              if (svg) {
+                flush();
+                g.push(svg);
+              }
+            }
+          };
+          for (let k = 0; k < it.regions.length; k++) {
+            const r = it.regions[k]!;
             const f = tone(figureDark(r));
             if (f !== cur) {
               flush();
               cur = f;
             }
             d += polyPath(r.pts);
+            const next = it.regions[k + 1];
+            if (!next || groupOf(next.part) !== groupOf(r.part)) emit(groupOf(r.part));
           }
           flush();
+          emit(null);
         }
         // the hatch sees the lit side a little lighter than its fill tone: lit side sparse, shade side dense
-        for (const r of it.regions) toneMap.push(el('path', { d: polyPath(r.pts), fill: toneGray(r.kind === 'shade' ? r.tone : r.tone - look.litHatch) }));
+        for (const r of it.regions) toneMap.push(el('path', { d: polyPath(r.pts), fill: toneGray(r.kind === 'shade' ? r.tone : litHatchTone(r)) }));
       }
       g.push(contourPaths(loopRuns(outline, rng, s.heightPx, W, H), w0, rng, look, plan.lightScreen, ink));
-      // head-direction guide (a faint line, not a face)
-      const mer = s.lines.find((l) => l.key === 'faceMeridian');
-      if (mer && !contourOnly && inFrame(mer.pts, W, H, 0)) {
-        const grng = rngFor(spec.seed, `guide:${it.key}`);
-        const dark = (look.figure[clamp(it.tone, 0, 3)] as number) > 0.42;
-        const d = taperedStroke(mer.pts, { w0: clamp(s.heightPx * 0.0045, 0.9, 3.2), rng: grng, overshoot: 0.02, wobble: 0.2 });
-        if (d)
-          guides.push(
-            `<g${attrs({ 'data-el': `guide:${s.id}` })}>${el('path', { d, fill: dark ? paper : ink, 'fill-opacity': dark ? 0.55 : 0.45 })}</g>`,
-          );
-      }
     }
     g.push('</g>');
     return g.join('');
@@ -641,7 +747,6 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
   if (!contourOnly) {
     out.push(smudge);
     out.push(hatch.join(''));
-    out.push(guides.join(''));
     if (background) out.push(paperOverlay(pids, W, H, look.grain, look.vignette));
   }
   out.push('</g>');

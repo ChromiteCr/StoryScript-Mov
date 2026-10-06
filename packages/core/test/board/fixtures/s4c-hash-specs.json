@@ -1,0 +1,638 @@
+[
+  {
+    "key": "03-ots-a",
+    "spec": {
+      "version": 1,
+      "frame": {
+        "aspect": "2.39",
+        "guides": [
+          "1.43"
+        ]
+      },
+      "camera": {
+        "x": 0,
+        "y": 1.6363,
+        "z": 0,
+        "yaw_deg": 0,
+        "pitch_deg": -8.385,
+        "roll_deg": 0,
+        "focal_mm": 40,
+        "sensor_w_mm": 36
+      },
+      "scene": {
+        "env": "interior",
+        "light": {
+          "azimuth_deg": 45,
+          "elevation_deg": 40
+        },
+        "subjects": [
+          {
+            "id": "s0",
+            "entity_id": null,
+            "label": "甲",
+            "badge": "A",
+            "x": -0.5299,
+            "z": 1.378,
+            "yaw_deg": 171.03,
+            "pose": "stand",
+            "height_m": 1.76,
+            "silhouette": "regular",
+            "tone_override": null,
+            "z_override": null
+          },
+          {
+            "id": "s1",
+            "entity_id": null,
+            "label": "乙",
+            "badge": "B",
+            "x": 0.3879,
+            "z": 2.5054,
+            "yaw_deg": -53.8,
+            "pose": "stand",
+            "height_m": 1.64,
+            "silhouette": "dress",
+            "tone_override": null,
+            "z_override": null
+          }
+        ],
+        "props": [
+          {
+            "id": "env-wall-back",
+            "kind": "wall",
+            "x": 0,
+            "z": 5.1054,
+            "y": 0,
+            "w": 7.4,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-wall-left",
+            "kind": "wall",
+            "x": -3.6,
+            "z": 1.5027,
+            "y": 0,
+            "w": 7.0054,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 90,
+            "attach": "world"
+          },
+          {
+            "id": "env-wall-right",
+            "kind": "wall",
+            "x": 3.6,
+            "z": 1.5027,
+            "y": 0,
+            "w": 7.0054,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 90,
+            "attach": "world"
+          },
+          {
+            "id": "p-window-0",
+            "kind": "window",
+            "x": -1.2121,
+            "z": 4.9554,
+            "y": 1,
+            "w": 1.2,
+            "h": 1.2,
+            "d": 0.1,
+            "yaw_deg": 0,
+            "attach": "world"
+          }
+        ]
+      },
+      "overlay": {
+        "labels": [
+          {
+            "id": "l-shot",
+            "text": "中景 · 40mm",
+            "x": 0.012,
+            "y": 0.955
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a-eye-s0",
+            "kind": "eyeline",
+            "mode": "anchored",
+            "subject_id": "s0",
+            "world_from": {
+              "x": -0.5299,
+              "z": 1.378
+            },
+            "world_to": {
+              "x": 0.3879,
+              "z": 2.5054
+            }
+          }
+        ],
+        "camera_move": "static",
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "show_code": true
+      },
+      "seed": 7
+    },
+    "structure_hash": "0a7903a8aec9540e7da24083ab63",
+    "hash_b": "04b7ba436fae1617bfe4c22035fc",
+    "hash_c": "142eb10bdbde61164459e6693adc"
+  },
+  {
+    "key": "05-mcu",
+    "spec": {
+      "version": 1,
+      "frame": {
+        "aspect": "2.39",
+        "guides": [
+          "1.43"
+        ]
+      },
+      "camera": {
+        "x": 0,
+        "y": 1.5252,
+        "z": 0,
+        "yaw_deg": 0,
+        "pitch_deg": -4.8306,
+        "roll_deg": 0,
+        "focal_mm": 40,
+        "sensor_w_mm": 36
+      },
+      "scene": {
+        "env": "interior",
+        "light": {
+          "azimuth_deg": 45,
+          "elevation_deg": 40
+        },
+        "subjects": [
+          {
+            "id": "s0",
+            "entity_id": null,
+            "label": "乙",
+            "badge": "B",
+            "x": -0.2739,
+            "z": 1.7801,
+            "yaw_deg": 53.75,
+            "pose": "stand",
+            "height_m": 1.64,
+            "silhouette": "dress",
+            "tone_override": null,
+            "z_override": null
+          }
+        ],
+        "props": [
+          {
+            "id": "env-wall-back",
+            "kind": "wall",
+            "x": 0,
+            "z": 4.3801,
+            "y": 0,
+            "w": 7.4,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-wall-left",
+            "kind": "wall",
+            "x": -3.6,
+            "z": 1.1401,
+            "y": 0,
+            "w": 6.2801,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 90,
+            "attach": "world"
+          },
+          {
+            "id": "env-wall-right",
+            "kind": "wall",
+            "x": 3.6,
+            "z": 1.1401,
+            "y": 0,
+            "w": 6.2801,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 90,
+            "attach": "world"
+          },
+          {
+            "id": "p-door-0",
+            "kind": "door",
+            "x": -1.7739,
+            "z": 4.2301,
+            "y": 0,
+            "w": 0.9,
+            "h": 2.1,
+            "d": 0.1,
+            "yaw_deg": 0,
+            "attach": "world"
+          }
+        ]
+      },
+      "overlay": {
+        "labels": [
+          {
+            "id": "l-shot",
+            "text": "近景 · 40mm",
+            "x": 0.012,
+            "y": 0.955
+          }
+        ],
+        "arrows": [],
+        "camera_move": "static",
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "show_code": true
+      },
+      "seed": 7
+    },
+    "structure_hash": "1b4b8cd8bc3f0b00f96d6a04c90b",
+    "hash_b": "0a848060477e1907eadd8ae46e57",
+    "hash_c": "1520327a50c1fc10bea3ffb6e9a3"
+  },
+  {
+    "key": "07-chase",
+    "spec": {
+      "version": 1,
+      "frame": {
+        "aspect": "2.39",
+        "guides": [
+          "1.43"
+        ]
+      },
+      "camera": {
+        "x": 0,
+        "y": 1.6368,
+        "z": 0,
+        "yaw_deg": 0,
+        "pitch_deg": -8.015,
+        "roll_deg": 0,
+        "focal_mm": 40,
+        "sensor_w_mm": 36
+      },
+      "scene": {
+        "env": "street",
+        "light": {
+          "azimuth_deg": 45,
+          "elevation_deg": 40
+        },
+        "subjects": [
+          {
+            "id": "s0",
+            "entity_id": null,
+            "label": "甲",
+            "badge": "A",
+            "x": -0.3909,
+            "z": 5.3879,
+            "yaw_deg": 94.15,
+            "pose": "run",
+            "height_m": 1.76,
+            "silhouette": "regular",
+            "tone_override": null,
+            "z_override": null
+          },
+          {
+            "id": "s1",
+            "entity_id": null,
+            "label": "丙",
+            "badge": "C",
+            "x": -1.2204,
+            "z": 5.3879,
+            "yaw_deg": 102.76,
+            "pose": "run",
+            "height_m": 1.82,
+            "silhouette": "coat",
+            "tone_override": null,
+            "z_override": null
+          }
+        ],
+        "props": [
+          {
+            "id": "env-block-0",
+            "kind": "building",
+            "x": -10,
+            "z": 1,
+            "y": 0,
+            "w": 8,
+            "h": 11,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-1",
+            "kind": "building",
+            "x": -10,
+            "z": 13,
+            "y": 0,
+            "w": 8,
+            "h": 11,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-2",
+            "kind": "building",
+            "x": -10,
+            "z": 25,
+            "y": 0,
+            "w": 8,
+            "h": 20,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-3",
+            "kind": "building",
+            "x": -10,
+            "z": 37,
+            "y": 0,
+            "w": 8,
+            "h": 8,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-4",
+            "kind": "building",
+            "x": -10,
+            "z": 49,
+            "y": 0,
+            "w": 8,
+            "h": 11,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-5",
+            "kind": "building",
+            "x": 10,
+            "z": 1,
+            "y": 0,
+            "w": 8,
+            "h": 17,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-6",
+            "kind": "building",
+            "x": 10,
+            "z": 13,
+            "y": 0,
+            "w": 8,
+            "h": 20,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-7",
+            "kind": "building",
+            "x": 10,
+            "z": 25,
+            "y": 0,
+            "w": 8,
+            "h": 8,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-8",
+            "kind": "building",
+            "x": 10,
+            "z": 37,
+            "y": 0,
+            "w": 8,
+            "h": 14,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-block-9",
+            "kind": "building",
+            "x": 10,
+            "z": 49,
+            "y": 0,
+            "w": 8,
+            "h": 8,
+            "d": 10,
+            "yaw_deg": 0,
+            "attach": "world"
+          }
+        ]
+      },
+      "overlay": {
+        "labels": [
+          {
+            "id": "l-shot",
+            "text": "全景 · 40mm",
+            "x": 0.012,
+            "y": 0.955
+          }
+        ],
+        "arrows": [
+          {
+            "id": "a-move-s0",
+            "kind": "subject_move",
+            "mode": "anchored",
+            "subject_id": "s0",
+            "world_from": {
+              "x": 0.1371,
+              "z": 5.3879
+            },
+            "world_to": {
+              "x": 1.1069,
+              "z": 5.3879
+            }
+          }
+        ],
+        "camera_move": "track",
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "show_code": true
+      },
+      "seed": 7
+    },
+    "structure_hash": "119543092a164603b94266b9ef94",
+    "hash_b": "1482b0b1ffc6511ffd774e155992",
+    "hash_c": "1fb82e7f54f591025a3f07a4cd25"
+  },
+  {
+    "key": "12-group",
+    "spec": {
+      "version": 1,
+      "frame": {
+        "aspect": "2.39",
+        "guides": [
+          "1.43"
+        ]
+      },
+      "camera": {
+        "x": 0,
+        "y": 3.8,
+        "z": 0,
+        "yaw_deg": 0,
+        "pitch_deg": -10.573,
+        "roll_deg": 0,
+        "focal_mm": 40,
+        "sensor_w_mm": 36
+      },
+      "scene": {
+        "env": "interior",
+        "light": {
+          "azimuth_deg": 45,
+          "elevation_deg": 40
+        },
+        "subjects": [
+          {
+            "id": "s0",
+            "entity_id": null,
+            "label": "甲",
+            "badge": "A",
+            "x": -2.3213,
+            "z": 14.0478,
+            "yaw_deg": 54.38,
+            "pose": "point",
+            "height_m": 1.76,
+            "silhouette": "regular",
+            "tone_override": null,
+            "z_override": null
+          },
+          {
+            "id": "s1",
+            "entity_id": null,
+            "label": "乙",
+            "badge": "B",
+            "x": -0.7822,
+            "z": 14.1947,
+            "yaw_deg": 3.15,
+            "pose": "sit",
+            "height_m": 1.64,
+            "silhouette": "dress",
+            "tone_override": null,
+            "z_override": null
+          },
+          {
+            "id": "s2",
+            "entity_id": null,
+            "label": "丙",
+            "badge": "C",
+            "x": 0.6939,
+            "z": 12.5498,
+            "yaw_deg": -48.16,
+            "pose": "stand",
+            "height_m": 1.82,
+            "silhouette": "coat",
+            "tone_override": null,
+            "z_override": null
+          },
+          {
+            "id": "s3",
+            "entity_id": null,
+            "label": "丁",
+            "badge": "D",
+            "x": 2.1961,
+            "z": 13.2452,
+            "yaw_deg": 35.59,
+            "pose": "crouch",
+            "height_m": 1.6,
+            "silhouette": "regular",
+            "tone_override": null,
+            "z_override": null
+          }
+        ],
+        "props": [
+          {
+            "id": "env-wall-back",
+            "kind": "wall",
+            "x": 0,
+            "z": 16.4947,
+            "y": 0,
+            "w": 10.5653,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 0,
+            "attach": "world"
+          },
+          {
+            "id": "env-wall-left",
+            "kind": "wall",
+            "x": -5.1827,
+            "z": 7.1974,
+            "y": 0,
+            "w": 18.3947,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 90,
+            "attach": "world"
+          },
+          {
+            "id": "env-wall-right",
+            "kind": "wall",
+            "x": 5.1827,
+            "z": 7.1974,
+            "y": 0,
+            "w": 18.3947,
+            "h": 3,
+            "d": 0.2,
+            "yaw_deg": 90,
+            "attach": "world"
+          },
+          {
+            "id": "p-table-0",
+            "kind": "table",
+            "x": -0.4061,
+            "z": 12.9498,
+            "y": 0,
+            "w": 1.4,
+            "h": 0.75,
+            "d": 0.8,
+            "yaw_deg": 0,
+            "attach": "world"
+          }
+        ]
+      },
+      "overlay": {
+        "labels": [
+          {
+            "id": "l-shot",
+            "text": "远景 · 40mm",
+            "x": 0.012,
+            "y": 0.955
+          }
+        ],
+        "arrows": [],
+        "camera_move": "static",
+        "offset": {
+          "x": 0,
+          "y": 0
+        },
+        "show_code": true
+      },
+      "seed": 7
+    },
+    "structure_hash": "188816684924c00092c5e3ea7c27",
+    "hash_b": "1756a9f058ffae08b43c43180a5e",
+    "hash_c": "196edb28a782d5053db06895cad9"
+  }
+]

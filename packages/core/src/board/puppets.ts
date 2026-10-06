@@ -426,16 +426,17 @@ const REACH_SIDE: JointTable = {
 // Standing, A hand holding a phone to the A ear.
 const PHONE_FRONT: JointTable = {
   ...STAND_FRONT,
-  elA: [-0.15, 0.69],
-  wrA: [-0.082, 0.83],
-  haA: [-0.066, 0.895],
+  elA: [-0.15, 0.7],
+  wrA: [-0.092, 0.83],
+  haA: [-0.07, 0.9],
 };
+// the hand at the ear (a little behind the face), the elbow forward and down
 const PHONE_SIDE: JointTable = {
   ...STAND_SIDE,
   head: [0.014, 0.933],
-  elA: [0.1, 0.69],
-  wrA: [0.035, 0.83],
-  haA: [0.02, 0.895],
+  elA: [0.07, 0.7],
+  wrA: [0.0, 0.83],
+  haA: [-0.012, 0.9],
 };
 
 // Lying on the back, head toward +F, A knee drawn up. Unlike the other poses the
@@ -642,7 +643,8 @@ const TORSO = {
   chest: { W: 0.098, D: 0.068 },
   waist: { W: 0.078, D: 0.058 },
   pelvis: { W: 0.092, D: 0.064 },
-  crotch: { W: 0.056, D: 0.05 },
+  // narrow and low: the trousers part between the legs instead of a briefs-like band across them
+  crotch: { W: 0.018, D: 0.04 },
 } as const;
 
 /**
@@ -910,7 +912,7 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
     F: (J.shA.F + J.shB.F) / 2,
     y: (J.shA.y + J.shB.y) / 2,
   };
-  const crotch: J3 = { L: J.pelvis.L, F: J.pelvis.F, y: J.pelvis.y - 0.05 };
+  const crotch: J3 = { L: J.pelvis.L, F: J.pelvis.F, y: J.pelvis.y - 0.072 };
   const coat = silhouette === 'coat';
   const wScale = coat ? 1.05 : 1;
   const sections: { c: V2; hw: number }[] = [
@@ -950,11 +952,12 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   const above = (p: V2) => (p[0] - cut[0]) * ux + (p[1] - cut[1]) * uy;
   const upper = clipPolygon(torsoPts, above, mix2);
   const lower = clipPolygon(torsoPts, (p) => -above(p), mix2);
-  const torsoPart = (key: string, pts: V2[], material: PuppetMaterial) =>
-    push({ key, group: 'torso', layer: LAYER.torso, t: 0, pts, fill: 'body', material, stroke: true, silhouette: true });
+  const torsoPart = (key: string, pts: V2[], material: PuppetMaterial, stroke = true) =>
+    push({ key, group: 'torso', layer: LAYER.torso, t: 0, pts, fill: 'body', material, stroke, silhouette: true });
   if (upper.length >= 3 && lower.length >= 3) {
     torsoPart('torso', upper, 'top');
-    torsoPart('hips', lower, 'bottom');
+    // no outline of its own: the trousers run on into the legs (the silhouette pass still draws the hips' edge)
+    torsoPart('hips', lower, 'bottom', false);
     const seam = upper.filter((p) => Math.abs(above(p)) < 1e-9).sort((p, q) => p[0] - q[0]);
     if (!coat && seam.length >= 2) {
       const s0 = seam[0] as V2;

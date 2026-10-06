@@ -99,6 +99,7 @@ export {
   STANDARD_LOOK,
   STANDARD_ROSTER,
   STANDARD_SHOTS,
+  VARIETY_SHOTS,
   STANDARD_SIDES,
   subject as standardSubject,
   type StandardShot,

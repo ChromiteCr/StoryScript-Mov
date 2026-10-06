@@ -263,6 +263,182 @@ export const STANDARD_SHOTS: StandardShot[] = [
   },
 ];
 
+/**
+ * S4c variety sheet: the new places, props and poses (look review and layout
+ * tests; the look metrics stay on the 12 standard shots above).
+ */
+export const VARIETY_SHOTS: StandardShot[] = [
+  {
+    key: 'v01-classroom-two',
+    name: '教室 双人',
+    fields: shotFields({
+      shot_size: 'MS',
+      template: 'two_shot',
+      env: 'classroom',
+      subjects: [subject('c1', { pose: 'stand' }), subject('c2', { pose: 'stand' })],
+      narrative_purpose: '下课后两人在教室里说话',
+      action: '甲和乙隔着课桌说话',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: STANDARD_SIDES,
+  },
+  {
+    key: 'v02-corridor-walk',
+    name: '走廊 迎面走来',
+    fields: shotFields({
+      shot_size: 'WS',
+      lens: 'wide',
+      movement: 'pull_out',
+      env: 'corridor',
+      subject_motion: 'toward',
+      subjects: [subject('c3', { pose: 'walk', facing: 'camera' })],
+      narrative_purpose: '丙从走廊尽头走来',
+      action: '丙沿着走廊走向镜头',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v03-nature-kneel',
+    name: '野外 跪地',
+    fields: shotFields({
+      shot_size: 'FS',
+      angle: 'high',
+      env: 'nature',
+      subjects: [subject('c4', { pose: 'kneel', facing: '3q_right' })],
+      narrative_purpose: '丁在林边跪下',
+      action: '丁跪在草地上',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v04-bedroom-lie',
+    name: '卧室 躺',
+    fields: shotFields({
+      shot_size: 'MS',
+      angle: 'high',
+      env: 'interior',
+      props: ['bed', 'lamp'],
+      subjects: [subject('c2', { pose: 'lie', facing: 'screen_left' })],
+      narrative_purpose: '乙躺在床上睡不着',
+      action: '乙躺着看天花板',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v05-sofa-sit',
+    name: '客厅 沙发',
+    fields: shotFields({
+      shot_size: 'MLS',
+      env: 'interior',
+      props: ['sofa'],
+      subjects: [subject('c1', { pose: 'sit', facing: 'camera' })],
+      narrative_purpose: '甲坐在沙发上等人',
+      action: '甲坐着',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v06-insert-phone',
+    name: '插入 手机',
+    fields: shotFields({
+      shot_size: 'INSERT',
+      angle: 'high',
+      props: ['phone'],
+      env: 'interior',
+      narrative_purpose: '桌上的手机亮了',
+      action: '手机在桌上震动',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v07-insert-cup',
+    name: '插入 杯子',
+    fields: shotFields({
+      shot_size: 'INSERT',
+      props: ['table', 'cup'],
+      env: 'interior',
+      narrative_purpose: '桌上那杯没动过的水',
+      action: '杯子放在桌上',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v08-street-away',
+    name: '街道 背影',
+    fields: shotFields({
+      shot_size: 'WS',
+      env: 'street',
+      subject_motion: 'away',
+      subjects: [subject('c1', { pose: 'walk', facing: 'away', screen: 'L' }), subject('c2', { pose: 'walk', facing: 'away', screen: 'L' })],
+      narrative_purpose: '两人沿街走远',
+      action: '甲和乙并肩走远',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v09-mcu-shelf',
+    name: '近景 书架前（三分线）',
+    fields: shotFields({
+      shot_size: 'MCU',
+      env: 'interior',
+      props: ['shelf'],
+      subjects: [subject('c1', { facing: '3q_right' })],
+      narrative_purpose: '甲看向对面的人',
+      action: '甲听着，没说话',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: STANDARD_SIDES,
+  },
+  {
+    key: 'v10-reach-shelf',
+    name: '伸手 拿书',
+    fields: shotFields({
+      shot_size: 'MS',
+      env: 'interior',
+      props: ['shelf', 'book'],
+      subjects: [subject('c2', { pose: 'reach', facing: 'screen_right' })],
+      narrative_purpose: '乙去拿书架上的书',
+      action: '乙伸手够书',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v11-phone-call',
+    name: '打电话',
+    fields: shotFields({
+      shot_size: 'MCU',
+      angle: 'low',
+      env: 'interior',
+      subjects: [subject('c4', { pose: 'phone', facing: '3q_left' })],
+      narrative_purpose: '丁接到电话',
+      action: '丁拿着手机听',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+  },
+  {
+    key: 'v12-reverse-single',
+    name: '正反打 单人（乙）',
+    fields: shotFields({
+      shot_size: 'MCU',
+      env: 'interior',
+      subjects: [subject('c2')],
+      narrative_purpose: '乙回答',
+      action: '乙看着甲说话',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: STANDARD_SIDES,
+  },
+];
+
 /** Lay out a standard shot with the fixture look (2.39 frame). */
 export function standardBoard(shot: StandardShot, seed = 7): BoardSpec {
   return layoutBoard(shot.fields, {

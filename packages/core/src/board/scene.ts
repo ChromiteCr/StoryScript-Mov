@@ -18,7 +18,7 @@ import {
   type CameraBasis,
 } from './camera.ts';
 import { isEnvProp, relativeYaw, shelfBoards, STREET } from './layout.ts';
-import { clamp, clipPolygon, cross3, DEG, dot3, mix2, sub3, type V2, type V3 } from './math.ts';
+import { clamp, clipPolygon, convexHull, cross3, DEG, dot3, mix2, sub3, type V2, type V3 } from './math.ts';
 import { figureStyleFor, type FigureStyle } from './puppet-style.ts';
 import {
   buildPuppet,
@@ -144,8 +144,8 @@ function propParts(p: BoardProp): LocalBox[] {
       for (const sx of [-1, 1])
         for (const sz of [-1, 1])
           legs.push({ cx: sx * (w / 2 - 0.07), y: 0, cz: sz * (d / 2 - 0.07), w: 0.05, h: h - t, d: 0.05 });
-      // two grain lines on the top read as a table surface in close inserts
-      const grain: [V3, V3][] = [-0.22, 0.2].map((k) => [
+      // grain lines on the top read as a table surface in close inserts
+      const grain: [V3, V3][] = [-0.36, -0.22, -0.07, 0.06, 0.2, 0.33].map((k) => [
         [-w / 2 + 0.08, h, d * k],
         [w / 2 - 0.08, h, d * k],
       ]);
@@ -621,6 +621,7 @@ export function projectProp(
   light: V3 = DEFAULT_LIGHT,
 ): { faces: FacePrim[]; depth: number } {
   if (p.kind === 'tree') return projectTree(p, cam, b, W, H, light);
+  if (p.kind === 'cup') return projectCup(p, cam, b, W, H, light);
   const o = propWorldOrigin(p, cam);
   const L = localToWorld(o, p.y);
   const psi = o.yaw * DEG;
@@ -691,7 +692,7 @@ export function treeShape(w: number, h: number): { cy: number; rx: number; ry: n
 }
 
 /** Pencil tones of a tree: canopy lit / canopy shade / trunk (set dressing stays lighter). */
-const TREE_TONES = { env: [0, 1, 1], set: [1, 2, 2] } as const;
+const TREE_TONES = { env: [1, 2, 2], set: [1, 2, 3] } as const;
 
 /**
  * A tree as a billboard (vertical plane square to the camera ray, like a
@@ -717,9 +718,29 @@ function projectTree(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, 
   const elev = Math.atan2(cam.y - (p.y + t.cy), horiz) / DEG;
   const toCam: V3 = horiz > 1e-6 ? [(cam.x - o.x) / horiz, 0, (cam.z - o.z) / horiz] : [0, 0, -1];
   const faces: FacePrim[] = [];
-  const push = (pts3: V3[], tone: number, sub: number, n: V3) => {
+  // leaf clumps: short scalloped strokes inside the canopy (unit coordinates)
+  const clumps: V2[][] = [];
+  for (let i = 0; i < 9; i++) {
+    const cx = (rng() * 2 - 1) * 0.6;
+    const cy = (rng() * 2 - 1) * 0.55;
+    const r = 0.12 + rng() * 0.08;
+    const arc: V2[] = [];
+    for (let k = 0; k <= 4; k++) {
+      const a = Math.PI * (1.1 - (0.9 * k) / 4);
+      arc.push([cx + r * Math.cos(a), cy + r * Math.sin(a) * 0.7]);
+    }
+    clumps.push(arc);
+  }
+  const push = (pts3: V3[], tone: number, sub: number, n: V3, decor3: V3[][] = []) => {
     const poly = projectPolygon(b, pts3);
-    if (poly.length >= 3) faces.push({ pts: poly.map(px), decor: [], n, sub, tone });
+    if (poly.length < 3) return;
+    const decor: V2[][] = [];
+    for (const line of decor3)
+      for (let k = 1; k < line.length; k++) {
+        const s = projectSegment(b, line[k - 1] as V3, line[k] as V3);
+        if (s) decor.push([px(s[0]), px(s[1])]);
+      }
+    faces.push({ pts: poly.map(px), decor, n, sub, tone });
   };
   /** unit canopy → lit and shade halves (the cut is shared, so it reads as a crease) */
   const split = (dir: V2, toWorld: (q: V2) => V3, n: V3) => {
@@ -727,7 +748,7 @@ function projectTree(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, 
     const lit = clipPolygon(canopy, f, mix2);
     const shade = clipPolygon(canopy, (q) => -f(q), mix2);
     if (shade.length >= 3) push(shade.map(toWorld), tones[1], 1, n);
-    if (lit.length >= 3) push(lit.map(toWorld), tones[0], 1, n);
+    if (lit.length >= 3) push(lit.map(toWorld), tones[0], 1, n, clumps.map((c) => c.map(toWorld)));
   };
   if (elev > 60) {
     // from above: a disc at canopy height, split by the light's ground direction
@@ -751,6 +772,63 @@ function projectTree(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, 
     const lu = dot3(light, u);
     const ll = Math.hypot(lu, light[1]) || 1;
     split([lu / ll, light[1] / ll], (q) => toWorld([q[0] * t.rx, t.cy + q[1] * t.ry]), toCam);
+  }
+  return { faces, depth: toCamera(b, [o.x, p.y + p.h / 2, o.z])[2] };
+}
+
+/**
+ * A cup as a turned form (S4c): the body is the hull of its foot and rim
+ * circles (split lit / shade by the light), the rim an ellipse with the dark
+ * inside, the handle a flat loop on the cup's +x side drawn before or after
+ * the body by depth. Fixed tones, so it flows through the prop pipeline.
+ */
+function projectCup(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, H: number, light: V3): { faces: FacePrim[]; depth: number } {
+  const o = propWorldOrigin(p, cam);
+  const px = toPx(W, H);
+  const psi = o.yaw * DEG;
+  const r0 = p.w / 2;
+  const r1 = r0 * 1.12;
+  const top = p.y + p.h;
+  const circle = (r: number, y: number, n = 24): V3[] => Array.from({ length: n }, (_, i) => [o.x + r * Math.cos((2 * Math.PI * i) / n), y, o.z + r * Math.sin((2 * Math.PI * i) / n)] as V3);
+  const proj = (pts: V3[]) => projectPolygon(b, pts).map(px);
+  const faces: FacePrim[] = [];
+  const toCam: V3 = (() => {
+    const h = Math.hypot(cam.x - o.x, cam.z - o.z) || 1;
+    return [(cam.x - o.x) / h, 0, (cam.z - o.z) / h];
+  })();
+  const foot = proj(circle(r0, p.y));
+  const rim = proj(circle(r1, top));
+  if (foot.length < 3 || rim.length < 3) return { faces, depth: toCamera(b, [o.x, p.y + p.h / 2, o.z])[2] };
+  const body = convexHull([...foot, ...rim]);
+  // handle: a loop in the cup's local x–y plane, on its +x side
+  const ax: V3 = [Math.cos(psi), 0, -Math.sin(psi)];
+  const hc: V3 = [o.x + ax[0] * (r0 + 0.022), p.y + p.h * 0.52, o.z + ax[2] * (r0 + 0.022)];
+  const loop = (r: number, from: number, to: number, n = 10): V3[] =>
+    Array.from({ length: n + 1 }, (_, i) => {
+      const a = from + ((to - from) * i) / n;
+      return [hc[0] + ax[0] * r * Math.cos(a), hc[1] + r * Math.sin(a) * 1.3, hc[2] + ax[2] * r * Math.cos(a)] as V3;
+    });
+  const handle = proj([...loop(0.032, -Math.PI / 2, Math.PI / 2), ...loop(0.018, Math.PI / 2, -Math.PI / 2)]);
+  const handleBehind = toCamera(b, hc)[2] > toCamera(b, [o.x, hc[1], o.z])[2];
+  const pushFace = (pts: V2[], tone: number, sub: number, n: V3) => {
+    if (pts.length >= 3) faces.push({ pts, decor: [], n, sub, tone });
+  };
+  if (handleBehind) pushFace(handle, 1, 0, toCam);
+  // lit / shade halves of the body: split across the light's screen direction
+  const lp = projectPoint(b, [o.x + light[0] * r1 * 4, p.y + p.h / 2, o.z + light[2] * r1 * 4]);
+  const cp = projectPoint(b, [o.x, p.y + p.h / 2, o.z]);
+  const sgn = lp.visible && cp.visible && lp.x > cp.x ? 1 : -1;
+  const cx = cp.x * W;
+  const bw = Math.max(...body.map((q) => q[0])) - Math.min(...body.map((q) => q[0]));
+  // the lit side toward the light, a little past the middle
+  const f = (q: V2) => (q[0] - cx) * sgn + 0.15 * bw;
+  pushFace(clipPolygon(body, (q) => -f(q), mix2), 1, 1, toCam);
+  pushFace(clipPolygon(body, f, mix2), 0, 1, toCam);
+  if (!handleBehind) pushFace(handle, 1, 2, toCam);
+  // the rim seen from above, with the dark inside
+  if (cam.y > top) {
+    pushFace(rim, 0, 3, [0, 1, 0]);
+    pushFace(proj(circle(r1 * 0.86, top)), 2, 3, [0, 1, 0]);
   }
   return { faces, depth: toCamera(b, [o.x, p.y + p.h / 2, o.z])[2] };
 }

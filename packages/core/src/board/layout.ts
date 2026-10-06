@@ -28,7 +28,7 @@ import {
 } from '@storyscript/contracts';
 import { shotLabelZh } from '../i18n/zh.ts';
 import { rngFor } from '../util/random.ts';
-import { cameraBasis, REF_HEIGHT_M, solveCamera, type CameraBasis, type CameraSolution } from './camera.ts';
+import { cameraBasis, projectPoint, REF_HEIGHT_M, solveCamera, type CameraBasis, type CameraSolution } from './camera.ts';
 import { clamp, dot3, round, wrapDeg, type V3 } from './math.ts';
 import { poseTopY } from './puppets.ts';
 
@@ -106,6 +106,31 @@ const FACING_SIDE: Record<Facing, ScreenPos | null> = {
 
 /** Street layout constants shared with the renderer (road markings). */
 export const STREET = { roadHalf: 4, walkHalf: 6, blockDepth: 8, blockLen: 10, gap: 2 } as const;
+
+/** S4c classroom: desk rows front to back (m) and the desk / chair sizes. */
+const DESK_PITCH = 1.3;
+const DESK = { w: 1.1, h: 0.74, d: 0.55 } as const;
+const DESK_CHAIR = { w: 0.44, h: 0.82, d: 0.44 } as const;
+/** S4c corridor cross-section (half width, ceiling height) and its door spacing. */
+const CORRIDOR = { half: 1.25, h: 2.8, doorEvery: 3.6 } as const;
+/** Small things that sit on a tabletop: an insert of one gets a table under it. */
+const TABLETOP_ITEMS: ReadonlySet<PropKind> = new Set<PropKind>(['phone', 'cup', 'book']);
+/** S4c kinds placed by the generic rules below (featured in an insert, on a table, beside a person). */
+const SMALL_ITEMS: ReadonlySet<PropKind> = new Set<PropKind>(['phone', 'cup', 'book', 'bag']);
+/** Kinds that existed before S4c keep their own placement rules, also when featured in an insert. */
+const PROP_SIZE_LEGACY: ReadonlySet<PropKind> = new Set<PropKind>(['door', 'table', 'chair', 'car', 'wall', 'building', 'stairs', 'window', 'box']);
+/** Props are placed in this order, so a table exists before what goes on it. */
+const PLACE_ORDER: PropKind[] = ['table', 'chair', 'bed', 'sofa', 'shelf', 'lamp', 'door', 'window', 'wall', 'building', 'stairs', 'car', 'tree', 'box', 'phone', 'cup', 'book', 'bag'];
+
+/**
+ * Heights of a shelf's compartment floors, bottom up (the plinth top first).
+ * Shared with the renderer (scene.ts draws the boards and the book spines).
+ */
+export function shelfBoards(h: number): number[] {
+  const n = Math.max(2, Math.round((h - 0.11) / 0.36));
+  const comp = (h - 0.08 - 0.03) / n;
+  return Array.from({ length: n }, (_, k) => round(0.08 + comp * k, 4));
+}
 
 const TIGHT = new Set(['MCU', 'CU', 'ECU']);
 export const VEHICLE_RIG_HEIGHT_M = 1.2;
@@ -487,6 +512,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
 
   const want = shot.props.slice();
   if (isInsert && featuredKind === 'box' && !want.includes('box')) want.push('box');
+  if (autoSupport && !want.includes('table')) want.push('table');
   if (template === 'scale' && !want.includes('building') && !want.includes('wall')) want.push('building');
   if (shot.movement === 'vehicle' && !want.includes('car')) want.push('car');
   const counts: Partial<Record<PropKind, number>> = {};
@@ -497,9 +523,23 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   };
   const side = focusX > 0.2 ? -1 : 1; // put set dressing on the emptier side
   let tableTop: { x: number; z: number } | null = null;
+  want.sort((a, b) => PLACE_ORDER.indexOf(a) - PLACE_ORDER.indexOf(b));
+  /** facing direction (world x, z) of a placed subject */
+  const facingOf = (s: BoardSubject): [number, number] => [Math.sin((s.yaw_deg * Math.PI) / 180), -Math.cos((s.yaw_deg * Math.PI) / 180)];
+  const lead = primary ? (placed[primary.idx] ?? null) : (subjects[0] ?? null);
+  const posed = (pose: Pose) => subjects.find((s) => s.pose === pose) ?? null;
+  /** inside the room's side walls (no-op outdoors) */
+  const inRoom = (x: number, margin: number) => (backZ !== null ? clamp(x, -roomHalf + margin, roomHalf - margin) : x);
+  /** against the back wall (or a few metres behind the subject outdoors), front to the camera */
+  const backAt = (depth: number) => (backZ !== null ? backZ - depth / 2 - 0.03 : focusZ + 2.5);
 
   for (const kind of want) {
     const dims = PROP_SIZE[kind];
+    // S4c: an insert's featured thing (a phone, a cup, a bag, a sofa …) is the subject, on its support
+    if (isInsert && kind === featuredKind && featuredDims && !PROP_SIZE_LEGACY.has(kind)) {
+      props.push(box(nextId(kind), kind, 0, focusZ, supportTop, featuredDims, SMALL_ITEMS.has(kind) ? 12 : 0));
+      continue;
+    }
     switch (kind) {
       case 'table': {
         if (isInsert) {
@@ -590,6 +630,167 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
         }
         break;
       }
+      case 'bed': {
+        const lying = posed('lie');
+        if (lying) {
+          // subjects stand on the ground: under a lying person the bed is a low mattress
+          const [fx, fz] = facingOf(lying);
+          const Hm = lying.height_m;
+          props.push(box(nextId(kind), kind, lying.x - fx * 0.45 * Hm, lying.z - fz * 0.45 * Hm, 0, { w: 1.2, h: 0.12, d: 2.1 }, 180 - lying.yaw_deg));
+          // on the mattress, not under it: drawn after the props around it
+          lying.z_override = 1;
+        } else {
+          // against the back wall, headboard to the wall, foot toward the room
+          props.push(box(nextId(kind), kind, inRoom(focusX + side * 2.4, dims.w / 2 + 0.1), backAt(dims.d), 0, dims, 0));
+        }
+        break;
+      }
+      case 'sofa': {
+        const sitter = posed('sit');
+        if (sitter) {
+          // the seat under the sitter, its front the way they face
+          const [fx, fz] = facingOf(sitter);
+          props.push(box(nextId(kind), kind, sitter.x - fx * 0.22, sitter.z - fz * 0.22, 0, dims, -sitter.yaw_deg));
+        } else {
+          props.push(box(nextId(kind), kind, inRoom(focusX + side * 2.6, dims.w / 2 + 0.1), backAt(dims.d), 0, dims, 0));
+        }
+        break;
+      }
+      case 'shelf': {
+        const reacher = posed('reach');
+        const turned = reacher ? Math.abs(relativeYaw(reacher, camera)) > 60 : false;
+        if (reacher && turned) {
+          // in reach: its front a hand's length ahead of the person, facing them
+          const [fx, fz] = facingOf(reacher);
+          const k = 0.45 * reacher.height_m / 1.7 + dims.d / 2;
+          props.push(box(nextId(kind), kind, reacher.x + fx * k, reacher.z + fz * k, 0, dims, 180 - reacher.yaw_deg));
+        } else {
+          props.push(box(nextId(kind), kind, inRoom(focusX + side * 2.6, dims.w / 2 + 0.1), backAt(dims.d), 0, dims, 0));
+        }
+        break;
+      }
+      case 'lamp': {
+        if (env === 'street') {
+          // a street lamp on the pavement, its arm over the road
+          const x = side * (STREET.roadHalf + 0.7);
+          props.push(box(nextId(kind), kind, x, focusZ + 3, 0, { w: 0.4, h: 5.2, d: 0.4 }, x < 0 ? 0 : 180));
+        } else {
+          props.push(box(nextId(kind), kind, inRoom(focusX + side * 1.9, 0.4), focusZ + 1.1, 0, dims, 0));
+        }
+        break;
+      }
+      case 'tree': {
+        props.push(box(nextId(kind), kind, focusX + side * 3.6, focusZ + 4.5, 0, dims, 0));
+        break;
+      }
+      case 'phone':
+      case 'cup':
+      case 'book': {
+        // on the table; without one the person holds it (or it is left out of the frame)
+        if (tableTop) {
+          const at = { phone: [0.22, -0.12, 20], cup: [-0.3, -0.06, 0], book: [0.02, 0.12, -8] }[kind] as [number, number, number];
+          props.push(box(nextId(kind), kind, tableTop.x + at[0], tableTop.z + at[1], PROP_SIZE.table.h, dims, at[2]));
+        }
+        break;
+      }
+      case 'bag': {
+        // at the feet of the lead person, on the emptier side
+        const s = lead;
+        if (s) props.push(box(nextId(kind), kind, s.x + side * 0.42 * s.height_m / 1.7, s.z + 0.05, 0, dims, side * 15));
+        else props.push(box(nextId(kind), kind, focusX + side * 0.8, focusZ, 0, dims, 10));
+        break;
+      }
+    }
+  }
+
+  // ---- set dressing (S4c) -------------------------------------------------------
+  // Deterministic from the seed, all env- props (lighter than the set pieces the
+  // shot lists), never in front of a person: what stands closer than someone is
+  // kept out of their stretch of the frame.
+  const drng = rngFor(ctx.seed, 'env-dressing');
+  const shotProps = new Set(shot.props);
+  const frameX = (x: number, z: number, y = 1): number | null => {
+    const q = projectPoint(basis, [x, y, z]);
+    return q.visible ? q.x : null;
+  };
+  const people = subjects.map((s) => ({ s, fx: frameX(s.x, s.z, s.height_m * 0.5) }));
+  /** true when a dressing piece at (x, z) of half-width hw would stand in front of someone in the frame */
+  const blocks = (x: number, z: number, hw: number, y = 1) => {
+    const fx = frameX(x, z, y);
+    if (fx === null) return false;
+    const half = hw / Math.max(frameWidthAt(z), 0.1);
+    return people.some(({ s, fx: px }) => px !== null && z < s.z + 0.6 && Math.abs(fx - px) < half + 0.1);
+  };
+  let dk = 0;
+  const dress = (kind: PropKind, x: number, z: number, y: number, dims: { w: number; h: number; d: number }, yaw = 0, name: string = kind) =>
+    envProps.push(box(`${ENV_PREFIX}${name}-${dk++}`, kind, x, z, y, dims, yaw));
+
+  if (env === 'interior' && backZ !== null) {
+    // the back wall gets a window (or a door), the emptier side one piece of furniture
+    if (!shotProps.has('window') && !shotProps.has('door')) {
+      if (drng() < 0.7) dress('window', inRoom(focusX + side * 1.3, 0.8), backZ - 0.05, 0.95, { w: 1.2, h: 1.3, d: 0.1 });
+      else dress('door', inRoom(focusX + side * 1.4, 0.6), backZ - 0.05, 0, PROP_SIZE.door);
+    }
+    if (!['bed', 'sofa', 'shelf', 'lamp'].some((k) => shotProps.has(k as PropKind))) {
+      const pick = (['shelf', 'lamp', 'sofa'] as const)[Math.floor(drng() * 3)] ?? 'shelf';
+      const dims = PROP_SIZE[pick];
+      const x = inRoom(focusX + side * 2.9, dims.w / 2 + 0.1);
+      const z = pick === 'lamp' ? backZ - 0.45 : backAt(dims.d);
+      if (!blocks(x, z, dims.w / 2)) dress(pick, x, z, 0, dims);
+    }
+  } else if (env === 'classroom' && backZ !== null) {
+    // blackboard on the back wall, rows of desks with their chairs, windows down the left wall
+    dress('wall', 0, backZ - 0.02, 0.9, { w: Math.min(4.2, 2 * roomHalf - 1.4), h: 1.2, d: 0.04 }, 0, 'board');
+    for (let r = 0; r < deskRows; r++) {
+      const z = focusZ + 0.15 + r * DESK_PITCH;
+      for (let x = -roomHalf + 1.1; x <= roomHalf - 1.1 + 1e-6; x += 1.75) {
+        if (z < 1.4 || subjects.some((s) => Math.abs(x - s.x) < 1.0 && Math.abs(z - s.z) < 1.0)) continue;
+        if (blocks(x, z - 0.4, DESK.w / 2, 0.6)) continue;
+        dress('table', x, z, 0, DESK, 0, 'desk');
+        dress('chair', x, z - 0.42, 0, DESK_CHAIR, 0, 'desk-chair');
+      }
+    }
+    for (let z = 1.2; z < backZ - 0.8; z += 2.6) dress('window', -roomHalf + 0.05, z, 0.9, { w: 1.5, h: 1.4, d: 0.08 }, -90);
+  } else if (env === 'corridor' && backZ !== null) {
+    // doors along both walls, a window at the far end, the ceiling with its lights
+    let k = 0;
+    for (let z = 2.2; z < backZ - 1; z += CORRIDOR.doorEvery / 2, k++) {
+      const left = k % 2 === 0;
+      dress('door', left ? -roomHalf + 0.03 : roomHalf - 0.03, z, 0, { w: 0.9, h: 2.1, d: 0.06 }, left ? -90 : 90);
+    }
+    dress('window', 0, backZ - 0.05, 0.9, { w: 1.4, h: 1.4, d: 0.08 });
+    dress('wall', 0, backZ / 2, CORRIDOR.h, { w: 2 * roomHalf + 0.4, h: 0.1, d: backZ + 4 }, 0, 'ceiling');
+  } else if (env === 'street') {
+    // lamps and trees along both pavements, off the people
+    for (const sgn of [-1, 1]) {
+      const x = sgn * (STREET.roadHalf + 0.8);
+      let i = sgn < 0 ? 0 : 1;
+      for (let z = 4 + (sgn < 0 ? 0 : 4.5); z < zEnd - 6; z += 9, i++) {
+        if (subjects.some((s) => Math.abs(z - s.z) < 2.5 && Math.abs(x - s.x) < 2)) continue;
+        if (i % 2 === 0) {
+          if (!blocks(x, z, 0.3, 3)) dress('lamp', x, z, 0, { w: 0.4, h: 5.2, d: 0.4 }, sgn < 0 ? 0 : 180);
+        } else if (!blocks(x, z, 1.5, 3)) dress('tree', x, z, 0, { w: 3, h: 6, d: 3 });
+      }
+    }
+  } else if (env === 'nature') {
+    // a few trees, off the people and not growing out of anyone's head
+    const n = 4 + Math.floor(drng() * 4);
+    for (let i = 0, tries = 0; i < n && tries < 80; tries++) {
+      const z = Math.max(2.5, focusZ * 0.6) + drng() * (focusZ + 28);
+      const fx = -0.25 + drng() * 1.5;
+      const x = worldXAtFrameX(basis, fx, z, 2);
+      const w = 2.4 + drng() * 2;
+      const h = 4.5 + drng() * 4;
+      const half = w / 2 / Math.max(frameWidthAt(z), 0.1);
+      const clash = people.some(({ s, fx: px }) => px !== null && Math.abs(fx - px) < half + (z < s.z + 1 ? 0.12 : 0.04));
+      // some of it in frame: the base, the trunk's middle or the canopy
+      const seen = [0.05, 0.4, 0.75].some((k) => {
+        const q = projectPoint(basis, [x, h * k, z]);
+        return q.visible && q.x > -0.05 && q.x < 1.05 && q.y > 0 && q.y < 1;
+      });
+      if (!Number.isFinite(x) || clash || !seen) continue;
+      dress('tree', x, z, 0, { w, h, d: w }, 0);
+      i++;
     }
   }
 

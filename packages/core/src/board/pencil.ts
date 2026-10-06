@@ -584,16 +584,25 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
         toneMap.push(el('path', { d: polyPath(f.pts), fill: toneGray(f.tone) }));
       }
       const w0 = W2.w(it.band) * (env ? 0.85 : 1);
-      // decor (windows, panels, floors): thin single strokes
+      // decor (windows, panels, floors): thin single strokes. The set shell's
+      // decor (rows of windows, leaf clumps, skirting) is many short lines: one
+      // plain stroked path keeps a street frame light; set pieces keep the hand.
       const drng = rngFor(spec.seed, `decor:${it.key}`);
+      let plain = '';
       for (const f of it.item.faces) {
         for (const seg of f.decor) {
           const s = clipToFrame(seg[0] as V2, seg[1] as V2, W, H);
           if (!s || !inFrame(s, W, H, 0)) continue;
+          if (env) {
+            plain += `M${num(s[0][0])} ${num(s[0][1])}L${num(s[1][0])} ${num(s[1][1])}`;
+            continue;
+          }
           const d = taperedStroke(s, { w0: w0 * 0.5, rng: drng, overshoot: 0.02, wobble: 0.3 });
-          if (d) g.push(el('path', { d, fill: ink, 'fill-opacity': clamp((env ? 0.4 : 0.6) * (1 + sym(drng) * 0.15), 0.05, 1) }));
+          if (d) g.push(el('path', { d, fill: ink, 'fill-opacity': clamp(0.6 * (1 + sym(drng) * 0.15), 0.05, 1) }));
         }
       }
+      if (plain)
+        g.push(el('path', { d: plain, fill: 'none', stroke: ink, 'stroke-width': num(Math.max(0.6, w0 * 0.42)), 'stroke-opacity': 0.4, 'stroke-linecap': 'round' }));
       const runs: Run[] = [];
       for (const e of it.edges) {
         const s = clipToFrame(e.a, e.b, W, H);

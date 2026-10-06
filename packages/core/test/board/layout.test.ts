@@ -274,7 +274,7 @@ describe('templates', () => {
 
   test('environments: interior shell walls, street blocks, open ground', () => {
     const mk = (env: 'interior' | 'street' | 'open') => layoutBoard(shotFields({ shot_size: 'MS', env, subjects: [subject('c1')] }), ctx());
-    const walls = mk('interior').scene.props.filter(isEnvProp);
+    const walls = mk('interior').scene.props.filter((p) => p.id.startsWith('env-wall-'));
     expect(walls.map((w) => w.id).sort()).toEqual(['env-wall-back', 'env-wall-left', 'env-wall-right']);
     expect(mk('street').scene.props.filter(isEnvProp).length).toBeGreaterThanOrEqual(8);
     expect(mk('open').scene.props.filter(isEnvProp)).toHaveLength(0);

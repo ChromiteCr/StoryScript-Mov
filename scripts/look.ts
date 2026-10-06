@@ -9,13 +9,15 @@
  *   <out>/m1/compare-structure.png          (all 12 structure boards, 2 × 6)
  *   <out>/m1/compare-topview.png            (all 12 topviews, 2 × 6)
  *   <out>/m1/thumbs.png                     (12 boards at 240 px wide)
- *   <out>/m1/puppets.png                    (6 poses × 4 facings × 3 silhouettes)
+ *   <out>/m1/puppets.png                    (10 poses × 4 facings × 3 silhouettes)
+ *   <out>/m1/gestures.png                   (S4c: the gesture variants of stand / sit / walk)
  *   <out>/m1/metrics.json                   (framing numbers + timings)
  *
  * M2 (pencil):
  *   <out>/m2/shots/<key>-pencil.svg / .png  (1840 px, annotation layer on)
  *   <out>/m2/compare-1.png, compare-2.png   (structure | pencil, 6 shots each)
  *   <out>/m2/compare-pencil.png             (all 12 pencil boards, 2 × 6)
+ *   <out>/m2/compare-variety.png            (S4c: the variety shots — places, props, poses; structure | pencil)
  *   <out>/m2/thumbs.png                     (12 pencil boards at 240 px wide)
  *   <out>/m2/crop-1.png, crop-2.png         (1:1 crops, re-rendered from a viewBox sub-rect)
  *   <out>/m2/metrics.json, metrics.md, metrics.png  (look metrics L1–L7 + timings)
@@ -27,10 +29,11 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Resvg } from '@resvg/resvg-wasm';
-import type { BoardSpec, Pose, Silhouette } from '@storyscript/contracts';
+import { Pose, type BoardSpec, type Silhouette } from '@storyscript/contracts';
 import { initResvg, svgToPixels } from '../apps/server/src/adapters/render/resvg.ts';
 import {
   DEFAULT_PENCIL_VARIANT,
+  gestureCount,
   LOOK_THRESHOLDS,
   measureLook,
   PENCIL_VARIANTS,
@@ -39,6 +42,7 @@ import {
   STANDARD_SHOTS,
   standardBoard,
   structureHash,
+  VARIETY_SHOTS,
   subjectFrameBoxes,
   subjectFramePoints,
   type LookReport,
@@ -180,7 +184,7 @@ function m1(): void {
 
   // Puppet gallery: rows = poses, columns = silhouettes × facings.
   {
-    const poses: Pose[] = ['stand', 'walk', 'run', 'sit', 'point', 'crouch'];
+    const poses: Pose[] = [...Pose.options];
     const views: PuppetView[] = ['front', '3q', 'side', 'back'];
     const sils: Silhouette[] = ['regular', 'coat', 'dress'];
     const cw = 110;
@@ -209,6 +213,26 @@ function m1(): void {
     writeFileSync(join(OUT, 'puppets.png'), png(sheet));
     // Small version: the same sheet at 40 % (figures ≈ 64 px tall).
     writeFileSync(join(OUT, 'puppets-small.png'), png(sheet, Math.round(W * 0.4)));
+  }
+
+  // S4c gesture variants: one row per pose with variants, front and 3/4
+  {
+    const rows: Pose[] = ['stand', 'sit', 'walk'];
+    const cw = 110;
+    const ch = 190;
+    const cols = Math.max(...rows.map((p) => gestureCount(p))) * 2;
+    const W = 90 + cols * cw;
+    const H = 30 + rows.length * ch;
+    let body = '';
+    rows.forEach((pose, ri) => {
+      const y = 20 + ri * ch;
+      body += label(12, y + ch / 2, pose, 18);
+      for (let g = 0; g < gestureCount(pose); g++)
+        (['front', '3q'] as const).forEach((v, vi) => {
+          body += place(renderPuppetPreview(pose, v, false, 'regular', { width: cw, height: ch, gesture: g }), 90 + (g * 2 + vi) * cw, y);
+        });
+    });
+    writeFileSync(join(OUT, 'gestures.png'), png(sheetSvg(W, H, body, '#f4f4f4')));
   }
 
   const avg = times.reduce((a, b) => a + b, 0) / times.length;
@@ -330,6 +354,23 @@ async function m2(): Promise<void> {
   }
 
   writeFileSync(join(OUT, 'thumbs.png'), thumbSheet('pencil'));
+
+  // S4c variety shots: structure | pencil per row
+  {
+    const vspecs = VARIETY_SHOTS.map((s, i) => ({ shot: s, spec: standardBoard(s), code: `V01-${String(i + 1).padStart(3, '0')}` }));
+    const rowH = Math.round(CW / 2.39) + 46;
+    const W = 2 * CW + 60;
+    const H = vspecs.length * rowH + 20;
+    let body = '';
+    vspecs.forEach(({ shot, spec, code }, i) => {
+      const y = 10 + i * rowH;
+      body += label(20, y + 28, `${shot.key}  ${shot.name}  · structure`);
+      body += label(CW + 40, y + 28, 'pencil');
+      body += place(renderBoard(spec, 'structure', { width: CW }), 20, y + 38);
+      body += place(pencil(spec, { width: CW, code }), CW + 40, y + 38);
+    });
+    writeFileSync(join(OUT, 'compare-variety.png'), png(sheetSvg(W, H, body)));
+  }
 
   // 1:1 crops: the OTS listener's head and shoulders; the group around the table
   const crops: { key: string; subject: string; w: number; h: number; fy: number }[] = [

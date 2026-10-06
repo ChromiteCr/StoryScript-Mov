@@ -552,9 +552,10 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
     // the shade is part-way from the lit tone to the next darker one; the hatch carries the rest
     return figureAt(r.kind === 'shade' ? lerp(r.base, r.tone, look.shade) : r.base);
   }
-  /** lit-side tone the hatch masks see: a little lighter than the fill; faces stay clear of the lightest hatch */
-  function litHatchTone(r: FigureRegion): number {
-    return r.tone - (r.material === 'skin' ? 1 : look.litHatch);
+  /** tone the hatch masks see: lit sides a little lighter than their fill; skin stays clear of the hatch */
+  function hatchTone(r: FigureRegion): number {
+    if (r.material === 'skin') return Math.min(r.tone, 0.5);
+    return r.kind === 'shade' ? r.tone : r.tone - look.litHatch;
   }
 
   /**
@@ -654,7 +655,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
           emit(null);
         }
         // the hatch sees the lit side a little lighter than its fill tone: lit side sparse, shade side dense
-        for (const r of it.regions) toneMap.push(el('path', { d: polyPath(r.pts), fill: toneGray(r.kind === 'shade' ? r.tone : litHatchTone(r)) }));
+        for (const r of it.regions) toneMap.push(el('path', { d: polyPath(r.pts), fill: toneGray(hatchTone(r)) }));
       }
       g.push(contourPaths(loopRuns(outline, rng, s.heightPx, W, H), w0, rng, look, plan.lightScreen, ink));
     }

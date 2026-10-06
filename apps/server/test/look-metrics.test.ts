@@ -19,6 +19,7 @@ import {
   standardBoard,
   type LookReport,
   type Mask,
+  type StandardShot,
   type RgbaImage,
 } from '@storyscript/core';
 import { beforeAll, describe, expect, test } from 'vitest';
@@ -32,8 +33,10 @@ const MIN_THUMB_AREA = 150;
 
 const applies = {
   // 11-insert has nobody in frame; 01-ews-scale's person is a ~10 px speck at
-  // 240 px by design (the scale shot) — nothing to binarise.
-  l3: (r: LookReport) => r.l3 !== null && r.l3Area >= MIN_THUMB_AREA,
+  // 240 px by design (the scale shot) — nothing to binarise. An extreme
+  // close-up (06-ecu) is a face filling the frame: since S4c faces are drawn
+  // light, it reads by its features and hair, not as a dark silhouette.
+  l3: (r: LookReport, shot: StandardShot) => r.l3 !== null && r.l3Area >= MIN_THUMB_AREA && shot.fields.shot_size !== 'ECU',
   // depth ordering needs people in at least two depth bands (03/04 OTS, 10 depth)
   l4: (r: LookReport) => r.bands.length >= 2,
   // no people: no foreground subject (11-insert)
@@ -67,7 +70,7 @@ describe('look metrics L1–L7 on the 12 standard shots (default look)', () => {
 
       test('L3 thumbnail silhouette IoU ≥ 0.7', (ctx) => {
         const r = get(shot.key);
-        if (!applies.l3(r)) ctx.skip();
+        if (!applies.l3(r, shot)) ctx.skip();
         expect(r.l3?.iou).toBeGreaterThanOrEqual(T.l3.minIoU);
       });
 
@@ -97,8 +100,8 @@ describe('look metrics L1–L7 on the 12 standard shots (default look)', () => {
   }
 
   test('skips are only the documented ones', () => {
-    const skipped = (f: (r: LookReport) => boolean) => STANDARD_SHOTS.filter((s) => !f(get(s.key))).map((s) => s.key);
-    expect(skipped(applies.l3)).toEqual(['01-ews-scale', '11-insert']);
+    const skipped = (f: (r: LookReport, shot: StandardShot) => boolean) => STANDARD_SHOTS.filter((s) => !f(get(s.key), s)).map((s) => s.key);
+    expect(skipped(applies.l3)).toEqual(['01-ews-scale', '06-ecu', '11-insert']);
     expect(skipped(applies.l6)).toEqual(['11-insert']);
     expect(STANDARD_SHOTS.filter((s) => applies.l4(get(s.key))).map((s) => s.key)).toEqual(['03-ots-a', '04-ots-b', '10-depth-two']);
   });

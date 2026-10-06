@@ -1,8 +1,9 @@
 import type { Pose, Silhouette } from '@storyscript/contracts';
 import { describe, expect, test } from 'vitest';
+import { polygonArea } from '../../src/board/math.ts';
 import { buildPuppet, facingBucket, POSE_TABLES, poseTopY, type PuppetView } from '../../src/index.ts';
 
-const POSES: Pose[] = ['stand', 'walk', 'run', 'sit', 'point', 'crouch'];
+const POSES: Pose[] = ['stand', 'walk', 'run', 'sit', 'point', 'crouch', 'lie', 'kneel', 'reach', 'phone'];
 const VIEWS: PuppetView[] = ['front', '3q', 'side', 'back'];
 const SILS: Silhouette[] = ['regular', 'coat', 'dress'];
 
@@ -65,7 +66,9 @@ describe('puppet geometry', () => {
             expect(part.pts.length).toBeGreaterThanOrEqual(3);
             for (const q of part.pts) expect(Number.isFinite(q[0]) && Number.isFinite(q[1])).toBe(true);
           }
-          expect(p.bbox.y1).toBeCloseTo(poseTopY(pose), 1);
+          // a lying figure's highest point is a knee or a hand, not its head
+          if (pose === 'lie') expect(p.bbox.y1).toBeLessThan(0.32);
+          else expect(p.bbox.y1).toBeCloseTo(poseTopY(pose), 1);
           if (sil !== 'regular') expect(p.parts.some((x) => x.key === 'skirt')).toBe(true);
         }
   });
@@ -78,7 +81,7 @@ describe('puppet geometry', () => {
     expect(b.bbox.y1).toBeCloseTo(a.bbox.y1, 9);
   });
 
-  test('3/4 narrows the shoulders; side view shows the nose, back view hides the face', () => {
+  test('3/4 narrows the shoulders; side view shows the nose; the face shows from the front, the hair from behind', () => {
     const width = (v: PuppetView) => {
       const t = buildPuppet('stand', v, false, 'regular').parts.find((p) => p.key === 'torso')!;
       const xs = t.pts.map((q) => q[0]);
@@ -88,8 +91,19 @@ describe('puppet geometry', () => {
     expect(width('side')).toBeLessThan(width('3q'));
     const keys = (v: PuppetView) => buildPuppet('stand', v, false, 'regular').parts.map((p) => p.key);
     expect(keys('side')).toContain('nose');
-    expect(keys('front')).toContain('face');
-    expect(keys('back')).not.toContain('face');
+    // S4c: the head is skin and the hair is laid over it, bounded by the hairline
+    const lineKeys = (v: PuppetView) => buildPuppet('stand', v, false, 'regular').lines.map((l) => l.key);
+    expect(lineKeys('front')).toEqual(expect.arrayContaining(['eye', 'brow', 'nose', 'mouth']));
+    expect(lineKeys('back')).not.toContain('eye');
+    expect(lineKeys('back')).toContain('whorl');
+    const hairShare = (v: PuppetView) => {
+      const parts = buildPuppet('stand', v, false, 'regular').parts;
+      const area = (k: string) => Math.abs(polygonArea(parts.find((p) => p.key === k)!.pts));
+      return area('hair') / area('head');
+    };
+    expect(hairShare('front')).toBeLessThan(0.6);
+    expect(hairShare('back')).toBeGreaterThan(0.6);
+    expect(hairShare('side')).toBeGreaterThan(hairShare('front'));
   });
 
   test('far limbs draw behind the torso and thinner in profile', () => {

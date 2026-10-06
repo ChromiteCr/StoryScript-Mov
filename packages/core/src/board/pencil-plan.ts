@@ -6,7 +6,7 @@
  *
  * Tone rules (docs/PLAN.md, 分镜管线 step 5):
  *  - people by depth band: fg 3 / mg 2 / bg 1 (tone_override wins), each part
- *    offset by its material (S4c): skin −1, hair +1, clothing by the
+ *    offset by its material (S4c): skin −1½, hair +1, clothing by the
  *    character's wardrobe −½ / 0 / +½, shoes +1; a foreground figure takes
  *    only 0.3 of the offsets, so it stays a near-black silhouette;
  *  - boxes by face vs light: lit top 0 (paper), lit side 1, side 2, away 3
@@ -78,7 +78,7 @@ export const MATERIAL_WEIGHT: Record<DepthBand, number> = { fg: 0.3, mg: 1, bg: 
 /** Tone (0..3) of a figure part: band tone + material offset (+1 for a far-side limb). */
 export function figurePartTone(bandTone: number, band: DepthBand, material: PuppetMaterial, style: FigureStyle, far = false): number {
   const off =
-    material === 'skin' ? -1 : material === 'hair' || material === 'shoe' ? 1 : CLOTH_OFFSET[material === 'top' ? style.top : style.bottom];
+    material === 'skin' ? -1.5 : material === 'hair' || material === 'shoe' ? 1 : CLOTH_OFFSET[material === 'top' ? style.top : style.bottom];
   return clamp(bandTone + off * MATERIAL_WEIGHT[band] + (far ? 1 : 0), 0, 3);
 }
 
@@ -511,16 +511,18 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
       // silhouette part) is toned as skin inside it
       const parts = orientAll(it.parts.filter((p) => p.fill !== 'none' && p.silhouette).map((p) => fit(p.pts)));
       const filled = it.parts.map((p, k) => ({ p, k })).filter(({ p }) => p.fill !== 'none');
-      // Per draw group (a whole limb, the torso, the head — puppets.ts): every
-      // part's shade first, then the lit sides on top. Inside a group the lit
-      // sides hide the seams, so a limb shades as one form (no knee / elbow
-      // crescents); a nearer group still covers a farther one.
+      // Per run of one draw group and one material (a sleeve, a trouser leg,
+      // the hair, the face — puppets.ts): every part's shade first, then the
+      // lit sides on top. Inside a run the lit sides hide the seams, so a limb
+      // shades as one form (no knee / elbow crescents); a later run — the face
+      // over the hair, a hand over its sleeve — and a nearer group still cover
+      // what is behind them.
       const regions: FigureRegion[] = [];
       let i = 0;
       while (i < filled.length) {
-        const group = filled[i]!.p.group;
+        const { group, material } = filled[i]!.p;
         let j = i;
-        while (j < filled.length && filled[j]!.p.group === group) j++;
+        while (j < filled.length && filled[j]!.p.group === group && filled[j]!.p.material === material) j++;
         const shade: FigureRegion[] = [];
         const lit: FigureRegion[] = [];
         for (const { p, k } of filled.slice(i, j)) {
@@ -530,8 +532,10 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
           const base = figurePartTone(tone, band, p.material, it.style, p.far);
           const r = { base, material: p.material, part: k };
           if (base < 3) {
-            shade.push({ pts, tone: Math.min(3, base + 1), kind: 'shade', ...r });
-            const l = litSide(pts, [lx, ly], SHADE_SHIFT);
+            // skin turns from the light softly: a full step reads as a stubble mask
+            shade.push({ pts, tone: Math.min(3, base + (p.material === 'skin' ? 0.5 : 0.8)), kind: 'shade', ...r });
+            // the torso is a broad, flat form: a narrow turn into shade, or it reads as a strap
+            const l = litSide(pts, [lx, ly], p.group === 'torso' ? SHADE_SHIFT * 0.45 : SHADE_SHIFT);
             if (l.length >= 3) lit.push({ pts: orientAll([l])[0] ?? l, tone: base, kind: 'body', ...r });
           } else lit.push({ pts, tone: base, kind: 'body', ...r });
         }

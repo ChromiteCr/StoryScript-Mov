@@ -394,21 +394,33 @@ const KNEEL_SIDE: JointTable = {
 
 // Standing, B arm reaching straight ahead at shoulder height (a little outward, so
 // it still reads from the front), torso leaning into the reach.
+// Leaning in, B arm reaching forward and down (for something on a table or a
+// shelf, or a hand to pull someone up); the A arm hangs a little back.
 const REACH_FRONT: JointTable = {
   ...STAND_FRONT,
-  head: [0, 0.93],
-  elB: [0.14, 0.805],
-  wrB: [0.17, 0.8],
-  haB: [0.18, 0.8],
+  head: [0, 0.918],
+  neck: [0, 0.834],
+  chest: [0, 0.74],
+  shA: [-0.106, 0.802],
+  shB: [0.106, 0.806],
+  elB: [0.13, 0.69],
+  wrB: [0.128, 0.61],
+  haB: [0.124, 0.57],
 };
 const REACH_SIDE: JointTable = {
   ...STAND_SIDE,
-  head: [0.045, 0.93],
-  neck: [0.024, 0.846],
-  chest: [0.026, 0.75],
-  elB: [0.165, 0.805],
-  wrB: [0.31, 0.8],
-  haB: [0.37, 0.8],
+  head: [0.075, 0.918],
+  neck: [0.05, 0.834],
+  chest: [0.04, 0.74],
+  waist: [0.012, 0.612],
+  shA: [0.03, 0.802],
+  shB: [0.03, 0.806],
+  elA: [-0.03, 0.62],
+  wrA: [-0.03, 0.475],
+  haA: [-0.026, 0.415],
+  elB: [0.17, 0.69],
+  wrB: [0.29, 0.61],
+  haB: [0.345, 0.57],
 };
 
 // Standing, A hand holding a phone to the A ear.
@@ -633,15 +645,54 @@ const TORSO = {
   crotch: { W: 0.056, D: 0.05 },
 } as const;
 
-/** Hair per style: hairline height (fraction of the head's ry) and the hair mass over the skull. */
-const HAIR: Record<HairStyle, { line: number; cap: { k: number; ky: number; dy: number; dl: number } | null }> = {
-  short: { line: 0.3, cap: { k: 1.05, ky: 0.97, dy: 0.09, dl: 0 } },
-  crop: { line: 0.44, cap: null },
-  side: { line: 0.26, cap: { k: 1.08, ky: 1.0, dy: 0.1, dl: 0.14 } },
-  long: { line: 0.24, cap: { k: 1.06, ky: 0.98, dy: 0.08, dl: 0 } },
-  ponytail: { line: 0.32, cap: { k: 1.03, ky: 0.96, dy: 0.07, dl: 0 } },
-  bun: { line: 0.32, cap: { k: 1.03, ky: 0.96, dy: 0.07, dl: 0 } },
+/**
+ * Hair per style. The hairline is a curve on the skull: its height (fraction
+ * of the head's ry above the head centre) at the forehead, the temples, above
+ * the ears and at the nape; the hair covers the skull above it. `fringe`
+ * lowers the forehead on the figure's right (a side-swept fringe); `volume`
+ * scales the outline of the hair beyond the skull (k across, ky up, dy lift).
+ */
+interface HairShape {
+  front: number;
+  temple: number;
+  side: number;
+  nape: number;
+  fringe: number;
+  volume: { k: number; ky: number; dy: number };
+}
+const HAIR: Record<HairStyle, HairShape> = {
+  short: { front: 0.5, temple: 0.34, side: 0.2, nape: -0.42, fringe: 0, volume: { k: 1.05, ky: 1.0, dy: 0.06 } },
+  crop: { front: 0.56, temple: 0.42, side: 0.3, nape: -0.3, fringe: 0, volume: { k: 1.02, ky: 0.99, dy: 0.03 } },
+  side: { front: 0.44, temple: 0.3, side: 0.18, nape: -0.46, fringe: 0.3, volume: { k: 1.07, ky: 1.02, dy: 0.08 } },
+  long: { front: 0.5, temple: 0.18, side: -0.75, nape: -1, fringe: 0, volume: { k: 1.08, ky: 1.0, dy: 0.06 } },
+  ponytail: { front: 0.52, temple: 0.34, side: 0.22, nape: -0.32, fringe: 0, volume: { k: 1.03, ky: 0.99, dy: 0.04 } },
+  bun: { front: 0.52, temple: 0.34, side: 0.22, nape: -0.32, fringe: 0, volume: { k: 1.03, ky: 0.99, dy: 0.04 } },
 };
+
+/** Hairline height at azimuth φ (deg, 0 = the face, + toward the figure's left). */
+function hairlineAt(h: HairShape, phi: number): number {
+  const a = Math.abs(wrapDeg(phi));
+  const knots: [number, number][] = [
+    [0, h.front],
+    [60, h.temple],
+    [95, h.side],
+    [180, h.nape],
+  ];
+  let y = h.nape;
+  for (let i = 1; i < knots.length; i++) {
+    const [a0, y0] = knots[i - 1] as [number, number];
+    const [a1, y1] = knots[i] as [number, number];
+    if (a <= a1) {
+      const u = (a - a0) / (a1 - a0);
+      y = y0 + (y1 - y0) * (0.5 - 0.5 * Math.cos(Math.PI * u));
+      break;
+    }
+  }
+  // side-swept fringe on the figure's right of the forehead
+  const w = wrapDeg(phi);
+  if (h.fringe && w < 0 && w > -75) y -= h.fringe * Math.sin((Math.PI * -w) / 75);
+  return y;
+}
 
 export type PuppetView = 'front' | '3q' | 'side' | 'back';
 export const VIEW_ANGLE: Record<PuppetView, number> = { front: 0, '3q': 45, side: 90, back: 180 };
@@ -1065,12 +1116,14 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
       hairBack.push(chaikin(convexHull(pts), 2));
     } else if (style.hair === 'ponytail') {
       const at = (F: number, yf: number): V2 => [hc[0] + F * HEAD.rxSide * sa, hc[1] + yf * ry];
-      hairBack.push(capsule(at(-0.95, 0.3), at(-1.5, -1.45), 0.021, 0.012, 5));
+      // tied at the back of the crown, hanging to the nape
+      hairBack.push(chaikin([...capsule(at(-0.92, 0.32), at(-1.28, -0.95), 0.012, 0.007, 4)], 1));
     } else if (style.hair === 'bun') {
       hairBack.push(ellipse([hc[0] - 0.8 * HEAD.rxSide * sa, hc[1] + 0.58 * ry], 0.026, 0.024, 16));
     }
     for (const pts of hairBack)
-      pushHead({ key: 'hairBack', group: 'hairBack', layer: view === 'front' ? LAYER.hairBehind : LAYER.hairOver, t: 0, pts, fill: 'hair', material: 'hair', stroke: true, silhouette: true });
+      // behind the head unless the head is seen from behind
+      pushHead({ key: 'hairBack', group: 'hairBack', layer: view === 'back' ? LAYER.hairOver : LAYER.hairBehind, t: 0, pts, fill: 'hair', material: 'hair', stroke: true, silhouette: true });
   }
 
   // Ears: peeking out behind the head seen edge-on, drawn on it seen from the side.
@@ -1082,8 +1135,17 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   for (const e of ears) {
     const open = clamp(e.t / HEAD.rxFront, 0, 1);
     const onTop = e.t > 0.02;
-    pushHead({ key: onTop ? 'ear' : 'earBehind', t: onTop ? 0.00015 : -0.003, pts: ellipse(e.c, 0.0035 + 0.0045 * open, 0.0125, 14), fill: 'body', material: 'skin', stroke: true, silhouette: true });
-    if (onTop) {
+    const covered = style.hair === 'long';
+    pushHead({
+      key: onTop ? 'ear' : 'earBehind',
+      t: onTop ? (covered ? 0.00005 : 0.00015) : -0.003,
+      pts: ellipse(e.c, 0.003 + 0.0035 * open, 0.0115, 14),
+      fill: 'body',
+      material: 'skin',
+      stroke: true,
+      silhouette: true,
+    });
+    if (onTop && !covered) {
       const dir = sah >= 0 ? -1 : 1; // the ear's rim faces the back of the head
       const arc: V2[] = [];
       for (let i = 0; i <= 6; i++) {
@@ -1110,22 +1172,20 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
       t: -0.0005,
     });
   }
+  // The head is skin; the hair is laid over it, bounded by the visible part of
+  // the hairline and, over the crown, by the hair's own outline.
   const headPoly = ellipse(hc, rx, ry, 28);
+  pushHead({ key: 'head', pts: headPoly, fill: 'body', material: 'skin', stroke: true, silhouette: true, t: 0 });
+  const vol = hair.volume;
+  const vc: V2 = [hc[0], hc[1] + vol.dy * ry];
+  const vrx = projW(HEAD.rxFront * vol.k, HEAD.rxSide * vol.k, a);
+  const vry = ry * vol.ky;
+  const cap = hairCap(hair, headPt, vc, vrx, vry);
   let outline = headPoly;
-  if (hair.cap) {
-    const c = hair.cap;
-    const cL = c.dl * HEAD.rxFront;
-    const cF = -0.004;
-    const cc: V2 = [hc[0] + cL * ca + cF * sa, hc[1] + c.dy * ry];
-    const cap = ellipse(cc, projW(HEAD.rxFront * c.k, HEAD.rxSide * c.k, a), ry * c.ky, 28);
-    pushHead({ key: 'hair', t: -0.0001, pts: cap, fill: 'hair', material: 'hair', stroke: true, silhouette: true });
+  if (cap) {
+    pushHead({ key: 'hair', t: 0.0001, pts: cap, fill: 'hair', material: 'hair', stroke: true, silhouette: true });
     outline = convexHull([...headPoly, ...cap]);
   }
-  pushHead({ key: 'head', pts: headPoly, fill: 'hair', material: 'hair', stroke: true, silhouette: true, t: 0 });
-
-  // Face: the part of the head's front hemisphere below the hairline.
-  const face = facePolygon(hc, rx, ry, ah / DEG, hair.line);
-  if (face) pushHead({ key: 'face', pts: face, fill: 'body', material: 'skin', stroke: false, silhouette: false, t: 0.0001 });
   pushHead({ key: 'headLine', pts: outline, fill: 'none', material: 'hair', stroke: true, silhouette: false, t: 0.0002 });
 
   // Features: sketchy storyboard marks — lids with an iris tick, brows, nose, mouth.
@@ -1226,27 +1286,63 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   return shape;
 }
 
-function facePolygon(c: V2, rx: number, ry: number, angleDeg: number, hairline: number): V2[] | null {
-  const a = angleDeg * DEG;
-  const ca = Math.cos(a);
-  if (Math.abs(angleDeg) >= 150) return null;
-  const hair = hairline * ry; // hairline height above the head centre
-  const n = 14;
-  const rightPts: V2[] = [];
-  const leftPts: V2[] = [];
-  const sgn = Math.sin(a) >= 0 ? 1 : -1;
-  for (let i = 0; i <= n; i++) {
-    const y = -ry + ((hair + ry) * i) / n;
-    const q = Math.sqrt(Math.max(0, 1 - (y / ry) ** 2));
-    // the face side reaches the silhouette; the other edge is the hemisphere's rim
-    const edge = sgn * rx * q;
-    const rim = (ca >= 0 ? -sgn : sgn) * rx * Math.abs(ca) * q;
-    rightPts.push([c[0] + Math.max(edge, rim), c[1] + y]);
-    leftPts.push([c[0] + Math.min(edge, rim), c[1] + y]);
+/**
+ * The hair over the skull as seen: the visible run of the hairline (points on
+ * the head where the hair starts, `headPt`) closed over the crown by the
+ * hair's outline ellipse (centre `vc`, half-axes vrx × vry). Null when none of
+ * the hairline faces the viewer.
+ */
+function hairCap(
+  h: HairShape,
+  headPt: (phi: number, yf: number, k?: number) => { p: V2; t: number },
+  vc: V2,
+  vrx: number,
+  vry: number,
+): V2[] | null {
+  // start the sweep at the most hidden azimuth so the visible run is contiguous
+  let phi0 = 0;
+  let tMin = Infinity;
+  for (let phi = -180; phi < 180; phi += 5) {
+    const t = headPt(phi, 0).t;
+    if (t < tMin) {
+      tMin = t;
+      phi0 = phi;
+    }
   }
-  const width = Math.max(...rightPts.map((p, i) => p[0] - (leftPts[i] as V2)[0]));
-  if (width < 0.06 * rx) return null;
-  return [...rightPts, ...leftPts.reverse()];
+  const run: V2[] = [];
+  let prev: { p: V2; t: number } | null = null;
+  for (let i = 0; i <= 144; i++) {
+    const phi = phi0 + i * 2.5;
+    const q = headPt(phi, hairlineAt(h, phi));
+    if (prev && (prev.t > 0) !== (q.t > 0)) {
+      // where the hairline crosses the silhouette
+      const u = prev.t / (prev.t - q.t);
+      run.push([prev.p[0] + (q.p[0] - prev.p[0]) * u, prev.p[1] + (q.p[1] - prev.p[1]) * u]);
+    }
+    if (q.t > 0) run.push(q.p);
+    prev = q;
+  }
+  if (run.length < 2) return null;
+  // close over the crown: from the run's end round the top back to its start
+  const angle = (p: V2) => Math.atan2((p[1] - vc[1]) / vry, (p[0] - vc[0]) / vrx);
+  const a0 = angle(run[run.length - 1] as V2);
+  let a1 = angle(run[0] as V2);
+  const top = Math.PI / 2;
+  // pick the direction whose sweep passes the crown
+  const ccw = (x: number) => ((x % (2 * Math.PI)) + 2 * Math.PI) % (2 * Math.PI);
+  const through = ccw(top - a0) < ccw(a1 - a0);
+  if (through) {
+    while (a1 < a0) a1 += 2 * Math.PI;
+  } else {
+    while (a1 > a0) a1 -= 2 * Math.PI;
+  }
+  const n = Math.max(6, Math.ceil(Math.abs(a1 - a0) / (Math.PI / 24)));
+  const arc: V2[] = [];
+  for (let i = 0; i <= n; i++) {
+    const th = a0 + ((a1 - a0) * i) / n;
+    arc.push([vc[0] + vrx * Math.cos(th), vc[1] + vry * Math.sin(th)]);
+  }
+  return [...run, ...arc];
 }
 
 function mirrorShape(s: PuppetShape): PuppetShape {

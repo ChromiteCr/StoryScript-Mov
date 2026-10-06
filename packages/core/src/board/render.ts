@@ -37,7 +37,7 @@ export interface RenderOptions {
   pencil?: { look?: PencilLook; layers?: 'all' | 'contour' };
 }
 
-export const RENDERER_VERSION = 'board-m2.0';
+export const RENDERER_VERSION = 'board-s4c';
 
 const C = {
   paper: gray(255),
@@ -60,6 +60,9 @@ const C = {
   wedge: gray(238),
   envFill: gray(242),
 };
+
+/** Structure fills for faces with a fixed pencil tone (tree shade, a blackboard): a light wash, not a value study. */
+const FIXED_FILL = [gray(255), gray(238), gray(218), gray(196)] as const;
 
 export function renderBoard(spec: BoardSpec, mode: RenderMode, opts: RenderOptions = {}): string {
   if (mode === 'topview') return renderTopview(spec, opts);
@@ -130,7 +133,8 @@ function propSvg(it: PropItem): string {
   const sw = it.env ? 1.4 : 2.2;
   const g: string[] = [`<g${attrs({ 'data-prop': it.id, 'data-kind': it.kind })}>`];
   for (const f of it.faces) {
-    g.push(el('path', { d: polyPath(f.pts), fill: C.paper, stroke, 'stroke-width': sw, 'stroke-linejoin': 'round' }));
+    const fill = f.tone === undefined ? C.paper : FIXED_FILL[clamp(Math.round(f.tone), 0, 3)];
+    g.push(el('path', { d: polyPath(f.pts), fill, stroke, 'stroke-width': sw, 'stroke-linejoin': 'round' }));
     if (f.decor.length)
       g.push(el('path', { d: linesPath(f.decor), fill: 'none', stroke: it.env ? C.envDecor : C.decor, 'stroke-width': it.env ? 0.9 : 1.2 }));
   }
@@ -565,17 +569,11 @@ function renderTopview(spec: BoardSpec, opts: RenderOptions): string {
   const labels: string[] = [];
   for (const p of spec.scene.props) {
     const env = isEnvProp(p);
-    const q = propCorners(p).map((c) => P(c[0], c[1]));
-    out.push(
-      el('path', {
-        d: polyPath(q),
-        fill: env ? C.envFill : C.paper,
-        stroke: env ? C.envLine : C.line,
-        'stroke-width': env ? 1.2 : 2,
-        'stroke-linejoin': 'round',
-        'data-prop': p.id,
-      }),
-    );
+    const o = propWorldOrigin(p, cam);
+    const psi = o.yaw * DEG;
+    // local (x along w, z along d; front = −z) → page
+    const at = (lx: number, lz: number): V2 => P(o.x + lx * Math.cos(psi) + lz * Math.sin(psi), o.z - lx * Math.sin(psi) + lz * Math.cos(psi));
+    out.push(topviewGlyph(p, env, at, scale));
     if (!env && overlay) {
       const o = propWorldOrigin(p, cam);
       const c = P(o.x, o.z);
@@ -679,6 +677,81 @@ function renderTopview(spec: BoardSpec, opts: RenderOptions): string {
   out.push(el('rect', { x: 0, y: 0, width: W, height: H, fill: 'none', stroke: C.ink, 'stroke-width': 3 }));
   out.push('</svg>');
   return out.join('');
+}
+
+/**
+ * Top-view glyph of a prop: its footprint plus a few lines that say what it
+ * is (pillows on a bed, the back of a sofa, the front of a shelf …). Round
+ * things are circles: a tree's canopy, a lamp, a cup.
+ */
+function topviewGlyph(p: BoardSpec['scene']['props'][number], env: boolean, at: (lx: number, lz: number) => V2, scale: number): string {
+  const stroke = env ? C.envLine : C.line;
+  const sw = env ? 1.2 : 2;
+  const fill = env ? C.envFill : C.paper;
+  const { w, d } = p;
+  const base = { fill, stroke, 'stroke-width': sw, 'stroke-linejoin': 'round', 'data-prop': p.id };
+  const detail = (segs: [number, number, number, number][]) =>
+    segs.length
+      ? el('path', { d: linesPath(segs.map(([a, b, c, e]) => [at(a, b), at(c, e)])), fill: 'none', stroke, 'stroke-width': sw * 0.6 })
+      : '';
+  const rect = (x0: number, z0: number, x1: number, z1: number): [number, number, number, number][] => [
+    [x0, z0, x1, z0],
+    [x1, z0, x1, z1],
+    [x1, z1, x0, z1],
+    [x0, z1, x0, z0],
+  ];
+  const c = at(0, 0);
+  switch (p.kind) {
+    case 'tree': {
+      // canopy circle (lightly lumped) and the trunk
+      const r = (w / 2) * scale;
+      const pts: V2[] = [];
+      for (let i = 0; i < 28; i++) {
+        const a = (2 * Math.PI * i) / 28;
+        const k = 1 + 0.06 * Math.cos(5 * a + 0.7);
+        pts.push([c[0] + Math.cos(a) * r * k, c[1] + Math.sin(a) * r * k]);
+      }
+      return el('path', { d: polyPath(pts), ...base }) + el('circle', { cx: c[0], cy: c[1], r: Math.max(2, 0.05 * w * scale), fill: stroke });
+    }
+    case 'lamp': {
+      if (p.h > 2.5) {
+        const arm = Math.max(0.8, w * 2.5);
+        return el('circle', { cx: c[0], cy: c[1], r: Math.max(3, 0.12 * scale), ...base }) + detail([[0, 0, arm, 0]]) + el('path', { d: polyPath(rect(arm - 0.25, -0.12, arm + 0.25, 0.12).map(([a, b]) => at(a, b))), ...base });
+      }
+      const r = (w / 2) * scale;
+      return el('circle', { cx: c[0], cy: c[1], r, ...base }) + el('circle', { cx: c[0], cy: c[1], r: r * 0.3, fill: 'none', stroke, 'stroke-width': sw * 0.6 });
+    }
+    case 'cup': {
+      const r = (w / 2) * scale;
+      return el('circle', { cx: c[0], cy: c[1], r, ...base }) + detail([[w / 2, 0, w / 2 + 0.03, 0]]);
+    }
+    default: {
+      const outline = el('path', { d: polyPath(rect(-w / 2, -d / 2, w / 2, d / 2).map(([a, b]) => at(a, b))), ...base });
+      switch (p.kind) {
+        case 'bed': {
+          const pz = d / 2 - 0.08;
+          const pillows: [number, number, number, number][] =
+            w > 1.2 ? [...rect(-w * 0.42, pz - 0.4, -w * 0.04, pz - 0.06), ...rect(w * 0.04, pz - 0.4, w * 0.42, pz - 0.06)] : rect(-w * 0.35, pz - 0.4, w * 0.35, pz - 0.06);
+          return outline + detail([[-w / 2, pz, w / 2, pz], [-w / 2, pz - 0.62, w / 2, pz - 0.62], ...pillows]);
+        }
+        case 'sofa': {
+          const arm = Math.min(0.2, w * 0.1);
+          const back = d / 2 - Math.min(0.22, d * 0.25);
+          return outline + detail([[-w / 2 + arm, back, w / 2 - arm, back], [-w / 2 + arm, -d / 2, -w / 2 + arm, d / 2], [w / 2 - arm, -d / 2, w / 2 - arm, d / 2]]);
+        }
+        case 'shelf':
+          return outline + detail([[-w / 2, d / 2 - 0.03, w / 2, d / 2 - 0.03], [-w / 2 + 0.03, -d / 2, -w / 2 + 0.03, d / 2], [w / 2 - 0.03, -d / 2, w / 2 - 0.03, d / 2]]);
+        case 'phone':
+          return outline + detail(rect(-w * 0.4, -d * 0.36, w * 0.4, d * 0.4));
+        case 'book':
+          return outline + detail([[-w / 2 + 0.018, -d / 2, -w / 2 + 0.018, d / 2]]);
+        case 'bag':
+          return outline + detail([[-w * 0.22, 0, w * 0.22, 0]]);
+        default:
+          return outline;
+      }
+    }
+  }
 }
 
 /** Frame-px bbox of each subject's silhouette (null when fully behind the camera). */

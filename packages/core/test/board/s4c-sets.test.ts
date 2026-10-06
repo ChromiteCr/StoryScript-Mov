@@ -73,6 +73,21 @@ describe('dressing per place', () => {
     expect(scene.items.some((it) => it.type === 'prop' && it.kind === 'tree' && it.faces.length > 0)).toBe(true);
   });
 
+  test('a camera above the corridor gets no ceiling over the frame; a tree indoors is a plant inside the room', () => {
+    const high = layoutBoard(shotFields({ shot_size: 'MS', angle: 'overhead', env: 'corridor', subjects: [subject('c1')] }), ctx());
+    expect(high.camera.y).toBeGreaterThan(2.8);
+    expect(ids(high).some((id) => id.startsWith('env-ceiling'))).toBe(false);
+    for (const env of ['interior', 'corridor'] as const) {
+      const spec = layoutBoard(shotFields({ shot_size: 'MS', env, props: ['tree'], subjects: [subject('c1')] }), ctx());
+      const back = spec.scene.props.find((p) => p.id === 'env-wall-back')!;
+      const right = spec.scene.props.find((p) => p.id === 'env-wall-right')!;
+      const tree = spec.scene.props.find((p) => p.kind === 'tree')!;
+      expect(tree.z + tree.d / 2).toBeLessThanOrEqual(back.z);
+      expect(Math.abs(tree.x) + tree.w / 2).toBeLessThanOrEqual(right.x);
+      expect(tree.h).toBeLessThan(2.5);
+    }
+  });
+
   test('listed props are not doubled by the dressing', () => {
     const spec = mk('interior', { props: ['window', 'shelf'] });
     expect(spec.scene.props.filter((p) => p.kind === 'window')).toHaveLength(1);
@@ -137,13 +152,22 @@ describe('the new props', () => {
     expect(cup.scene.props.find((x) => x.kind === 'cup')!.x).toBe(0);
   });
 
-  test('a lying person lies on the bed and is drawn over it; a sitter sits on the sofa', () => {
+  test('a lying person lies on the bed and is drawn over it, but under a nearer person; a sitter sits on the sofa', () => {
     const lie = layoutBoard(shotFields({ shot_size: 'MS', env: 'interior', props: ['bed'], subjects: [subject('c2', { pose: 'lie' })] }), ctx());
     const s = lie.scene.subjects[0]!;
     const bed = lie.scene.props.find((x) => x.kind === 'bed')!;
-    expect(s.z_override).toBe(1);
+    expect(s.z_override).toBeNull();
     expect(bed.h).toBeLessThan(0.2);
     expect(Math.hypot(bed.x - s.x, bed.z - s.z)).toBeLessThan(1.2);
+    const order = (spec: BoardSpec) => buildFrameScene(spec).items.map((it) => it.id);
+    expect(order(lie).indexOf('s0')).toBeGreaterThan(order(lie).indexOf(bed.id));
+    const two = layoutBoard(
+      shotFields({ shot_size: 'MS', env: 'interior', props: ['bed', 'lamp'], subjects: [subject('c2', { pose: 'lie', depth: 'bg', screen: 'C' }), subject('c1', { depth: 'fg', screen: 'C' })] }),
+      ctx(),
+    );
+    const o = order(two);
+    expect(o.indexOf('s0')).toBeGreaterThan(o.indexOf(two.scene.props.find((x) => x.kind === 'bed')!.id));
+    expect(o.indexOf('s1')).toBeGreaterThan(o.indexOf('s0'));
     const sit = layoutBoard(shotFields({ shot_size: 'MS', env: 'interior', props: ['sofa'], subjects: [subject('c1', { pose: 'sit' })] }), ctx());
     const p = sit.scene.subjects[0]!;
     const sofa = sit.scene.props.find((x) => x.kind === 'sofa')!;

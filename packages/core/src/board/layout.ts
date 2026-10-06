@@ -636,9 +636,8 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
           // subjects stand on the ground: under a lying person the bed is a low mattress
           const [fx, fz] = facingOf(lying);
           const Hm = lying.height_m;
+          // the frame draws the person over it (scene.ts: a lying person's depth)
           props.push(box(nextId(kind), kind, lying.x - fx * 0.45 * Hm, lying.z - fz * 0.45 * Hm, 0, { w: 1.2, h: 0.12, d: 2.1 }, 180 - lying.yaw_deg));
-          // on the mattress, not under it: drawn after the props around it
-          lying.z_override = 1;
         } else {
           // against the back wall, headboard to the wall, foot toward the room
           props.push(box(nextId(kind), kind, inRoom(focusX + side * 2.4, dims.w / 2 + 0.1), backAt(dims.d), 0, dims, 0));
@@ -680,7 +679,11 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
         break;
       }
       case 'tree': {
-        props.push(box(nextId(kind), kind, focusX + side * 3.6, focusZ + 4.5, 0, dims, 0));
+        if (backZ !== null) {
+          // indoors: a potted plant against the back wall, under the ceiling
+          const plant = { w: 0.7, h: Math.min(1.6, (env === 'corridor' ? CORRIDOR.h : wallH) - 0.4), d: 0.7 };
+          props.push(box(nextId(kind), kind, inRoom(focusX + side * 2.2, plant.w / 2 + 0.1), backAt(plant.d), 0, plant, 0));
+        } else props.push(box(nextId(kind), kind, focusX + side * 3.6, focusZ + 4.5, 0, dims, 0));
         break;
       }
       case 'phone':
@@ -759,7 +762,8 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
       dress('door', left ? -roomHalf + 0.03 : roomHalf - 0.03, z, 0, { w: 0.9, h: 2.1, d: 0.06 }, left ? -90 : 90);
     }
     dress('window', 0, backZ - 0.05, 0.9, { w: 1.4, h: 1.4, d: 0.08 });
-    dress('wall', 0, backZ / 2, CORRIDOR.h, { w: 2 * roomHalf + 0.4, h: 0.1, d: backZ + 4 }, 0, 'ceiling');
+    // the ceiling only from below: a camera above it (high, overhead) sees into the corridor
+    if (camera.y < CORRIDOR.h - 0.05) dress('wall', 0, backZ / 2, CORRIDOR.h, { w: 2 * roomHalf + 0.4, h: 0.1, d: backZ + 4 }, 0, 'ceiling');
   } else if (env === 'street') {
     // lamps and trees along both pavements, off the people
     for (const sgn of [-1, 1]) {

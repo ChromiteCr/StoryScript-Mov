@@ -118,7 +118,8 @@ describe('analyzeVariety', () => {
     expect(moving('林川走进教室', { subjects: [person({ pose: null })], subject_motion: 'toward' })).toEqual([]);
     expect(moving('林川走进教室', { subjects: [] })).toEqual([]);
     expect(moving('林川走进教室', { subjects: [person({ pose: null })] })).toEqual(['VARIETY_MOTION_UNSET@0']);
-    for (const still of ['走廊尽头站着一个人', '林晓追问日记的来历', '两人的冲突升级', '老周看着她']) expect(moving(still), still).toEqual([]);
+    for (const still of ['走廊尽头站着一个人', '林晓追问日记的来历', '两人的冲突升级', '老周看着她', '她冲着门口喊', '老周冲他点头', '他拿走桌上的手机', '林晓带走了日记', '风把纸吹走'])
+      expect(moving(still), still).toEqual([]);
   });
 
   test('score: 0–1 with two decimals, lower for monotone passages', () => {

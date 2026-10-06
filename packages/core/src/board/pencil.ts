@@ -188,6 +188,11 @@ function contourPaths(runs: readonly Run[], w0: number, rng: Rng, look: PencilLo
   return out;
 }
 
+/** A clipped segment crosses the frame itself (its ends may both lie in the clip margin). */
+function crossesFrame(s: readonly [V2, V2], W: number, H: number): boolean {
+  return clipSegmentRect(s[0], s[1], 0, 0, W, H) !== null;
+}
+
 /** Clip a segment to the frame (with margin) so off-frame geometry never produces huge strokes. */
 function clipToFrame(a: V2, b: V2, W: number, H: number): [V2, V2] | null {
   const m = 24;
@@ -514,7 +519,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       for (const l of scene.ground) {
         if (l.kind === 'grid' || l.kind === 'horizon') continue;
         const seg = clipToFrame(l.pts[0], l.pts[1], W, H);
-        if (!seg || !inFrame(seg, W, H, 0)) continue;
+        if (!seg || !crossesFrame(seg, W, H)) continue;
         const d = taperedStroke(seg, { w0: look.outline.bg * (l.kind === 'road' ? 1 : 0.8), rng, overshoot: 0.02, wobble: 0.3 });
         if (d) marks.push(el('path', { d, fill: ink, 'fill-opacity': clamp((l.kind === 'road' ? 0.45 : 0.3) * (1 + sym(rng) * 0.15), 0.05, 1) }));
       }
@@ -592,7 +597,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       for (const f of it.item.faces) {
         for (const seg of f.decor) {
           const s = clipToFrame(seg[0] as V2, seg[1] as V2, W, H);
-          if (!s || !inFrame(s, W, H, 0)) continue;
+          if (!s || !crossesFrame(s, W, H)) continue;
           if (env) {
             plain += `M${num(s[0][0])} ${num(s[0][1])}L${num(s[1][0])} ${num(s[1][1])}`;
             continue;
@@ -606,7 +611,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       const runs: Run[] = [];
       for (const e of it.edges) {
         const s = clipToFrame(e.a, e.b, W, H);
-        if (!s || !inFrame(s, W, H, 0)) continue;
+        if (!s || !crossesFrame(s, W, H)) continue;
         runs.push({ pts: s, n: e.crease ? null : e.n, crease: e.crease });
       }
       g.push(contourPaths(runs, w0, rng, look, plan.lightScreen, ink));

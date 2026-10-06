@@ -59,9 +59,11 @@ const WIDE: ReadonlySet<ShotSize> = new Set(['EWS', 'WS', 'FS', 'MLS']);
 
 /**
  * Words in an action that mean someone moves through the frame. Compounds for
- * 进/出 (进来, 出门 …) and look-aheads keep 走廊, 追问, 冲突 out.
+ * 进/出 (进来, 出门 …) and look-arounds keep 走廊, 追问 out; 冲 counts only as a
+ * dash somewhere (冲出, 冲向 …), not as 冲着 / 冲他 / 冲突; 走 not as the result
+ * of taking or carrying something away (拿走, 带走, 吹走).
  */
-const MOTION_WORDS = /走(?![廊道神])|跑|追(?![问究])|冲(?![突动洗])|奔|进来|进去|进门|进屋|进入|出去|出门|离开|转身/;
+const MOTION_WORDS = /(?<![拿带抢偷收吹搬取夺赶])走(?![廊道神])|跑|追(?![问究])|冲(?=[出进向上过回入下])|奔|进来|进去|进门|进屋|进入|出去|出门|离开|转身/;
 
 export interface VarietyStats {
   shots: number;

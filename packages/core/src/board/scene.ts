@@ -1189,6 +1189,21 @@ export function buildFrameScene(spec: BoardSpec): FrameScene {
     const item = projectSubject(s, cam, b, W, H, order++, spec.seed);
     if (item.parts.length) items.push(item);
   });
+  // A lying person (S4c) sorts by the middle of the body, and in front of the bed under it.
+  for (const s of spec.scene.subjects) {
+    if (s.pose !== 'lie') continue;
+    const it = items.find((q) => q.type === 'subject' && q.id === s.id);
+    if (!it) continue;
+    const Y = s.yaw_deg * DEG;
+    const cx = s.x - Math.sin(Y) * 0.45 * s.height_m;
+    const cz = s.z + Math.cos(Y) * 0.45 * s.height_m;
+    it.depth = toCamera(b, [cx, LIE_AXIS_Y * s.height_m, cz])[2];
+    for (const { p, o } of propInfo) {
+      if (p.kind !== 'bed' || Math.hypot(o.x - cx, o.z - cz) > Math.max(p.w, p.d) / 2) continue;
+      const bed = items.find((q) => q.id === p.id);
+      if (bed) it.depth = Math.min(it.depth, bed.depth - 0.001);
+    }
+  }
   // Painter order: environment shell first (then what hangs on it), then z_override (larger = later), then far → near.
   const zo = new Map(spec.scene.subjects.map((s) => [s.id, s.z_override ?? 0] as const));
   const key = (it: SceneItem) => (it.type === 'subject' ? (zo.get(it.id) ?? 0) : 0);

@@ -28,6 +28,7 @@ import {
   type TimeOfDay,
 } from '@storyscript/contracts';
 import { shotLabelZh } from '../i18n/zh.ts';
+import { propKindsInName } from '../shots/normalize.ts';
 import { shotEmotions, timeOfDay } from './emotion.ts';
 import { rngFor } from '../util/random.ts';
 import { cameraBasis, projectPoint, REF_HEIGHT_M, solveCamera, type CameraBasis, type CameraSolution } from './camera.ts';
@@ -41,6 +42,8 @@ export interface RosterEntry {
   entity_id: string | null;
   height_m?: number | null;
   silhouette?: Silhouette | null;
+  /** S5b: the character's other names (feelings read from the action text) */
+  aliases?: readonly string[];
 }
 
 export interface LayoutContext {
@@ -66,12 +69,21 @@ export const OBJECT_NAME_MAX = 12;
 /**
  * The name a board writes next to the object a shot is about: the shot's own
  * `object_name`, else the longest project prop name its action (then its
- * purpose) mentions. Trimmed and cut to OBJECT_NAME_MAX.
+ * purpose) mentions that fits the object drawn — a name that speaks of
+ * another shape (桌子 for a phone) or of none (热咖啡 for a phone) is not
+ * taken; a plain box stands in for any small thing, so it takes any name but
+ * a big one (门, 书架 …). Trimmed and cut to OBJECT_NAME_MAX.
  */
-export function objectNameFor(shot: Pick<ShotFields, 'object_name' | 'action' | 'narrative_purpose'>, propNames: readonly string[] = []): string | null {
+export function objectNameFor(shot: Pick<ShotFields, 'object_name' | 'action' | 'narrative_purpose'>, propNames: readonly string[] = [], kind: PropKind | null = null): string | null {
   const own = typeof shot.object_name === 'string' ? shot.object_name.trim() : '';
   if (own) return [...own].slice(0, OBJECT_NAME_MAX).join('');
-  const names = propNames.map((n) => n.trim()).filter((n) => n.length >= 2).sort((a, b) => b.length - a.length);
+  const fits = (name: string) => {
+    if (!kind) return true;
+    const said = propKindsInName(name);
+    if (said.includes(kind)) return true;
+    return kind === 'box' && said.every((k) => k === 'box' || SMALL_ITEMS.has(k));
+  };
+  const names = propNames.map((n) => n.trim()).filter((n) => n.length >= 2 && fits(n)).sort((a, b) => b.length - a.length);
   for (const text of [shot.action, shot.narrative_purpose]) {
     const hit = names.find((n) => text?.includes(n));
     if (hit) return [...hit].slice(0, OBJECT_NAME_MAX).join('');
@@ -359,7 +371,7 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   // ---- subject placement ------------------------------------------------------
   const placed: BoardSubject[] = new Array(subs.length);
   // S5b: what each person feels — set on the shot, else read from its action text
-  const felt = shotEmotions(shot, subs.map((s) => ({ alias: s.alias, label: s.label })));
+  const felt = shotEmotions(shot, subs.map((s) => ({ alias: s.alias, label: s.label, names: ctx.roster.find((r) => r.alias === s.alias)?.aliases ?? [] })));
   const make = (s: Resolved, x: number, z: number, yaw: number, pose: Pose): BoardSubject => {
     const emotion = s.spec.emotion ?? felt.get(s.alias) ?? null;
     return {
@@ -904,8 +916,8 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   // An insert names its featured object; another shot the first small thing it
   // lists (a tin on the table, a letter in a hand) — when it is in frame.
   const labels: BoardSpec['overlay']['labels'] = [{ id: 'l-shot', text: shotLabelZh(isInsert ? 'INSERT' : shot.shot_size, camera.focal_mm), x: 0.012, y: 0.955 }];
-  const objectName = objectNameFor(shot, ctx.prop_names);
   const namedKind = isInsert ? featuredKind : (shot.props.find((k) => SMALL_ITEMS.has(k) || k === 'box') ?? null);
+  const objectName = objectNameFor(shot, ctx.prop_names, namedKind);
   const named = objectName && namedKind ? props.find((p) => p.kind === namedKind) : undefined;
   if (objectName && named) {
     const c = projectPoint(basis, [named.x, named.y + named.h / 2, named.z]);

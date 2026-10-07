@@ -238,7 +238,8 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
   const [errors, setErrors] = useState<Errors>({});
   const [savedAt, setSavedAt] = useState<string | null>(null);
 
-  const dirty = stableKey(form) !== stableKey(initial);
+  // an unset feeling or name (null) is the same as an old shot's missing key (S5b)
+  const dirty = stableKey({ ...form, fields: cleanShotFields(form.fields) }) !== stableKey({ ...initial, fields: cleanShotFields(initial.fields) });
   const locked = base?.locked ?? false;
   const watching = watchersText(watchersOf(base?.id ?? null, feed.presence));
   const staleBase = latest !== null && base !== null && latest.revision !== base.revision;

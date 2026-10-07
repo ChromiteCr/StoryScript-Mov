@@ -4,7 +4,7 @@
  */
 import type { BoardSpec } from '@storyscript/contracts';
 import { clamp } from './math.ts';
-import { buildPencilPlan, type DepthBand } from './pencil-plan.ts';
+import { buildPencilPlan, TIME_LOOK, type DepthBand } from './pencil-plan.ts';
 import { attrs, el, gray, num, polyPath } from './svg.ts';
 
 function open(W: number, H: number, width?: number): string {
@@ -64,6 +64,27 @@ export function renderToneMap(spec: BoardSpec, o: { width?: number } = {}): stri
     if (it.type === 'prop') for (const f of it.faces) out.push(el('path', { d: polyPath(f.pts), fill: tg(f.tone) }));
     else if (it.type === 'shadow') out.push(el('path', { d: polyPath(it.pts), fill: tg(it.tone) }));
     else for (const r of it.regions) out.push(el('path', { d: polyPath(r.pts), fill: tg(r.tone) }));
+  }
+  // S5b: the night pool / dusk fade over everything, as the pencil hatch masks and toneRaster see them
+  if (plan.pool) {
+    const { cx, cy, rx, ry } = plan.pool;
+    const n = TIME_LOOK.night;
+    out.push(
+      `<defs><radialGradient${attrs({ id: 'tm-n', gradientUnits: 'userSpaceOnUse', cx: 0, cy: 0, r: 1, gradientTransform: `translate(${num(cx)} ${num(cy)}) scale(${num(rx)} ${num(ry)})` })}>` +
+        el('stop', { offset: n.inner, 'stop-color': tg(n.dark), 'stop-opacity': 0 }) +
+        el('stop', { offset: 1, 'stop-color': tg(n.dark), 'stop-opacity': n.alpha }) +
+        '</radialGradient></defs>',
+      el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#tm-n)' }),
+    );
+  } else if (plan.dusk) {
+    const d = TIME_LOOK.dusk;
+    out.push(
+      `<defs><linearGradient${attrs({ id: 'tm-d', gradientUnits: 'userSpaceOnUse', x1: 0, y1: 0, x2: 0, y2: num(plan.dusk.y1) })}>` +
+        el('stop', { offset: 0, 'stop-color': tg(d.dark), 'stop-opacity': d.alpha }) +
+        el('stop', { offset: 1, 'stop-color': tg(d.dark), 'stop-opacity': 0 }) +
+        '</linearGradient></defs>',
+      el('rect', { x: 0, y: 0, width: W, height: H, fill: 'url(#tm-d)' }),
+    );
   }
   out.push('</svg>');
   return out.join('');

@@ -25,14 +25,21 @@ const KEYWORDS: readonly { word: string; emotion: Emotion }[] = Object.entries(W
   .flatMap(([emotion, words]) => words.map((word) => ({ word, emotion: emotion as Emotion })))
   .sort((a, b) => b.word.length - a.word.length || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0));
 
-/** A word right after one of these does not count (没哭, 不笑); 忍住 a word still counts as the feeling held back. */
-const NEGATIONS = ['不', '没', '别', '未', '毫不', '并不', '没有'];
+/**
+ * A word with a negation just before it does not count (没哭, 不笑, 不是害怕,
+ * 没那么害怕); 不禁 / 忍不住 / 禁不住 / 不由得 are not negations (忍不住哭 is sad).
+ */
+const NEGATION = /[不没别未]/;
+const NOT_NEGATION = /(不禁|忍不住|禁不住|不由得|不由|止不住|不住)/g;
+const NEGATION_WINDOW = 4;
 
 const CLAUSE = /[。！？!?；;，,、\n]+/;
 
 export interface EmotionPerson {
   alias: string;
   label: string;
+  /** other names the text may use (the character's aliases: 老林 for 林川) */
+  names?: readonly string[];
 }
 
 interface Hit {
@@ -54,21 +61,35 @@ function clauseHits(clause: string): Hit[] {
       for (let i = at; i < at + word.length; i++) if (taken[i]) free = false;
       if (!free) continue;
       for (let i = at; i < at + word.length; i++) taken[i] = true;
-      const before = clause.slice(Math.max(0, at - 2), at);
-      if (NEGATIONS.some((n) => before.endsWith(n))) continue;
+      const before = clause.slice(Math.max(0, at - NEGATION_WINDOW), at).replace(NOT_NEGATION, '');
+      if (NEGATION.test(before)) continue;
       hits.push({ at, emotion });
     }
   }
   return hits.sort((a, b) => a.at - b.at);
 }
 
-/** Who a clause is about: the first person named in it (by name, longest name first at a place). */
+const WORDISH = /[0-9A-Za-z_]/;
+
+/** Where `name` first stands in `text` as a whole word: an ASCII name (c1) must not run on into letters or digits (c12). */
+function findName(text: string, name: string): number {
+  const ascii = /^[0-9A-Za-z_]+$/.test(name);
+  let from = 0;
+  for (;;) {
+    const at = text.indexOf(name, from);
+    if (at < 0 || !ascii) return at;
+    if (!WORDISH.test(text[at - 1] ?? '') && !WORDISH.test(text[at + name.length] ?? '')) return at;
+    from = at + 1;
+  }
+}
+
+/** Who a clause is about: the first person named in it (by name, alias or code; the longest name first at a place). */
 function firstNamed(clause: string, people: readonly EmotionPerson[]): string | null {
   let best: { at: number; len: number; alias: string } | null = null;
   for (const p of people) {
-    for (const name of [p.label, p.alias]) {
+    for (const name of [p.label, ...(p.names ?? []), p.alias]) {
       if (!name) continue;
-      const at = clause.indexOf(name);
+      const at = findName(clause, name);
       if (at < 0) continue;
       if (!best || at < best.at || (at === best.at && name.length > best.len)) best = { at, len: name.length, alias: p.alias };
     }
@@ -105,12 +126,21 @@ export function shotEmotions(fields: { action: string; narrative_purpose: string
 
 /** Words that are night whatever else the label says (凌晨 before the 晨 of dawn). */
 const NIGHT = /(夜|深夜|午夜|凌晨|半夜|子夜|NIGHT|MIDNIGHT)/i;
-const DUSK = /(黄昏|傍晚|日落|夕阳|薄暮|昏|清晨|黎明|拂晓|日出|破晓|晨|DUSK|DAWN|SUNSET|SUNRISE|EVENING)/i;
+/** A low sun: evening and the first light (早晨 / 早上 are plain morning: day). */
+const DUSK = /(黄昏|傍晚|日落|夕阳|薄暮|昏|霞|清晨|黎明|拂晓|日出|破晓|^晨$|DUSK|DAWN|SUNSET|SUNRISE|EVENING)/i;
+/** "Same time as the scene before" (Fountain CONTINUOUS / LATER, 稍后, 接上): the light of that scene. */
+const CONTINUITY = /^(CONTINUOUS|CONT'?D|LATER|MOMENTS LATER|SAME|SAME TIME|稍后|片刻后|同时|接上|接上场|连续|同上)$/i;
+
+/** Whether a time label means "same as the scene before" (the caller carries that scene's time). */
+export function isContinuityTime(label: string | null | undefined): boolean {
+  return !!label && CONTINUITY.test(label.trim());
+}
 
 /**
  * The light a scene heading's time asks for: 夜 / 晚上 / 凌晨 → night, 黄昏 /
- * 傍晚 / 清晨 → dusk (a low sun), anything else (日, 下午, none) → day. 傍晚 is
- * dusk, a bare 晚 (not 晚饭) is night.
+ * 傍晚 / 清晨 / 晚霞 → dusk (a low sun), anything else (日, 早上, 早晨, 下午,
+ * none) → day. 傍晚 is dusk, a bare 晚 (not 晚饭) is night. A continuity label
+ * (CONTINUOUS, 稍后) is day here: resolve it to the scene before first.
  */
 export function timeOfDay(label: string | null | undefined): TimeOfDay {
   if (!label) return 'day';

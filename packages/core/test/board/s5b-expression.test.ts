@@ -70,6 +70,22 @@ describe('feelings from the action text', () => {
     expect(inferEmotions(null, P).size).toBe(0);
   });
 
+  test('a nickname counts; a code does not run on into a longer one (c1 is not c12)', () => {
+    const people = [
+      { alias: 'c1', label: '林川', names: ['老林'] },
+      { alias: 'c12', label: '周远' },
+    ];
+    expect(inferEmotions('老林笑了，周远没说话', people).get('c1')).toBe('happy');
+    expect(Object.fromEntries(inferEmotions('c12 哭了', [{ alias: 'c1', label: '林川' }, { alias: 'c2', label: '周远' }]))).toEqual({});
+  });
+
+  test('a negation a few characters before counts (不是害怕, 没那么生气); 忍不住 and 不禁 do not negate', () => {
+    expect(inferEmotions('小林不是害怕', P).size).toBe(0);
+    expect(inferEmotions('小林没那么生气', P).size).toBe(0);
+    expect(inferEmotions('小林忍不住哭了', P).get('c1')).toBe('sad');
+    expect(inferEmotions('小林不禁笑了', P).get('c1')).toBe('happy');
+  });
+
   test('the purpose is read only when the action gives nobody a feeling', () => {
     expect(shotEmotions({ action: '小林坐着', narrative_purpose: '表现小林的不安' }, P).get('c1')).toBe('tense');
     expect(shotEmotions({ action: '小林笑了', narrative_purpose: '表现小林的不安' }, P).get('c1')).toBe('happy');
@@ -89,6 +105,11 @@ describe('time of day from the scene heading', () => {
     ['清晨', 'dusk'],
     ['日落', 'dusk'],
     ['DUSK', 'dusk'],
+    ['晚霞', 'dusk'],
+    ['晨', 'dusk'],
+    ['早晨', 'day'],
+    ['早上', 'day'],
+    ['CONTINUOUS', 'day'],
     ['日', 'day'],
     ['下午', 'day'],
     ['', 'day'],
@@ -186,6 +207,16 @@ describe('layout', () => {
 
 describe('hashes stay put for what was written before S5b', () => {
   const base = shotFields({ shot_size: 'MS', subjects: [subject('c1')], action: '甲坐着' });
+
+  test('content hash of shots written before S5b, frozen (computed with the S3 cleaning)', () => {
+    const talk = shotFields({ shot_size: 'MS', subjects: [subject('c1', { pose: 'sit' }), subject('c2')], props: ['table', 'cup'], action: '甲和乙隔着桌子说话', narrative_purpose: '交代关系' });
+    const insert = { ...shotFields({ shot_size: 'INSERT', props: ['book'], action: '桌上的日记本' }), camera_notes: '  慢推  ' };
+    expect(shotContentHash(talk)).toBe('19e7ff49cbe96b157bc61dc9d167');
+    expect(shotContentHash(insert)).toBe('1c009e510eba54007716a78de7b8');
+    // what a model or the editor writes for "nothing set" changes nothing
+    const fromModel = normalizeShotFieldsJson({ ...talk, subjects: talk.subjects.map((s) => ({ ...s, emotion: '' })), object_name: '' }) as ShotFields;
+    expect(shotContentHash(fromModel)).toBe('19e7ff49cbe96b157bc61dc9d167');
+  });
 
   test('content hash: a null emotion or an empty object name is the same as none', () => {
     const h = shotContentHash(base);
@@ -288,6 +319,18 @@ describe('the name of the object a close-up is about', () => {
       expect(it && it.type === 'prop' && it.faces.length, angle).toBeGreaterThan(0);
       expect(spec.overlay.labels.some((l) => l.id === 'l-object'), angle).toBe(true);
     }
+  });
+
+  test('a project prop name is only taken when it fits the object drawn', () => {
+    expect(objectNameFor({ object_name: null, action: '手机放在桌子上', narrative_purpose: '' }, ['桌子', '手机'], 'phone')).toBe('手机');
+    expect(objectNameFor({ object_name: null, action: '手机旁一杯热咖啡', narrative_purpose: '' }, ['热咖啡'], 'phone')).toBeNull();
+    expect(objectNameFor({ object_name: null, action: '书架上的旧书', narrative_purpose: '' }, ['书架'], 'book')).toBeNull();
+    // a plain box stands in for any small thing, not for a big one
+    expect(objectNameFor({ object_name: null, action: '桌上的日记本', narrative_purpose: '' }, ['日记本'], 'box')).toBe('日记本');
+    expect(objectNameFor({ object_name: null, action: '桌上的录音笔', narrative_purpose: '' }, ['录音笔'], 'box')).toBe('录音笔');
+    expect(objectNameFor({ object_name: null, action: '门口的书架', narrative_purpose: '' }, ['书架'], 'box')).toBeNull();
+    // the shot's own name is always written
+    expect(objectNameFor({ object_name: '热咖啡', action: '', narrative_purpose: '' }, [], 'phone')).toBe('热咖啡');
   });
 
   test('the name comes from the shot, else from a project prop its action mentions; none, no label', () => {

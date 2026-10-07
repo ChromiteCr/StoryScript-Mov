@@ -5,6 +5,7 @@
  * guesses content: unknown values are left as they are so zod reports them and
  * the repair round can fix them.
  */
+import type { PropKind } from '@storyscript/contracts';
 
 type Json = unknown;
 type Rec = Record<string, Json>;
@@ -113,7 +114,7 @@ const EMOTION = table({
   surprised: ['surprise', 'shocked', 'shock', 'astonished', 'stunned', '吃惊', '惊讶', '震惊', '惊愕'],
   tense: ['nervous', 'anxious', 'worried', 'uneasy', 'tension', 'stressed', '紧张', '不安', '焦虑', '担心', '忐忑'],
 });
-const PROP = table({
+const PROP_WORDS: Record<PropKind, readonly string[]> = {
   door: ['doors', '门'],
   table: ['tables', 'desk', 'counter', '桌'],
   chair: ['chairs', 'seat', '椅'],
@@ -134,7 +135,37 @@ const PROP = table({
   bag: ['bags', 'backpack', 'handbag', 'schoolbag', 'satchel', '包', '书包', '背包'],
   can: ['cans', 'tin', 'tin can', 'tins', 'jar', 'jars', 'canister', '罐', '罐子', '罐头', '易拉罐', '铁罐', '玻璃罐'],
   bottle: ['bottles', 'flask', 'vial', '瓶', '瓶子', '酒瓶', '水瓶', '药瓶', '饮料瓶'],
-});
+};
+const PROP = table(PROP_WORDS);
+
+/** Chinese prop words, longest first (书架 before 书). */
+const PROP_CJK: readonly { word: string; kind: PropKind }[] = (Object.entries(PROP_WORDS) as [PropKind, readonly string[]][])
+  .flatMap(([kind, words]) => words.filter((w) => /[\u4e00-\u9fff]/.test(w)).map((word) => ({ word, kind })))
+  .sort((a, b) => b.word.length - a.word.length || (a.word < b.word ? -1 : a.word > b.word ? 1 : 0));
+
+/**
+ * S5b: the prop kinds a Chinese name speaks of (黄桃罐头 → can, 日记本 → book,
+ * 书架 → shelf, not book): longest words first, each character counted once.
+ * An empty list for a name that says nothing about its shape (热咖啡, 信).
+ */
+export function propKindsInName(name: string): PropKind[] {
+  const taken = new Array<boolean>(name.length).fill(false);
+  const kinds = new Set<PropKind>();
+  for (const { word, kind } of PROP_CJK) {
+    let from = 0;
+    for (;;) {
+      const at = name.indexOf(word, from);
+      if (at < 0) break;
+      from = at + 1;
+      let free = true;
+      for (let i = at; i < at + word.length; i++) if (taken[i]) free = false;
+      if (!free) continue;
+      for (let i = at; i < at + word.length; i++) taken[i] = true;
+      kinds.add(kind);
+    }
+  }
+  return [...kinds];
+}
 const ENV = table({
   open: ['outdoor', 'outdoors', 'exterior', 'ext', 'outside', '室外', '外景'],
   interior: ['indoor', 'indoors', 'inside', 'int', '室内', '内景'],

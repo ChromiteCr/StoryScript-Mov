@@ -24,6 +24,10 @@ const SCRIPT = `1. 内景 书店 日
 3. 内景 厨房 黄昏
 
 桌上放着一罐黄桃罐头。
+
+4. 外景 街口 CONTINUOUS
+
+小林走远。
 `;
 
 let app: M3App;
@@ -43,8 +47,8 @@ const boardOf = (s: Shot) => latestBoard(db(), s.id)!;
 beforeEach(async () => {
   app = await makeM3App();
   scenes = (await importFixture(app, 's5b.txt', 'txt', SCRIPT)).scenes;
-  expect(scenes.map((s) => s.time_label)).toEqual(['日', '夜', '黄昏']);
-  roster = [(await app.post<Entity>('/api/v1/entities', { type: 'character', name: '小林', aliases: [] })).data];
+  expect(scenes.map((s) => s.time_label)).toEqual(['日', '夜', '黄昏', 'CONTINUOUS']);
+  roster = [(await app.post<Entity>('/api/v1/entities', { type: 'character', name: '小林', aliases: ['林子'] })).data];
   const prop = await app.post<Entity>('/api/v1/entities', { type: 'prop', name: '黄桃罐头', aliases: [] });
   expect(prop.status, prop.text).toBe(201);
 });
@@ -61,6 +65,18 @@ describe('S5b boards', () => {
     expect(boardOf(night).spec.scene.time).toBe('night');
     expect(boardOf(dusk).spec.scene.time).toBe('dusk');
     expect(boardOf(night).renderer_version).toBe(RENDERER_VERSION);
+  });
+
+  test('CONTINUOUS takes the time of the nearest scene before it that says one', async () => {
+    const s = await makeShot(3, '001', {});
+    expect(boardOf(s).spec.scene.time).toBe('dusk');
+  });
+
+  test('a character’s alias in the action carries the feeling too', async () => {
+    const other = (await app.post<Entity>('/api/v1/entities', { type: 'character', name: '阿杰', aliases: [] })).data;
+    const who = (alias: string) => ({ alias, screen: null, depth: null, facing: null, pose: null });
+    const s = await makeShot(1, '009', { subjects: [who(roster[0]!.alias), who(other.alias)], action: '林子在路灯下哭了，阿杰站在一旁' });
+    expect(boardOf(s).spec.scene.subjects.map((x) => x.emotion)).toEqual(['sad', undefined]);
   });
 
   test('a feeling read from the action, or set on the shot, reaches the board', async () => {

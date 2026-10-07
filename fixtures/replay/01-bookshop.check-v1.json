@@ -1,0 +1,42 @@
+{
+  "format": "storyscript-replay-v1",
+  "prompt_version": "check-v1",
+  "key": "06750775b77ac312e19016a924ad",
+  "origin": "handwritten",
+  "output_json": {
+    "risks": [
+      {
+        "paragraph_id": "p-002",
+        "category": "permit_location",
+        "severity": "medium",
+        "quote": "内景 旧书店 日",
+        "problem": "书店是别人的店，拍一下午要店主同意",
+        "alternative": "找学校图书馆或阅览室的书架角落，提前约好管理老师；柜台用课桌铺布代替，多拍近景。"
+      },
+      {
+        "paragraph_id": "p-003",
+        "category": "vfx",
+        "severity": "low",
+        "quote": "灰尘在光柱里慢慢浮动",
+        "problem": "光柱里的浮尘要强侧光和扬尘才拍得出",
+        "alternative": "关掉顶灯，用台灯或手机电筒从侧后方打光，开拍前拍打旧书扬起灰尘；拍不出来就改成普通的午后光线。"
+      },
+      {
+        "paragraph_id": "p-005",
+        "category": "rain_water",
+        "severity": "low",
+        "quote": "外套肩上还有雨点",
+        "problem": "外套要像刚淋过雨",
+        "alternative": "开拍前用喷壶往外套肩上和头发上喷水，不用拍下雨的画面；每条之间补喷一次保持一致。"
+      },
+      {
+        "paragraph_id": "p-021",
+        "category": "period",
+        "severity": "low",
+        "quote": "墙上挂着一张褪色的合影",
+        "problem": "要一张像四十年前拍的旧合影",
+        "alternative": "请两位同学穿朴素的旧式衣服在门口合影，加黑白或泛黄滤镜后打印，揉皱再展平做旧。"
+      }
+    ]
+  }
+}

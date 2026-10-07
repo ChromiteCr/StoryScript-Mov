@@ -7,6 +7,7 @@ import { STYLE_CAST_SQL } from './003_style_cast.ts';
 import { ACTORS_SQL } from './004_actors.ts';
 import { REVISIONS_SQL } from './005_revisions.ts';
 import { COMMENTS_SQL } from './006_comments.ts';
+import { SCRIPT_CHECK_SQL } from './007_script_check.ts';
 
 /**
  * Hand-written SQL migrations, embedded as TS strings so the bundle carries them.
@@ -27,6 +28,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 4, name: '004_actors', sql: ACTORS_SQL },
   { version: 5, name: '005_revisions', sql: REVISIONS_SQL },
   { version: 6, name: '006_comments', sql: COMMENTS_SQL },
+  { version: 7, name: '007_script_check', sql: SCRIPT_CHECK_SQL },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

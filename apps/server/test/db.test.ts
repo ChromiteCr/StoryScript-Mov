@@ -40,6 +40,9 @@ const EXPECTED_TABLES = [
   'comment',
   'comment_mention',
   'comment_read',
+  // S5
+  'script_check',
+  'script_risk',
 ];
 
 let root: string;

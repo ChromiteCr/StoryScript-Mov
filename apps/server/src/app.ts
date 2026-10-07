@@ -19,6 +19,7 @@ import { collabMiddleware, registerCollabRoutes } from './routes/collab.ts';
 import { registerCommentRoutes } from './routes/comments.ts';
 import { registerDraftRoutes } from './routes/drafts.ts';
 import { registerStyleRoutes } from './routes/styles.ts';
+import { registerCheckRoutes } from './routes/checks.ts';
 import { registerEntityRoutes } from './routes/entities.ts';
 import { registerJobRoutes } from './routes/jobs.ts';
 import { registerScriptRoutes } from './routes/scripts.ts';
@@ -148,6 +149,7 @@ export function createApp(opts: CreateAppOptions): AppHandle {
   registerShotRoutes(app, deps);
   registerDraftRoutes(app, deps);
   registerStyleRoutes(app, deps);
+  registerCheckRoutes(app, deps);
   registerJobRoutes(app, deps);
   registerResourceRoutes(app, deps);
   registerSetupRoutes(app, deps);

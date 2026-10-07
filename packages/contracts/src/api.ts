@@ -15,6 +15,8 @@ import { CastApplyInput, CastSuggestion, CastSyncApplyInput, CastSyncPreview } f
 import { CollabChanges } from './collab.ts';
 import { CommentSummary, CreateCommentInput, MarkCommentsReadInput, ShotComment, UpdateCommentInput } from './comments.ts';
 import { Take, TakeRating } from './take.ts';
+import { ScriptCheckView, ScriptRisk, SetRiskHandledInput } from './check.ts';
+import { SaveUsagePriceInput, UsagePrice, UsageReport } from './usage.ts';
 
 /**
  * Local REST API (prefix /api/v1). Internal, not a stable public API.
@@ -809,6 +811,12 @@ export const Api = {
   applyCast: { method: 'POST', path: '/api/v1/entities/cast', input: CastApplyInput, output: z.array(Entity) },
   castSyncPreview: { method: 'GET', path: '/api/v1/resources/cast-sync', output: CastSyncPreview },
   applyCastSync: { method: 'POST', path: '/api/v1/resources/cast-sync', input: CastSyncApplyInput, output: z.array(Resource) },
+  // S5 — script check and usage
+  getScriptCheck: { method: 'GET', path: '/api/v1/scripts/check', output: ScriptCheckView },
+  startScriptCheck: { method: 'POST', path: '/api/v1/scripts/check', output: JobAccepted },
+  setRiskHandled: { method: 'PUT', path: '/api/v1/scripts/risks/:id/handled', input: SetRiskHandledInput, output: ScriptRisk },
+  getUsage: { method: 'GET', path: '/api/v1/usage', output: UsageReport },
+  saveUsagePrice: { method: 'PUT', path: '/api/v1/usage/price', input: SaveUsagePriceInput, output: UsagePrice },
 
   // M3 — jobs
   getJob: { method: 'GET', path: '/api/v1/jobs/:id', output: Job },

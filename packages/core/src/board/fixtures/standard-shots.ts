@@ -63,6 +63,8 @@ export interface StandardShot {
   fields: ShotFields;
   roster: RosterEntry[];
   scene_sides: ScreenSides | null;
+  /** S5b: the scene heading's time (absent: day) */
+  time_label?: string;
 }
 
 export const STANDARD_SHOTS: StandardShot[] = [
@@ -437,6 +439,50 @@ export const VARIETY_SHOTS: StandardShot[] = [
     roster: STANDARD_ROSTER,
     scene_sides: STANDARD_SIDES,
   },
+  // S5b: the light of the time of day, and feelings read from the action
+  {
+    key: 'v13-night-street',
+    name: '夜 街道 争吵',
+    fields: shotFields({
+      shot_size: 'MS',
+      env: 'street',
+      subjects: [subject('c1'), subject('c2')],
+      narrative_purpose: '两人在路灯下吵起来',
+      action: '甲在路灯下低头叹气，乙生气地瞪着他',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: STANDARD_SIDES,
+    time_label: '夜',
+  },
+  {
+    key: 'v14-dusk-field',
+    name: '黄昏 野外 独坐',
+    fields: shotFields({
+      shot_size: 'FS',
+      env: 'nature',
+      subjects: [subject('c3', { pose: 'sit', facing: '3q_right' })],
+      narrative_purpose: '丙一个人等到天黑',
+      action: '丙坐在坡上望着远处，紧张地攥紧书包',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+    time_label: '黄昏',
+  },
+  {
+    key: 'v15-night-room',
+    name: '夜 卧室 读信',
+    fields: shotFields({
+      shot_size: 'MCU',
+      env: 'interior',
+      props: ['lamp'],
+      subjects: [subject('c4', { facing: '3q_left' })],
+      narrative_purpose: '丁读到信里的消息',
+      action: '丁在台灯下读信，愣住了',
+    }),
+    roster: STANDARD_ROSTER,
+    scene_sides: null,
+    time_label: '夜',
+  },
 ];
 
 /** Lay out a standard shot with the fixture look (2.39 frame). */
@@ -448,5 +494,6 @@ export function standardBoard(shot: StandardShot, seed = 7): BoardSpec {
     technique: null,
     aspect: '2.39',
     seed,
+    time_label: shot.time_label ?? null,
   });
 }

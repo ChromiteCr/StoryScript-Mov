@@ -58,6 +58,13 @@ export const Pose = z.enum([
 ]);
 export type Pose = z.infer<typeof Pose>;
 
+/**
+ * S5b: what a person feels in the shot (face and body language on the board).
+ * Absent or null on a shot subject: read from the shot's action text.
+ */
+export const Emotion = z.enum(['neutral', 'happy', 'sad', 'angry', 'afraid', 'surprised', 'tense']);
+export type Emotion = z.infer<typeof Emotion>;
+
 export const PropKind = z.enum([
   'door',
   'table',
@@ -78,6 +85,9 @@ export const PropKind = z.enum([
   'cup',
   'book',
   'bag',
+  // S5b: turned forms an insert is often about (a tin of fruit, a bottle of pills)
+  'can',
+  'bottle',
 ]);
 export type PropKind = z.infer<typeof PropKind>;
 
@@ -128,6 +138,8 @@ export const ShotSubject = z.object({
   depth: DepthPlane.nullable(),
   facing: Facing.nullable(),
   pose: Pose.nullable(),
+  /** S5b: optional so shots written before S5b keep their content hash; null = infer from the action */
+  emotion: Emotion.nullable().optional(),
 });
 export type ShotSubject = z.infer<typeof ShotSubject>;
 
@@ -166,6 +178,12 @@ export const ShotFields = z.object({
    * written before S3 keep their content hash; empty is stored as absent.
    */
   camera_notes: z.string().nullable().optional(),
+  /**
+   * S5b 物件名称: what the object a close-up or insert is about is called
+   * (水果罐头, 录取通知书). The board writes it next to the object, which it can
+   * only draw as a plain shape. Optional (hash-stable like camera_notes).
+   */
+  object_name: z.string().nullable().optional(),
 });
 export type ShotFields = z.infer<typeof ShotFields>;
 

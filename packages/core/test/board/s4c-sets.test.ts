@@ -204,7 +204,7 @@ describe('composition', () => {
     expect(Math.abs(fx(spec) - 0.5)).toBeLessThan(0.05);
   });
 
-  test('the renderer version marks boards laid out with the S4c rules', () => {
-    expect(RENDERER_VERSION).toBe('board-s4c');
+  test('the renderer version marks boards laid out with the current rules (S5b: emotions, time of day)', () => {
+    expect(RENDERER_VERSION).toBe('board-s5b');
   });
 });

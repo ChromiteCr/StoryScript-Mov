@@ -5,8 +5,10 @@ import { LEVEL_LABEL } from '../presets/styles.ts';
 export const BREAKDOWN_PROMPT_VERSION = 'breakdown-v1';
 /** S3: style card or a braver level. No longer sent since S4c; older drafts keep it. */
 export const BREAKDOWN_PROMPT_VERSION_V2 = 'breakdown-v2';
-/** S4c: every request outside --demo — v2's rules plus 【镜头变化】 and the new vocabularies. */
+/** S4c: v2's rules plus 【镜头变化】 and the new vocabularies. No longer sent since S5b; older drafts keep it. */
 export const BREAKDOWN_PROMPT_VERSION_V3 = 'breakdown-v3';
+/** S5b: every request outside --demo — v3 plus each person's emotion, the object's name, cans and bottles. */
+export const BREAKDOWN_PROMPT_VERSION_V4 = 'breakdown-v4';
 
 /** The parts of a style card the model sees (never the user's reference text). */
 export interface BreakdownStyle {
@@ -84,7 +86,14 @@ export const VOCAB_MOVEMENT =
   'static | push_in | pull_out | pan | tilt | track | crane | handheld | vehicle | orbit | aerial | dolly_zoom（orbit 环绕主体；aerial 航拍；dolly_zoom 变焦推拉）';
 export const VOCAB_POSE = 'stand | walk | run | sit | point | crouch | lie | kneel | reach | phone | null（lie 躺；kneel 跪；reach 伸手够东西或拉人；phone 打电话）';
 export const VOCAB_PROPS =
-  'door | table | chair | car | wall | building | stairs | window | box | bed | sofa | shelf | lamp | tree | phone | cup | book | bag（shelf 书架或货架；只能从中选，最多 4 个；没有合适的就留空数组）';
+  'door | table | chair | car | wall | building | stairs | window | box | bed | sofa | shelf | lamp | tree | phone | cup | book | bag | can | bottle（shelf 书架或货架；can 罐头或罐子；bottle 瓶子；只能从中选，最多 4 个；没有合适的就留空数组）';
+/** S5b: the seven feelings a board can draw. */
+export const VOCAB_EMOTION = 'neutral | happy | sad | angry | afraid | surprised | tense | null（null 表示看不出来，由系统按 action 推断）';
+
+/** S5b 【人物情绪与物件】: what v4 and polish-v3 add to the rules. */
+export const EXPRESSION_BLOCK = `【人物情绪与物件】
+- subjects[].emotion 写这个镜头里这个人物的情绪：开心 happy、难过 sad、生气 angry、害怕 afraid、吃惊 surprised、紧张 tense、平静 neutral。从 action、台词和前后文判断，看不出来填 null。分镜会画出相应的表情和姿态。
+- object_name：插入镜头或特写拍的是一件东西时，写它的具体名称（如「水果罐头」「录取通知书」，12 字以内），分镜只能画出大致形状，会把名称写在画面上；不是拍物件的镜头填 null。props 选形状最接近的：罐头或罐子 can，瓶子 bottle，信、本子和照片 book，其他小物件 box。`;
 export const VOCAB_ENV = 'open | interior | street | nature | corridor | classroom | null（nature 树林山野；corridor 走廊过道；classroom 教室）';
 
 /**
@@ -113,12 +122,12 @@ const RULES_V3 = `你是真人实拍短片的拆镜助理。你的任务是把"�
    - angle: eye | low | high | overhead | dutch
    - lens: wide | normal | tele；focal_mm 填数字或 null
    - movement: ${VOCAB_MOVEMENT}
-   - subjects[].screen: L | C | R | null；depth: fg | mg | bg | null；facing: camera | away | screen_left | screen_right | 3q_left | 3q_right | null；pose: ${VOCAB_POSE}
+   - subjects[].screen: L | C | R | null；depth: fg | mg | bg | null；facing: camera | away | screen_left | screen_right | 3q_left | 3q_right | null；pose: ${VOCAB_POSE}；emotion: ${VOCAB_EMOTION}
    - props[]: ${VOCAB_PROPS}
    - env: ${VOCAB_ENV}
    - subject_motion: none | l2r | r2l | toward | away
    - frame_format: 2.39 | 2.20 | 1.90 | 1.78 | 1.43 | null（null 表示沿用项目画幅）
-5. 所有字段都必须出现，包括 camera_notes；不确定的填 null 或空数组，并把你的推测写进 assumptions，把需要导演确认的问题写进 questions。
+5. 所有字段都必须出现，包括 camera_notes、object_name 和每个人物的 emotion；不确定的填 null 或空数组，并把你的推测写进 assumptions，把需要导演确认的问题写进 questions。
 6. set_piece 只在动作、奔跑、交通工具、大场面等需要重点设计的镜头设为 true，其余为 false。
 7. technique_id 只能是【可用手法】中的 id 或 null。
 8. 你没有看过任何具体电影的分镜。不要声称"某部电影的某个镜头就是这样拍的"，不要写片名、年份、时间码和真实人名。【风格】是通用手法的整理，只作方向；用户提到导演或影片时，也只给通用做法，并在 assumptions 中写"通用手法建议"。
@@ -144,9 +153,9 @@ const LEVEL_RULES: Record<StyleLevel, string> = {
 - est_seconds 可以到 60 秒（一镜到底）；镜头可以更多、更碎，只要节奏成立。`,
 };
 
-/** The level's rules close 【拆镜原则】; 【镜头变化】 follows for every level. */
+/** The level's rules close 【拆镜原则】; 【镜头变化】 and (S5b) 【人物情绪与物件】 follow for every level. */
 function systemV3(level: StyleLevel): string {
-  return `${RULES_V3}\n${LEVEL_RULES[level]}\n\n${VARIETY_BLOCK}`;
+  return `${RULES_V3}\n${LEVEL_RULES[level]}\n\n${VARIETY_BLOCK}\n\n${EXPRESSION_BLOCK}`;
 }
 
 function formatBias(b: StyleBias): string {
@@ -176,9 +185,9 @@ export function formatLevelBlock(level: StyleLevel): string {
   return `【难度】${LEVEL_LABEL[level]}`;
 }
 
-/** v3, except in --demo: v1, the version the replay recordings answer (style and level are not asked there). */
-export function breakdownPromptVersion(input: Pick<BreakdownPromptInput, 'demo'>): typeof BREAKDOWN_PROMPT_VERSION | typeof BREAKDOWN_PROMPT_VERSION_V3 {
-  return input.demo ? BREAKDOWN_PROMPT_VERSION : BREAKDOWN_PROMPT_VERSION_V3;
+/** v4 (S5b), except in --demo: v1, the version the replay recordings answer (style and level are not asked there). */
+export function breakdownPromptVersion(input: Pick<BreakdownPromptInput, 'demo'>): typeof BREAKDOWN_PROMPT_VERSION | typeof BREAKDOWN_PROMPT_VERSION_V4 {
+  return input.demo ? BREAKDOWN_PROMPT_VERSION : BREAKDOWN_PROMPT_VERSION_V4;
 }
 
 function formatRoster(roster: BreakdownPromptInput['roster']): string {
@@ -196,7 +205,7 @@ function formatTechniques(t: BreakdownPromptInput['techniques'], preferred: stri
 }
 
 export function buildBreakdownMessages(input: BreakdownPromptInput): ChatMessage[] {
-  if (breakdownPromptVersion(input) === BREAKDOWN_PROMPT_VERSION_V3) return buildBreakdownMessagesV3(input);
+  if (breakdownPromptVersion(input) === BREAKDOWN_PROMPT_VERSION_V4) return buildBreakdownMessagesV3(input);
   const paragraphs = input.paragraphs.map((p) => `[${p.id}] ${p.text}`).join('\n');
   const user = [
     `【场景】第 ${input.scene.display_no} 场：${input.scene.heading}`,

@@ -21,7 +21,7 @@
  * (−sin az·cos el, sin el, −cos az·cos el). The layout default (45°, 40°)
  * is the illustrator's upper-left light.
  */
-import type { BoardProp, BoardSpec } from '@storyscript/contracts';
+import type { BoardProp, BoardSpec, TimeOfDay } from '@storyscript/contracts';
 import { NEAR_M, projectPoint, projectPolygon, toCamera, unprojectToPlane } from './camera.ts';
 import { clamp, clipPolygon, clipPolygonRect, convexHull, DEG, dot3, lerp, mix2, polygonArea, type V2, type V3 } from './math.ts';
 import { CLOTH_OFFSET, type FigureStyle } from './puppet-style.ts';
@@ -107,10 +107,41 @@ export interface GroundPlan {
   stops: { o: number; v: number }[];
 }
 
+/**
+ * S5b: the light of the time of day.
+ *  - night: the set shell and the ground nearly a step darker (`shift`), the
+ *    props the shot lists less (`propShift`: what the light falls on stays
+ *    lighter than the room); outside an elliptical
+ *    pool of light round the people the frame goes toward tone `dark` (alpha
+ *    rising linearly from `inner` of the pool's radius to its edge, `alpha`
+ *    beyond), painted over the picture and into the hatch masks alike;
+ *  - dusk: a low sun — long shadows (shadowPolygon), and the top of the frame
+ *    drawn toward tone `dark` (alpha `alpha` at the top edge, fading out at the
+ *    horizon, kept between 35 % and 70 % of the frame height), over everything.
+ */
+export const TIME_LOOK = {
+  night: { shift: 0.9, propShift: 0.3, dark: 2.7, alpha: 0.86, inner: 0.45, vignette: 2.2 },
+  dusk: { dark: 2, alpha: 0.6, vignette: 1.5 },
+} as const;
+
+/** The pool of light at night (frame px). */
+export interface LightPool {
+  cx: number;
+  cy: number;
+  rx: number;
+  ry: number;
+}
+
 export interface PencilPlan {
   W: number;
   H: number;
   scene: FrameScene;
+  /** S5b: time of day (absent in the spec = day) */
+  time: TimeOfDay;
+  /** S5b: night only — where the light falls */
+  pool: LightPool | null;
+  /** S5b: dusk only — the graduated darkness fades from the top edge to y1 */
+  dusk: { y1: number } | null;
   /** world direction toward the light */
   light: V3;
   /** screen direction toward the light (unit, y down) */
@@ -347,10 +378,13 @@ function shadowPolygon(spec: BoardSpec, scene: FrameScene, id: string, L: V3): V
     gx /= gl;
     gz /= gl;
   }
-  const along = 0.2 * h;
-  const across = 0.1 * h;
-  const cx = s.x + gx * 0.1 * h;
-  const cz = s.z + gz * 0.1 * h;
+  // S5b: a low sun stretches the shadow (×1 at the day light's 40°, up to ×4)
+  const elev = Math.max(5, spec.scene.light.elevation_deg) * DEG;
+  const stretch = clamp(Math.tan(40 * DEG) / Math.tan(elev), 1, 4);
+  const along = 0.2 * h * stretch;
+  const across = (0.1 * h) / Math.sqrt(stretch);
+  const cx = s.x + gx * (along - 0.1 * h);
+  const cz = s.z + gz * (along - 0.1 * h);
   const pts: V3[] = [];
   for (let i = 0; i < 24; i++) {
     const a = (2 * Math.PI * i) / 24;
@@ -474,6 +508,8 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
     ly /= ll;
   }
   const steep = spec.camera.pitch_deg < -60;
+  const time: TimeOfDay = spec.scene.time ?? 'day';
+  const night = time === 'night';
   // seen from high above a shadow shows whole, right beside its owner: a little lighter
   const shadowTone = steep ? 2.3 : 3;
   const subjects = subjectBands(spec, scene);
@@ -492,7 +528,8 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
           const k = seen.get(f.sub) ?? 0;
           seen.set(f.sub, k + 1);
           // billboards (trees, the horizon band) and a blackboard carry a fixed tone
-          return { pts: fit(f.pts), tone: f.tone ?? tones.get(f.sub)?.[k] ?? 2, sub: f.sub };
+          const t = f.tone ?? tones.get(f.sub)?.[k] ?? 2;
+          return { pts: fit(f.pts), tone: night ? Math.min(3, t + (it.env ? TIME_LOOK.night.shift : TIME_LOOK.night.propShift)) : t, sub: f.sub };
         })
         .filter((f) => f.pts.length >= 3);
       // furniture-scale set props cast a shadow; walls and buildings do not (their
@@ -548,17 +585,70 @@ export function buildPencilPlan(spec: BoardSpec): PencilPlan {
       items.push({ type: 'subject', key: `subject:${it.id}`, item: it, band, tone, parts, regions });
     }
   }
+  let ground = groundPlan(spec, scene, refDepth);
+  if (ground && night) ground = { ...ground, stops: ground.stops.map((q) => ({ o: q.o, v: Math.min(3, Math.round((q.v + TIME_LOOK.night.shift) * 1000) / 1000) })) };
   return {
     W,
     H,
     scene,
+    time,
+    pool: night ? lightPool(scene, items) : null,
+    dusk: time === 'dusk' ? duskFade(scene) : null,
     light: L,
     lightScreen: [lx, ly],
     refDepth,
     subjects,
-    ground: groundPlan(spec, scene, refDepth),
+    ground,
     items,
   };
+}
+
+/**
+ * Night: the light falls on the people — an ellipse round the union of the
+ * main (mid- and foreground) figures, centred a little above their middle;
+ * with nobody in frame, on the middle of the frame.
+ */
+function lightPool(scene: FrameScene, items: readonly PlanItem[]): LightPool {
+  const { W, H } = scene;
+  const figs = items.filter((it): it is Extract<PlanItem, { type: 'subject' }> => it.type === 'subject' && it.item.bbox !== null);
+  const main = figs.filter((f) => f.band !== 'bg');
+  const boxes = (main.length ? main : figs)
+    .map((f) => f.item.bbox!)
+    .map((b) => ({ x0: clamp(b.x0, 0, W), y0: clamp(b.y0, 0, H), x1: clamp(b.x1, 0, W), y1: clamp(b.y1, 0, H) }))
+    .filter((b) => b.x1 > b.x0 && b.y1 > b.y0);
+  if (!boxes.length) return { cx: W / 2, cy: H * 0.52, rx: W * 0.34, ry: H * 0.5 };
+  const x0 = Math.min(...boxes.map((b) => b.x0));
+  const y0 = Math.min(...boxes.map((b) => b.y0));
+  const x1 = Math.max(...boxes.map((b) => b.x1));
+  const y1 = Math.max(...boxes.map((b) => b.y1));
+  const w = x1 - x0;
+  const h = y1 - y0;
+  // centred on the upper body: the faces sit well inside the light
+  return {
+    cx: (x0 + x1) / 2,
+    cy: y0 + h * 0.34,
+    rx: Math.max(w * 0.9, W * 0.2),
+    ry: Math.max(h * 0.9, H * 0.34),
+  };
+}
+
+/** Dusk: where the graduated darkness from the top edge fades out (the horizon, kept to the frame's middle band). */
+function duskFade(scene: FrameScene): { y1: number } {
+  const { H } = scene;
+  const hy = scene.horizon ? (scene.horizon[0][1] + scene.horizon[1][1]) / 2 : H / 2;
+  return { y1: clamp(hy, H * 0.35, H * 0.7) };
+}
+
+/** Night darkness at a px position: 0 inside the pool's core, rising to TIME_LOOK.night.alpha at its edge. */
+export function nightAlpha(pool: LightPool, x: number, y: number): number {
+  const n = TIME_LOOK.night;
+  const d = Math.hypot((x - pool.cx) / pool.rx, (y - pool.cy) / pool.ry);
+  return n.alpha * clamp((d - n.inner) / (1 - n.inner), 0, 1);
+}
+
+/** Dusk darkness at a px row: TIME_LOOK.dusk.alpha at the top edge, 0 from y1 down. */
+export function duskAlpha(dusk: { y1: number }, y: number): number {
+  return TIME_LOOK.dusk.alpha * clamp(1 - y / (dusk.y1 || 1), 0, 1);
 }
 
 /** Coarse tone raster (cell px) in painter order — used to cull hatch strokes. */
@@ -570,6 +660,20 @@ export function toneRaster(plan: PencilPlan, cell = 4): Grid {
     if (it.type === 'prop') for (const f of it.faces) fillPolygon(g, f.pts, f.tone);
     else if (it.type === 'shadow') fillPolygon(g, it.pts, it.tone);
     else for (const r of it.regions) fillPolygon(g, r.pts, r.tone);
+  }
+  // the night / dusk darkness laid over everything, as the renderer paints it
+  const { pool, dusk } = plan;
+  if (pool || dusk) {
+    const dark = pool ? TIME_LOOK.night.dark : TIME_LOOK.dusk.dark;
+    for (let row = 0; row < g.h; row++)
+      for (let col = 0; col < g.w; col++) {
+        const x = g.x0 + (col + 0.5) * g.cell;
+        const y = g.y0 + (row + 0.5) * g.cell;
+        const a = pool ? nightAlpha(pool, x, y) : duskAlpha(dusk!, y);
+        if (a <= 0) continue;
+        const i = row * g.w + col;
+        g.data[i] = (g.data[i] as number) * (1 - a) + dark * a;
+      }
   }
   return g;
 }

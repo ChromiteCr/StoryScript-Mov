@@ -111,17 +111,17 @@ describe('breakdown evaluation', () => {
     const seen: string[] = [];
     const chat = new FakeChat([], (req) => {
       seen.push(req.meta?.prompt_version ?? '');
-      const meta = req.meta?.prompt_version === 'breakdown-v3' ? { ...req.meta, prompt_version: BREAKDOWN_PROMPT_VERSION } : req.meta;
+      const meta = req.meta?.prompt_version === 'breakdown-v4' ? { ...req.meta, prompt_version: BREAKDOWN_PROMPT_VERSION } : req.meta;
       return recordings.complete({ ...req, meta }).then((r) => ({ content: r.content }));
     });
     const client = { base_url: 'https://llm.internal.example/v1', api_key: TEST_KEY, model: 'fake-model' };
     const recordDir = join(out, 'replay');
     const res = await runBreakdownEval({ client, chat, fixturesDir: FIXTURES, outDir: out, date: '2026-10-05', only: ['01-bookshop.txt'], recordDir });
-    expect(seen).toEqual([ENTITIES_PROMPT_VERSION, 'breakdown-v3', 'breakdown-v3']);
+    expect(seen).toEqual([ENTITIES_PROMPT_VERSION, 'breakdown-v4', 'breakdown-v4']);
     expect(res.breakdown.rate).toBe(1);
     expect(res.calls).toBe(3); // neither recorded scene is severe: no refine round
-    expect(res.markdown).toContain('提示词版本：breakdown-v3、');
+    expect(res.markdown).toContain('提示词版本：breakdown-v4、');
     expect(res.markdown).toMatch(/镜头变化：2 场平均 0\.\d\d，单一 0 场，调整一轮后采用 0 场/);
-    expect(readdirSync(recordDir).filter((f) => f.includes('.breakdown-v3.'))).toHaveLength(2);
+    expect(readdirSync(recordDir).filter((f) => f.includes('.breakdown-v4.'))).toHaveLength(2);
   });
 });

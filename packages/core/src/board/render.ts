@@ -10,13 +10,13 @@
  * Modes: 'structure', 'topview' (here) and 'pencil' (pencil.ts, same scene,
  * projection and painter order as structure).
  */
-import type { BoardSpec, Movement, Pose, RenderMode, Silhouette } from '@storyscript/contracts';
+import type { BoardSpec, Emotion, Movement, Pose, RenderMode, Silhouette } from '@storyscript/contracts';
 import { cyrb53 } from '../util/hash.ts';
 import { ZH_BOARD, ZH_PROP_KIND } from '../i18n/zh.ts';
 import { cameraBasis, hFov, projectSegment, unprojectToPlane } from './camera.ts';
 import { isEnvProp, STREET } from './layout.ts';
 import { clamp, DEG, type V2, type V3 } from './math.ts';
-import { arrowPx, badgePlacement, FONT } from './overlay-geom.ts';
+import { arrowPx, badgePlacement, FONT, leaderLine, propAnchor } from './overlay-geom.ts';
 import { renderPencil } from './pencil.ts';
 import type { PencilLook } from './pencil-look.ts';
 import { DEFAULT_FIGURE_STYLE, type FigureStyle } from './puppet-style.ts';
@@ -37,7 +37,7 @@ export interface RenderOptions {
   pencil?: { look?: PencilLook; layers?: 'all' | 'contour' };
 }
 
-export const RENDERER_VERSION = 'board-s4c';
+export const RENDERER_VERSION = 'board-s5b';
 
 const C = {
   paper: gray(255),
@@ -161,7 +161,8 @@ function subjectSvg(it: SubjectItem): string {
     for (const l of it.lines) {
       if (l.after !== i || !detailVisible(l.kind, it.headPx, it.heightPx, 0.8)) continue;
       const w = l.kind === 'cloth' ? inner * 0.8 : l.kind === 'faceMinor' ? faceW * 0.7 : faceW;
-      g.push(el('path', { d: polyPath(l.pts, false), fill: 'none', stroke: C.inner, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
+      if (l.closed) g.push(el('path', { d: polyPath(l.pts), fill: C.inner, stroke: C.inner, 'stroke-width': w * 0.5, 'stroke-linejoin': 'round' }));
+      else g.push(el('path', { d: polyPath(l.pts, false), fill: 'none', stroke: C.inner, 'stroke-width': w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }));
     }
   };
   let i = 0;
@@ -446,6 +447,18 @@ function overlaySvg(spec: BoardSpec, scene: FrameScene): string {
     g.push(`<g${attrs({ 'data-badge': it.id })}>${badgeSvg(c[0], c[1], it.badge, r)}</g>`);
   }
   for (const l of o.labels) {
+    // S5b: a callout naming a prop — a leader from the text to the object
+    const target = l.prop_id ? propAnchor(scene, l.prop_id) : null;
+    if (target) {
+      let tw = 0;
+      for (const ch of l.text) tw += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? 26 : 26 * 0.66;
+      const seg = leaderLine({ x: l.x * W - 4, y: l.y * H - 26, w: tw + 8, h: 32 }, target, 5);
+      if (seg) {
+        g.push(el('path', { d: polyPath(seg, false), fill: 'none', stroke: C.halo, 'stroke-width': 6, 'stroke-linecap': 'round' }));
+        g.push(el('path', { d: polyPath(seg, false), fill: 'none', stroke: C.ink, 'stroke-width': 2, 'stroke-linecap': 'round', 'data-leader': l.id }));
+        g.push(el('circle', { cx: target[0], cy: target[1], r: 5, fill: C.ink, stroke: C.halo, 'stroke-width': 2 }));
+      }
+    }
     g.push(
       text(
         { x: l.x * W, y: l.y * H, 'font-family': FONT, 'font-size': 26, fill: C.ink, stroke: C.halo, 'stroke-width': 6, 'paint-order': 'stroke', 'data-label': l.id },
@@ -725,6 +738,11 @@ function topviewGlyph(p: BoardSpec['scene']['props'][number], env: boolean, at: 
       const r = (w / 2) * scale;
       return el('circle', { cx: c[0], cy: c[1], r, ...base }) + detail([[w / 2, 0, w / 2 + 0.03, 0]]);
     }
+    case 'can':
+    case 'bottle': {
+      const r = (w / 2) * scale;
+      return el('circle', { cx: c[0], cy: c[1], r, ...base }) + el('circle', { cx: c[0], cy: c[1], r: r * (p.kind === 'bottle' ? 0.38 : 0.84), fill: 'none', stroke, 'stroke-width': sw * 0.6 });
+    }
     default: {
       const outline = el('path', { d: polyPath(rect(-w / 2, -d / 2, w / 2, d / 2).map(([a, b]) => at(a, b))), ...base });
       switch (p.kind) {
@@ -785,11 +803,11 @@ export function renderPuppetPreview(
   view: PuppetView,
   mirror: boolean,
   silhouette: Silhouette,
-  opts: { width?: number; height?: number; background?: boolean; gesture?: number; style?: FigureStyle } = {},
+  opts: { width?: number; height?: number; background?: boolean; gesture?: number; style?: FigureStyle; emotion?: Emotion | null } = {},
 ): string {
   const W = opts.width ?? 120;
   const H = opts.height ?? 220;
-  const shape = buildPuppet(pose, view, mirror, silhouette, { gesture: opts.gesture, style: opts.style });
+  const shape = buildPuppet(pose, view, mirror, silhouette, { gesture: opts.gesture, style: opts.style, emotion: opts.emotion ?? null });
   // Centre the figure's horizontal extent (a pointing arm reaches far to one
   // side) and shrink only when it still would not fit the cell.
   let minX = 0;
@@ -810,7 +828,7 @@ export function renderPuppetPreview(
     view,
     mirror,
     parts: shape.parts.map((p) => ({ pts: p.pts.map(px), fill: p.fill, material: p.material, stroke: p.stroke, silhouette: p.silhouette, group: p.group, far: p.far })),
-    lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1, key: l.key, kind: l.kind })),
+    lines: shape.lines.map((l, i) => ({ pts: l.pts.map(px), after: idx[i] ?? shape.parts.length - 1, key: l.key, kind: l.kind, ...(l.closed ? { closed: true } : {}) })),
     heightPx: figure,
     headPx: figure * 2 * HEAD.ry,
     style: opts.style ?? DEFAULT_FIGURE_STYLE,

@@ -91,7 +91,7 @@ export interface SubjectItem {
   view: PuppetView | 'top';
   mirror: boolean;
   parts: PuppetPrim[];
-  lines: { pts: V2[]; after: number; key: string; kind: PuppetLineKind }[];
+  lines: { pts: V2[]; after: number; key: string; kind: PuppetLineKind; closed?: boolean }[];
   /** projected head-top → feet length in px (stroke scaling) */
   heightPx: number;
   /** projected head height in px (which face details are drawn) */
@@ -329,6 +329,14 @@ function propParts(p: BoardProp): LocalBox[] {
         { cx: w / 2 + hw, y: h * 0.22, cz: 0, w: 2 * hw, h: h * 0.52, d: Math.min(0.014, d * 0.2) },
       ];
     }
+    case 'can':
+      return [{ cx: 0, y: 0, cz: 0, w, h, d, decor: { '+y': rectY(-w * 0.42, -d * 0.42, w * 0.42, d * 0.42, h) } }];
+    case 'bottle':
+      return [
+        { cx: 0, y: 0, cz: 0, w, h: h * 0.62, d },
+        { cx: 0, y: h * 0.62, cz: 0, w, h: h * 0.16, d, taper: 0.4 },
+        { cx: 0, y: h * 0.78, cz: 0, w: w * 0.38, h: h * 0.22, d: d * 0.38 },
+      ];
     case 'book': {
       // page edges on three sides, the hinge line beside the spine (−x)
       const along = (f: (y: number) => [V3, V3]) => [h * 0.34, h * 0.66].map(f);
@@ -621,7 +629,7 @@ export function projectProp(
   light: V3 = DEFAULT_LIGHT,
 ): { faces: FacePrim[]; depth: number } {
   if (p.kind === 'tree') return projectTree(p, cam, b, W, H, light);
-  if (p.kind === 'cup') return projectCup(p, cam, b, W, H, light);
+  if (p.kind === 'cup' || p.kind === 'can' || p.kind === 'bottle') return projectTurned(p, cam, b, W, H, light);
   const o = propWorldOrigin(p, cam);
   const L = localToWorld(o, p.y);
   const psi = o.yaw * DEG;
@@ -777,18 +785,23 @@ function projectTree(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, 
 }
 
 /**
- * A cup as a turned form (S4c): the body is the hull of its foot and rim
- * circles (split lit / shade by the light), the rim an ellipse with the dark
- * inside, the handle a flat loop on the cup's +x side drawn before or after
- * the body by depth. Fixed tones, so it flows through the prop pipeline.
+ * A cup, a can or a bottle as a turned form (S4c; can and bottle S5b): the body
+ * is the hull of stacked circles (split lit / shade by the light), the rim
+ * seen from above an ellipse — a cup's dark inside, a can's lid with its
+ * rim ring; a bottle narrows at the shoulder into a neck. A cup's handle is a
+ * flat loop on its +x side drawn before or after the body by depth. Fixed
+ * tones, so it flows through the prop pipeline.
  */
-function projectCup(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, H: number, light: V3): { faces: FacePrim[]; depth: number } {
+function projectTurned(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, H: number, light: V3): { faces: FacePrim[]; depth: number } {
   const o = propWorldOrigin(p, cam);
   const px = toPx(W, H);
   const psi = o.yaw * DEG;
+  const cup = p.kind === 'cup';
+  const bottle = p.kind === 'bottle';
   const r0 = p.w / 2;
-  const r1 = r0 * 1.12;
+  const r1 = cup ? r0 * 1.12 : r0;
   const top = p.y + p.h;
+  const depth = toCamera(b, [o.x, p.y + p.h / 2, o.z])[2];
   const circle = (r: number, y: number, n = 24): V3[] => Array.from({ length: n }, (_, i) => [o.x + r * Math.cos((2 * Math.PI * i) / n), y, o.z + r * Math.sin((2 * Math.PI * i) / n)] as V3);
   const proj = (pts: V3[]) => projectPolygon(b, pts).map(px);
   const faces: FacePrim[] = [];
@@ -796,10 +809,23 @@ function projectCup(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, H
     const h = Math.hypot(cam.x - o.x, cam.z - o.z) || 1;
     return [(cam.x - o.x) / h, 0, (cam.z - o.z) / h];
   })();
+  const pushFace = (pts: V2[], tone: number, sub: number, n: V3) => {
+    if (pts.length >= 3) faces.push({ pts, decor: [], n, sub, tone });
+  };
+  // the profile, bottom → top: [radius, height]
+  const shoulder = p.y + p.h * 0.62;
+  const neck = p.y + p.h * 0.78;
+  const rn = r0 * 0.38;
+  const bands: [number, number, number, number][] = bottle
+    ? [
+        [r0, p.y, r0, shoulder],
+        [r0, shoulder, rn, neck],
+        [rn, neck, rn, top],
+      ]
+    : [[r0, p.y, r1, top]];
   const foot = proj(circle(r0, p.y));
-  const rim = proj(circle(r1, top));
-  if (foot.length < 3 || rim.length < 3) return { faces, depth: toCamera(b, [o.x, p.y + p.h / 2, o.z])[2] };
-  const body = convexHull([...foot, ...rim]);
+  const rim = proj(circle(bottle ? rn : r1, top));
+  if (foot.length < 3 || rim.length < 3) return { faces, depth };
   // handle: a loop in the cup's local x–y plane, on its +x side
   const ax: V3 = [Math.cos(psi), 0, -Math.sin(psi)];
   const hc: V3 = [o.x + ax[0] * (r0 + 0.022), p.y + p.h * 0.52, o.z + ax[2] * (r0 + 0.022)];
@@ -808,29 +834,34 @@ function projectCup(p: BoardProp, cam: BoardCamera, b: CameraBasis, W: number, H
       const a = from + ((to - from) * i) / n;
       return [hc[0] + ax[0] * r * Math.cos(a), hc[1] + r * Math.sin(a) * 1.3, hc[2] + ax[2] * r * Math.cos(a)] as V3;
     });
-  const handle = proj([...loop(0.032, -Math.PI / 2, Math.PI / 2), ...loop(0.018, Math.PI / 2, -Math.PI / 2)]);
-  const handleBehind = toCamera(b, hc)[2] > toCamera(b, [o.x, hc[1], o.z])[2];
-  const pushFace = (pts: V2[], tone: number, sub: number, n: V3) => {
-    if (pts.length >= 3) faces.push({ pts, decor: [], n, sub, tone });
-  };
+  const handle = cup ? proj([...loop(0.032, -Math.PI / 2, Math.PI / 2), ...loop(0.018, Math.PI / 2, -Math.PI / 2)]) : [];
+  const handleBehind = cup && toCamera(b, hc)[2] > toCamera(b, [o.x, hc[1], o.z])[2];
   if (handleBehind) pushFace(handle, 1, 0, toCam);
-  // lit / shade halves of the body: split across the light's screen direction
-  const lp = projectPoint(b, [o.x + light[0] * r1 * 4, p.y + p.h / 2, o.z + light[2] * r1 * 4]);
+  // lit / shade halves: split across the light's screen direction
+  const lp = projectPoint(b, [o.x + light[0] * r0 * 4, p.y + p.h / 2, o.z + light[2] * r0 * 4]);
   const cp = projectPoint(b, [o.x, p.y + p.h / 2, o.z]);
   const sgn = lp.visible && cp.visible && lp.x > cp.x ? 1 : -1;
   const cx = cp.x * W;
-  const bw = Math.max(...body.map((q) => q[0])) - Math.min(...body.map((q) => q[0]));
-  // the lit side toward the light, a little past the middle
-  const f = (q: V2) => (q[0] - cx) * sgn + 0.15 * bw;
-  pushFace(clipPolygon(body, (q) => -f(q), mix2), 1, 1, toCam);
-  pushFace(clipPolygon(body, f, mix2), 0, 1, toCam);
-  if (!handleBehind) pushFace(handle, 1, 2, toCam);
-  // the rim seen from above, with the dark inside
+  bands.forEach(([ra, ya, rb, yb], i) => {
+    const body = convexHull([...proj(circle(ra, ya)), ...proj(circle(rb, yb))]);
+    if (body.length < 3) return;
+    const bw = Math.max(...body.map((q) => q[0])) - Math.min(...body.map((q) => q[0]));
+    // the lit side toward the light, a little past the middle
+    const f = (q: V2) => (q[0] - cx) * sgn + 0.15 * bw;
+    pushFace(clipPolygon(body, (q) => -f(q), mix2), 1, 1 + i, toCam);
+    pushFace(clipPolygon(body, f, mix2), 0, 1 + i, toCam);
+  });
+  if (cup && !handleBehind) pushFace(handle, 1, 1 + bands.length, toCam);
+  // the top seen from above: a cup's dark inside, a can's lid inside its rim, a bottle's mouth
   if (cam.y > top) {
-    pushFace(rim, 0, 3, [0, 1, 0]);
-    pushFace(proj(circle(r1 * 0.86, top)), 2, 3, [0, 1, 0]);
+    const sub = 2 + bands.length;
+    // a cup's rim and its dark inside; a can's rim ring round a light lid; a bottle's dark mouth
+    pushFace(rim, cup || bottle ? 0 : 1, sub, [0, 1, 0]);
+    if (cup) pushFace(proj(circle(r1 * 0.86, top)), 2, sub, [0, 1, 0]);
+    else if (bottle) pushFace(proj(circle(rn * 0.6, top)), 3, sub, [0, 1, 0]);
+    else pushFace(proj(circle(r0 * 0.86, top)), 0, sub, [0, 1, 0]);
   }
-  return { faces, depth: toCamera(b, [o.x, p.y + p.h / 2, o.z])[2] };
+  return { faces, depth };
 }
 
 // ---------------------------------------------------------------------------
@@ -949,7 +980,7 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
     }
     toWorld = (q: V2): V3 => [s.x + q[0] * Hm * lx, q[1] * Hm, s.z + q[0] * Hm * lz];
   }
-  const shape = buildPuppet(s.pose, view, mirror, s.silhouette, { gesture: effectiveGesture(s, seed), style });
+  const shape = buildPuppet(s.pose, view, mirror, s.silhouette, { gesture: effectiveGesture(s, seed), style, emotion: s.emotion ?? null });
   const parts: PuppetPrim[] = [];
   // idxMap[i] = index in `parts` of shape part i (or of the last part drawn before it)
   const idxMap: number[] = [];
@@ -969,7 +1000,9 @@ export function projectSubject(s: BoardSubject, cam: BoardCamera, b: CameraBasis
         }
       }
       const after = shape.lineAfter[i] ?? -1;
-      return { pts: runs, after: after >= 0 ? (idxMap[after] ?? parts.length - 1) : parts.length - 1, key: l.key, kind: l.kind };
+      const out = { pts: runs, after: after >= 0 ? (idxMap[after] ?? parts.length - 1) : parts.length - 1, key: l.key, kind: l.kind };
+      // a solid shape stays solid only when all of it projected (else its visible runs are a line)
+      return l.closed && runs.length === l.pts.length ? { ...out, closed: true } : out;
     })
     .filter((l) => l.pts.length >= 2);
   const heightPx = lying ? lengthPx : head && foot ? Math.hypot(head[0] - foot[0], head[1] - foot[1]) : 0;

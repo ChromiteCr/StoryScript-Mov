@@ -1,5 +1,6 @@
 import type { BreakdownOutput, DraftIssue, ShotFields } from '@storyscript/contracts';
 import { flagFilmClaims, type ClaimFlag } from '../prompt/claims.ts';
+import { OBJECT_NAME_MAX } from '../board/layout.ts';
 import { matchQuote, normalizeForMatch, type QuoteLevel } from '../script/quote.ts';
 
 /**
@@ -91,6 +92,9 @@ export function validateShotFieldsBasic(fields: ShotFields, ctx: ShotFieldsConte
   }
   if ((fields.template === 'two_shot' || fields.template === 'ots') && n < 2) {
     out.push(issue('warning', 'template_subjects', `${fields.template} 模板通常需要 2 个人物，当前 ${n} 个`, item));
+  }
+  if (typeof fields.object_name === 'string' && [...fields.object_name.trim()].length > OBJECT_NAME_MAX) {
+    out.push(issue('warning', 'object_name_long', `物件名称超过 ${OBJECT_NAME_MAX} 字，分镜上只写前 ${OBJECT_NAME_MAX} 个字`, item));
   }
   if (typeof fields.camera_notes === 'string' && fields.camera_notes.length > CAMERA_NOTES_MAX) {
     out.push(issue('warning', 'camera_notes_long', `拍法说明超过 ${CAMERA_NOTES_MAX} 字（当前 ${fields.camera_notes.length} 字）`, item));

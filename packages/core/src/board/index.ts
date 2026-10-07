@@ -33,9 +33,12 @@ export {
   inferTemplate,
   isEnvProp,
   layoutBoard,
+  OBJECT_NAME_MAX,
+  objectNameFor,
   PROP_SIZE,
   relativeYaw,
   SCREEN_X,
+  TIME_LIGHT,
   worldXAtFrameX,
   yawForRel,
   yawLookAt,
@@ -54,6 +57,7 @@ export {
   type PuppetView,
 } from './puppets.ts';
 export { buildFrameScene, frameSize, FRAME_W, type FrameScene } from './scene.ts';
+export { inferEmotions, shotEmotions, timeOfDay, type EmotionPerson } from './emotion.ts';
 export { arrowWorldHeights, placeArrow, type ArrowPlacement } from './overlay-geom.ts';
 export { renderBoard, renderPuppetPreview, RENDERER_VERSION, subjectFrameBoxes, subjectFramePoints, type RenderOptions } from './render.ts';
 export { lintBoard, type BoardLintIssue, type LintOptions } from './lint.ts';

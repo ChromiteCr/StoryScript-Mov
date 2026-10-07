@@ -41,7 +41,7 @@ const build = (mode: 'vary' | 'improve') =>
 
 describe('polish-v2 prompt', () => {
   test('version and the new vocabularies', () => {
-    expect(POLISH_PROMPT_VERSION).toBe('polish-v2');
+    expect(POLISH_PROMPT_VERSION).toBe('polish-v3');
     const system = build('improve')[0]!.content;
     expect(system).toContain(`pose: ${Pose.options.join(' | ')} | null`);
     expect(system).toContain(`props[]: ${PropKind.options.join(' | ')}`);

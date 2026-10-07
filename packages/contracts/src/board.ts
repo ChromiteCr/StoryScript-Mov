@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import { ActorRef, IsoTime, Uuid } from './common.ts';
-import { EnvKind, FrameFormat, Movement, Pose, PropKind } from './shot.ts';
+import { Emotion, EnvKind, FrameFormat, Movement, Pose, PropKind } from './shot.ts';
 
 // ---------------------------------------------------------------------------
 // BoardSpec v1 — produced only by core/board/layoutBoard or by user edits.
@@ -44,6 +44,8 @@ export const BoardSubject = z.object({
    * or null: picked from the board seed, so two people never look cloned.
    */
   gesture: z.number().int().min(0).max(15).nullable().optional(),
+  /** S5b: face and body language; absent or null draws a calm face */
+  emotion: Emotion.nullable().optional(),
 });
 export type BoardSubject = z.infer<typeof BoardSubject>;
 
@@ -113,6 +115,8 @@ export const BoardLabel = z.object({
   /** frame coordinates */
   x: z.number(),
   y: z.number(),
+  /** S5b: a callout naming this prop (a leader line runs from the label to it) */
+  prop_id: z.string().nullable().optional(),
 });
 export type BoardLabel = z.infer<typeof BoardLabel>;
 
@@ -126,11 +130,17 @@ export const BoardOverlay = z.object({
 });
 export type BoardOverlay = z.infer<typeof BoardOverlay>;
 
+/** S5b: the light of the frame, from the scene heading's time (日 / 黄昏 / 夜) */
+export const TimeOfDay = z.enum(['day', 'dusk', 'night']);
+export type TimeOfDay = z.infer<typeof TimeOfDay>;
+
 export const BoardScene = z.object({
   env: EnvKind,
   light: z.object({ azimuth_deg: z.number(), elevation_deg: z.number() }),
   subjects: z.array(BoardSubject),
   props: z.array(BoardProp),
+  /** S5b: absent = day (boards laid out before S5b) */
+  time: TimeOfDay.optional(),
 });
 export type BoardScene = z.infer<typeof BoardScene>;
 

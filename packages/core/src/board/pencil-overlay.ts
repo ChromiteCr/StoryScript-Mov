@@ -9,7 +9,7 @@ import type { BoardSpec, Movement } from '@storyscript/contracts';
 import { ZH_BOARD } from '../i18n/zh.ts';
 import { rngFor } from '../util/random.ts';
 import { DEG, type V2 } from './math.ts';
-import { arrowPx, badgePlacement, FONT, guideLines } from './overlay-geom.ts';
+import { arrowPx, badgePlacement, FONT, guideLines, leaderLine, propAnchor } from './overlay-geom.ts';
 import type { FrameScene } from './scene.ts';
 import { looseLoop, sym, taperedStroke, type Rng } from './strokes.ts';
 import { attrs, el, gray, num, polyPath, text } from './svg.ts';
@@ -280,7 +280,19 @@ export function pencilOverlaySvg(spec: BoardSpec, scene: FrameScene, o: PencilOv
     g.push('</g>');
   }
   for (const l of ov.labels) {
-    g.push(labelTab(l.x * W, l.y * H, 26, 400, l.text, ctx, l.id, 'data-label'));
+    // S5b: a callout naming a prop — a pencil leader from the tab to the object, ending in a dot
+    const target = l.prop_id ? propAnchor(scene, l.prop_id) : null;
+    if (target) {
+      const box = tabBox(l.x * W, l.y * H, 26, l.text);
+      const seg = leaderLine(box, target, 5);
+      if (seg) {
+        const rng = rngFor(spec.seed, `overlay:leader:${l.id}`);
+        const d = taperedStroke(seg, { w0: 2.4, rng, overshoot: 0, wobble: 0.3 });
+        if (d) g.push(halo(polyPath(seg, false), ctx, 7), el('path', { d, fill: ctx.ink, 'fill-opacity': 0.85, 'data-leader': l.id }));
+        g.push(el('circle', { cx: target[0], cy: target[1], r: 5, fill: ctx.ink, stroke: ctx.paper, 'stroke-width': 2 }));
+      }
+    }
+    g.push(labelTab(l.x * W, l.y * H, 26, l.prop_id ? 600 : 400, l.text, ctx, l.id, 'data-label'));
   }
   if (ov.show_code && o.code) {
     g.push(labelTab(22, 44, 30, 700, o.code, ctx, '1', 'data-code'));
@@ -294,6 +306,13 @@ function textWidth(t: string, size: number): number {
   let w = 0;
   for (const ch of t) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? size : size * 0.66;
   return w;
+}
+
+/** The paper tab of a label (labelTab's geometry). */
+function tabBox(x: number, baseline: number, size: number, t: string): { x: number; y: number; w: number; h: number } {
+  const padX = size * 0.3;
+  const padY = size * 0.22;
+  return { x: x - padX, y: baseline - size * 0.86 - padY, w: textWidth(t, size) + padX * 2, h: size + padY * 2 };
 }
 
 /**

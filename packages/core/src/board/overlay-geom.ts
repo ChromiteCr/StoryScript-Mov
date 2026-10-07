@@ -154,3 +154,35 @@ export function guideLines(spec: BoardSpec, W: number, H: number): { guide: stri
   }
   return out;
 }
+
+/**
+ * S5b callouts: where a label naming a prop points — the middle of the prop's
+ * drawn faces, kept inside the frame (null when the prop is not drawn).
+ */
+export function propAnchor(scene: FrameScene, propId: string): V2 | null {
+  const it = scene.items.find((i) => i.type === 'prop' && i.id === propId);
+  if (!it || it.type !== 'prop') return null;
+  const pts = it.faces.flatMap((f) => f.pts);
+  if (!pts.length) return null;
+  let x0 = Infinity;
+  let y0 = Infinity;
+  let x1 = -Infinity;
+  let y1 = -Infinity;
+  for (const [x, y] of pts) {
+    x0 = Math.min(x0, x);
+    y0 = Math.min(y0, y);
+    x1 = Math.max(x1, x);
+    y1 = Math.max(y1, y);
+  }
+  return [clamp((x0 + x1) / 2, 0, scene.W), clamp((y0 + y1) / 2, 0, scene.H)];
+}
+
+/** The leader from a label's box (x, y, w, h) to its target: from the box edge nearest the target, stopping short of it. */
+export function leaderLine(box: { x: number; y: number; w: number; h: number }, target: V2, gap = 6): [V2, V2] | null {
+  const from: V2 = [clamp(target[0], box.x, box.x + box.w), clamp(target[1], box.y, box.y + box.h)];
+  const dx = target[0] - from[0];
+  const dy = target[1] - from[1];
+  const l = Math.hypot(dx, dy);
+  if (l < gap * 3) return null;
+  return [from, [target[0] - (dx / l) * gap, target[1] - (dy / l) * gap]];
+}

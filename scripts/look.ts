@@ -18,6 +18,8 @@
  *   <out>/m2/compare-1.png, compare-2.png   (structure | pencil, 6 shots each)
  *   <out>/m2/compare-pencil.png             (all 12 pencil boards, 2 × 6)
  *   <out>/m2/compare-variety.png            (S4c: the variety shots — places, props, poses; structure | pencil)
+ *   <out>/m2/expressions.png                (S5b: 7 emotions × front / three-quarter, close-up and medium shot)
+ *   <out>/m2/objects.png                    (S5b: a named tin on a table at five angles, a bottle, a named prop beside a person)
  *   <out>/m2/thumbs.png                     (12 pencil boards at 240 px wide)
  *   <out>/m2/crop-1.png, crop-2.png         (1:1 crops, re-rendered from a viewBox sub-rect)
  *   <out>/m2/metrics.json, metrics.md, metrics.png  (look metrics L1–L7 + timings)
@@ -29,7 +31,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { Resvg } from '@resvg/resvg-wasm';
-import { Pose, type BoardSpec, type Silhouette } from '@storyscript/contracts';
+import { Emotion, Pose, type BoardSpec, type ShotFields, type Silhouette } from '@storyscript/contracts';
 import { initResvg, svgToPixels } from '../apps/server/src/adapters/render/resvg.ts';
 import {
   DEFAULT_PENCIL_VARIANT,
@@ -49,7 +51,11 @@ import {
   type PencilLook,
   type PencilVariant,
   type PuppetView,
+  layoutBoard,
+  ZH_EMOTION,
 } from '../packages/core/src/index.ts';
+import { shotFields, STANDARD_LOOK, STANDARD_ROSTER, subject } from '../packages/core/src/board/fixtures/standard-shots.ts';
+
 
 const { values } = parseArgs({
   options: {
@@ -370,6 +376,60 @@ async function m2(): Promise<void> {
       body += place(pencil(spec, { width: CW, code }), CW + 40, y + 38);
     });
     writeFileSync(join(OUT, 'compare-variety.png'), png(sheetSvg(W, H, body)));
+  }
+
+  // S5b: the seven feelings, face (CU) and body (MS), front and three-quarter
+  {
+    const cw = 440;
+    const chH = Math.round(cw / 2.39);
+    const cols: { size: 'CU' | 'MS'; facing: 'camera' | '3q_left' }[] = [
+      { size: 'CU', facing: 'camera' },
+      { size: 'CU', facing: '3q_left' },
+      { size: 'MS', facing: 'camera' },
+      { size: 'MS', facing: '3q_left' },
+    ];
+    const left = 110;
+    const W = left + cols.length * (cw + 10) + 10;
+    const H = 50 + Emotion.options.length * (chH + 12);
+    let body = label(20, 34, 'S5b 人物情绪 · 特写与中景，正面与四分之三侧面（铅笔稿）', 24);
+    Emotion.options.forEach((e, row) => {
+      const y = 50 + row * (chH + 12);
+      body += label(20, y + chH / 2 + 8, ZH_EMOTION[e], 22);
+      cols.forEach((c, ci) => {
+        const fields = shotFields({ shot_size: c.size, env: 'interior', subjects: [subject(c.size === 'MS' ? 'c3' : 'c2', { facing: c.facing, emotion: e })] });
+        const spec = layoutBoard(fields, { scene_sides: null, roster: STANDARD_ROSTER, look: STANDARD_LOOK, technique: null, aspect: '2.39', seed: 7 });
+        body += place(renderBoard(spec, 'pencil', { width: cw, overlay: false }), left + ci * (cw + 10), y);
+      });
+    });
+    writeFileSync(join(OUT, 'expressions.png'), png(sheetSvg(W, H, body)));
+  }
+
+  // S5b: an object a close-up can only draw as a shape, named on the board
+  {
+    const cw = 900;
+    const chH = Math.round(cw / 2.39);
+    const shots: { name: string; f: Partial<ShotFields> }[] = [
+      { name: '插入 平视', f: { angle: 'eye' } },
+      { name: '插入 俯拍', f: { angle: 'high' } },
+      { name: '插入 顶拍', f: { angle: 'overhead' } },
+      { name: '插入 仰拍', f: { angle: 'low' } },
+      { name: '大特写 斜角', f: { shot_size: 'ECU', angle: 'dutch' } },
+      { name: '插入 药瓶（夜）', f: { props: ['table', 'bottle'], object_name: '药瓶' } },
+      { name: '中景 人物与桌上的罐头', f: { template: null, shot_size: 'MS', subjects: [subject('c2', { pose: 'sit', facing: '3q_right' })] } },
+      { name: '插入 没有名称', f: { object_name: null } },
+    ];
+    const W = 30 + 2 * cw;
+    const H = 50 + Math.ceil(shots.length / 2) * (chH + 44);
+    let body = label(20, 34, 'S5b 物件名称 · 水果罐头的不同角度（铅笔稿）', 24);
+    shots.forEach((s, i) => {
+      const x = 10 + (i % 2) * (cw + 10);
+      const y = 50 + Math.floor(i / 2) * (chH + 44);
+      const fields = shotFields({ template: 'insert', shot_size: 'INSERT', env: 'interior', props: ['table', 'can'], object_name: '水果罐头', action: '桌上的水果罐头', ...s.f });
+      const spec = layoutBoard(fields, { scene_sides: null, roster: STANDARD_ROSTER, look: STANDARD_LOOK, technique: null, aspect: '2.39', seed: 11 + i, time_label: s.name.includes('夜') ? '夜' : null });
+      body += label(x, y + 28, s.name);
+      body += place(renderBoard(spec, 'pencil', { width: cw, code: `O-${i + 1}` }), x, y + 38);
+    });
+    writeFileSync(join(OUT, 'objects.png'), png(sheetSvg(W, H, body)));
   }
 
   // 1:1 crops: the OTS listener's head and shoulders; the group around the table

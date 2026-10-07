@@ -2,7 +2,7 @@ import { describe, expect, test } from 'vitest';
 import { Pose, PropKind, EnvKind, type StyleCard } from '@storyscript/contracts';
 import {
   BREAKDOWN_PROMPT_VERSION,
-  BREAKDOWN_PROMPT_VERSION_V3,
+  BREAKDOWN_PROMPT_VERSION_V4,
   TECHNIQUES,
   buildBreakdownMessages,
   breakdownPromptVersion,
@@ -38,8 +38,8 @@ const asStyle = (c: StyleCard) => ({ name: c.name, grammar: c.grammar, bias: c.b
 
 describe('breakdown prompt version', () => {
   test('v3 by default, with or without a style or level', () => {
-    expect(breakdownPromptVersion(BASE)).toBe(BREAKDOWN_PROMPT_VERSION_V3);
-    expect(breakdownPromptVersion({ demo: false })).toBe('breakdown-v3');
+    expect(breakdownPromptVersion(BASE)).toBe(BREAKDOWN_PROMPT_VERSION_V4);
+    expect(breakdownPromptVersion({ demo: false })).toBe('breakdown-v4');
     expect(buildBreakdownMessages(BASE)[0]!.content).toContain('【镜头变化】');
     expect(buildBreakdownMessages({ ...BASE, style: asStyle(TRACK), level: 'bold' })[0]!.content).toContain('【镜头变化】');
   });
@@ -53,7 +53,7 @@ describe('breakdown prompt version', () => {
   });
 });
 
-describe('breakdown-v3', () => {
+describe('breakdown-v4', () => {
   const plain = buildBreakdownMessages(BASE);
 
   test('snapshot of the default request (稳妥, no style)', () => {

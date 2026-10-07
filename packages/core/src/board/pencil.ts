@@ -33,6 +33,7 @@ import {
   buildPencilPlan,
   figurePartTone,
   groundValueAt,
+  TIME_LOOK,
   toneRaster,
   type DepthBand,
   type FigureRegion,
@@ -51,7 +52,7 @@ export const PENCIL_VERSION = 'pencil-1';
  * it; structureHash deliberately does not, so a renderer upgrade never marks
  * adopted AI redraws as stale.
  */
-export const PICTURE_VERSION = 'picture-s4c';
+export const PICTURE_VERSION = 'picture-s5b';
 
 export interface PencilRenderOptions {
   width?: number;
@@ -74,14 +75,20 @@ export function structureHash(spec: BoardSpec, look: PencilLook = DEFAULT_PENCIL
   // Frozen inputs (S4c): the v1 version string, the v1 default look, and only
   // the look fields v1 had; an unset gesture (absent or null) hashes as absent.
   const hashLook = look === DEFAULT_PENCIL_LOOK ? LOOK_HASH_V1 : pickV1(look);
-  const subjects = spec.scene.subjects.map((s) => (s.gesture === null || s.gesture === undefined ? omitGesture(s) : s));
-  const scene = { ...spec.scene, subjects };
+  // S5b: a calm face (emotion absent / null) and daylight (time absent / day) hash as absent
+  const subjects = spec.scene.subjects.map((s) => omitUnset(omitUnset(s, 'gesture'), 'emotion'));
+  const { time, ...sceneRest } = spec.scene;
+  const scene = time && time !== 'day' ? { ...sceneRest, subjects, time } : { ...sceneRest, subjects };
   return contentHash({ v: PENCIL_VERSION, frame: spec.frame, camera: spec.camera, scene, seed: spec.seed, movers, look: hashLook });
 }
 
-function omitGesture<T extends { gesture?: unknown }>(s: T): Omit<T, 'gesture'> {
-  const { gesture: _g, ...rest } = s;
-  return rest;
+/** Drop an optional key whose value is unset (absent or null). */
+function omitUnset<T extends object, K extends string>(s: T, key: K): T {
+  const v = (s as Record<string, unknown>)[key];
+  if (v !== null && v !== undefined) return s;
+  if (!(key in s)) return s;
+  const { [key]: _drop, ...rest } = s as Record<string, unknown>;
+  return rest as T;
 }
 
 /**
@@ -502,6 +509,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
     m: (k: number) => `${id}-m${k}`,
   };
   const pids = paperIds(id);
+  const timeIds = { sky: `${id}-sky`, skyT: `${id}-skyt`, night: `${id}-nt`, nightT: `${id}-ntt` };
   const W2 = { w: (band: DepthBand) => look.outline[band] * look.contour.scale };
   const motion = subjectMotion(spec, plan);
 
@@ -547,6 +555,33 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
 
   for (const it of plan.items) body.push(itemSvg(it));
 
+  // S5b night: darkness over the picture outside the pool of light round the people
+  // (the same falloff goes into the hatch masks, and toneRaster mirrors it)
+  if (plan.pool && !contourOnly) {
+    const { cx, cy, rx, ry } = plan.pool;
+    const n = TIME_LOOK.night;
+    const grad = (gid: string, color: string) =>
+      `<radialGradient${attrs({ id: gid, gradientUnits: 'userSpaceOnUse', cx: 0, cy: 0, r: 1, gradientTransform: `translate(${num(cx)} ${num(cy)}) scale(${num(rx)} ${num(ry)})` })}>` +
+      el('stop', { offset: n.inner, 'stop-color': color, 'stop-opacity': 0 }) +
+      el('stop', { offset: 1, 'stop-color': color, 'stop-opacity': n.alpha }) +
+      '</radialGradient>';
+    defsLocal.push(grad(timeIds.night, tone(fillAt(n.dark))), grad(timeIds.nightT, toneGray(n.dark)));
+    body.push(el('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${timeIds.night})`, 'data-el': 'night' }));
+    toneMap.push(el('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${timeIds.nightT})` }));
+  }
+  // S5b dusk: the top of the frame drawn down toward the horizon (a low sun's sky)
+  if (plan.dusk && !contourOnly) {
+    const d = TIME_LOOK.dusk;
+    const grad = (gid: string, color: string) =>
+      `<linearGradient${attrs({ id: gid, gradientUnits: 'userSpaceOnUse', x1: 0, y1: 0, x2: 0, y2: num(plan.dusk!.y1) })}>` +
+      el('stop', { offset: 0, 'stop-color': color, 'stop-opacity': d.alpha }) +
+      el('stop', { offset: 1, 'stop-color': color, 'stop-opacity': 0 }) +
+      '</linearGradient>';
+    defsLocal.push(grad(timeIds.sky, tone(fillAt(d.dark))), grad(timeIds.skyT, toneGray(d.dark)));
+    body.push(el('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${timeIds.sky})`, 'data-el': 'dusk' }));
+    toneMap.push(el('rect', { x: 0, y: 0, width: W, height: H, fill: `url(#${timeIds.skyT})` }));
+  }
+
   /** figure darkness at a fractional tone (piecewise linear over look.figure) */
   function figureAt(v: number): number {
     const t = clamp(v, 0, 3);
@@ -572,6 +607,10 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
     const on: PuppetMaterial = l.kind === 'face' || l.kind === 'faceMinor' ? 'skin' : l.kind === 'hair' ? 'hair' : (s.parts[l.after]?.material ?? 'top');
     const dark = figureAt(figurePartTone(bandTone, band, on, s.style)) > 0.5;
     const face = clamp(s.headPx * 0.026, 0.6, 2.6);
+    if (l.closed) {
+      // S5b: a pupil or an open mouth — a small solid graphite shape
+      return el('path', { d: polyPath(l.pts), fill: dark ? paper : ink, 'fill-opacity': clamp((dark ? 0.6 : 0.85) * (1 + sym(rng) * 0.08), 0.05, 1), 'data-mark': l.key });
+    }
     const w0 = l.kind === 'face' ? face : l.kind === 'faceMinor' ? face * 0.7 : l.kind === 'hair' ? face * 0.8 : clamp(s.heightPx * 0.0022, 0.5, 1.6);
     const d = taperedStroke(l.pts, { w0, rng, overshoot: 0.02, wobble: Math.min(0.3, w0 * 0.2) });
     if (!d) return '';
@@ -585,7 +624,8 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       const rng = rngFor(spec.seed, `contour:${it.key}`);
       const env = it.item.env;
       for (const f of it.faces) {
-        g.push(el('path', { d: polyPath(f.pts), fill: tone(look.fill[f.tone] as number) }));
+        // S5b: a night set is shifted by a fraction of a step — interpolate between the fills
+        g.push(el('path', { d: polyPath(f.pts), fill: tone(Number.isInteger(f.tone) ? (look.fill[f.tone] as number) : fillAt(f.tone)) }));
         toneMap.push(el('path', { d: polyPath(f.pts), fill: toneGray(f.tone) }));
       }
       const w0 = W2.w(it.band) * (env ? 0.85 : 1);
@@ -751,7 +791,8 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
       smudge = el('use', { href: `#${ids.tm}`, filter: `url(#${ids.sm})`, 'data-layer': 'smudge' });
     }
   }
-  if (!contourOnly && background) defs.push(paperDefs(pids, look.grain, look.vignette));
+  const vignette = look.vignette * (plan.time === 'night' ? TIME_LOOK.night.vignette : plan.time === 'dusk' ? TIME_LOOK.dusk.vignette : 1);
+  if (!contourOnly && background) defs.push(paperDefs(pids, look.grain, vignette));
 
   // ---- assemble -------------------------------------------------------------
   const out: string[] = [svgOpen(W, H, opts.width)];
@@ -762,7 +803,7 @@ export function renderPencil(spec: BoardSpec, opts: PencilRenderOptions = {}): s
   if (!contourOnly) {
     out.push(smudge);
     out.push(hatch.join(''));
-    if (background) out.push(paperOverlay(pids, W, H, look.grain, look.vignette));
+    if (background) out.push(paperOverlay(pids, W, H, look.grain, vignette));
   }
   out.push('</g>');
   // widescreen frame line

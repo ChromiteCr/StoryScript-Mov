@@ -18,6 +18,9 @@ import { getScene } from '../../db/repos/script.ts';
  * - technique: builtin card or user card referenced by shot.fields.technique_id.
  * - aspect: shot.fields.frame_format ?? project.default_aspect.
  * - seed: stable hash of the shot id (same shot → same pencil jitter forever).
+ * - time_label (S5b): the scene heading's time (日 / 夜 / 黄昏): the frame's light.
+ * - prop_names (S5b): the project's prop entities (names and aliases): an
+ *   insert's object is named by the one its action mentions.
  */
 
 const LETTERS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
@@ -80,8 +83,12 @@ export function shotSeed(shotId: string): number {
 export interface ProjectBoardContext {
   roster: RosterEntry[];
   defaultAspect: FrameFormat;
+  /** S5b: prop entity names and aliases */
+  propNames: string[];
   /** memoised per call site: scene id → screen sides */
   sides(sceneId: string): LayoutContext['scene_sides'];
+  /** S5b: scene id → its heading's time label */
+  timeLabel(sceneId: string): string | null;
   technique(id: string | null): Technique | null;
 }
 
@@ -89,14 +96,24 @@ export interface ProjectBoardContext {
 export function projectBoardContext(db: DbPort): ProjectBoardContext {
   const roster = characterRosterEntries(db);
   const defaultAspect = getProject(db)?.default_aspect ?? '2.39';
-  const sideCache = new Map<string, LayoutContext['scene_sides']>();
+  const propNames = listEntities(db)
+    .filter((e) => e.type === 'prop')
+    .flatMap((e) => [e.name, ...e.aliases]);
+  const sceneCache = new Map<string, ReturnType<typeof getScene>>();
+  const scene = (id: string) => {
+    if (!sceneCache.has(id)) sceneCache.set(id, getScene(db, id));
+    return sceneCache.get(id) ?? null;
+  };
   const techCache = new Map<string, Technique | null>();
   return {
     roster,
     defaultAspect,
+    propNames,
     sides(sceneId) {
-      if (!sideCache.has(sceneId)) sideCache.set(sceneId, getScene(db, sceneId)?.screen_sides ?? null);
-      return sideCache.get(sceneId) ?? null;
+      return scene(sceneId)?.screen_sides ?? null;
+    },
+    timeLabel(sceneId) {
+      return scene(sceneId)?.time_label ?? null;
     },
     technique(id) {
       if (!id) return null;
@@ -114,5 +131,7 @@ export function layoutContextFor(shot: Shot, pc: ProjectBoardContext): LayoutCon
     technique: pc.technique(shot.fields.technique_id),
     aspect: shot.fields.frame_format ?? pc.defaultAspect,
     seed: shotSeed(shot.id),
+    time_label: pc.timeLabel(shot.scene_id),
+    prop_names: pc.propNames,
   };
 }

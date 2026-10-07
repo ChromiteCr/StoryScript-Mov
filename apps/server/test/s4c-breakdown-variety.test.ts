@@ -64,7 +64,7 @@ describe('breakdown-v3 and the variety check', () => {
     fake!.enqueue(reply.json(SCENE1));
     const { job, draft } = await breakdown(id);
     expect(job.status).toBe('succeeded');
-    expect(draft.prompt_version).toBe('breakdown-v3');
+    expect(draft.prompt_version).toBe('breakdown-v4');
     expect(fake!.chatRequests()).toHaveLength(1);
     const system = fake!.chatRequests()[0]!.body!.messages![0]!.content;
     expect(system).toContain('【镜头变化】');
@@ -77,7 +77,7 @@ describe('breakdown-v3 and the variety check', () => {
     const id = await setup();
     fake!.enqueue(reply.json(VARIED));
     const { draft } = await breakdown(id, { ...BREAKDOWN_REQUEST, style_id: 'style.track-low', level: 'extreme' });
-    expect(draft.prompt_version).toBe('breakdown-v3');
+    expect(draft.prompt_version).toBe('breakdown-v4');
     const [system, user] = fake!.chatRequests()[0]!.body!.messages!;
     expect(system!.content).toContain('【难度：挑战】');
     expect(system!.content).toContain('【镜头变化】');
@@ -174,7 +174,7 @@ describe('丰富变化 polish', () => {
     const job = await waitJob(app, res.data.job_id);
     expect(job.status).toBe('succeeded');
     const detail = (await app.get<DraftDetail>(`/api/v1/drafts/${job.result_ref}`)).data;
-    expect(detail.draft.prompt_version).toBe('polish-v2');
+    expect(detail.draft.prompt_version).toBe('polish-v3');
     const user = fake!.chatRequests()[0]!.body!.messages![1]!.content;
     expect(user).toContain('【方式：丰富变化】');
     expect(user).toContain('【现在的问题】');

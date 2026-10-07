@@ -201,6 +201,8 @@ const EN_PROP: Record<PropKind, string> = {
   cup: 'cup',
   book: 'book',
   bag: 'bag',
+  can: 'tin can',
+  bottle: 'bottle',
 };
 const ZH_PROP: Record<PropKind, string> = {
   door: '门',
@@ -221,6 +223,8 @@ const ZH_PROP: Record<PropKind, string> = {
   cup: '杯子',
   book: '书',
   bag: '包',
+  can: '罐子',
+  bottle: '瓶子',
 };
 
 const EN_SCREEN = { left: 'screen left', center: 'screen center', right: 'screen right' } as const;

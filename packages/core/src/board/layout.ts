@@ -25,8 +25,10 @@ import {
   type ShotSubject,
   type Silhouette,
   type Technique,
+  type TimeOfDay,
 } from '@storyscript/contracts';
 import { shotLabelZh } from '../i18n/zh.ts';
+import { shotEmotions, timeOfDay } from './emotion.ts';
 import { rngFor } from '../util/random.ts';
 import { cameraBasis, projectPoint, REF_HEIGHT_M, solveCamera, type CameraBasis, type CameraSolution } from './camera.ts';
 import { clamp, dot3, round, wrapDeg, type V3 } from './math.ts';
@@ -52,7 +54,44 @@ export interface LayoutContext {
   seed: number;
   /** focal slider ("keep shot size"), overrides shot.focal_mm */
   focal_mm?: number | null;
+  /** S5b: the scene heading's time (日 / 夜 / 黄昏 …): the light of the frame */
+  time_label?: string | null;
+  /** S5b: the project's prop names (道具条目): an insert's object is named by the one its action mentions */
+  prop_names?: readonly string[];
 }
+
+/** S5b: longest object name a board writes (a callout, not a caption). */
+export const OBJECT_NAME_MAX = 12;
+
+/**
+ * The name a board writes next to the object a shot is about: the shot's own
+ * `object_name`, else the longest project prop name its action (then its
+ * purpose) mentions. Trimmed and cut to OBJECT_NAME_MAX.
+ */
+export function objectNameFor(shot: Pick<ShotFields, 'object_name' | 'action' | 'narrative_purpose'>, propNames: readonly string[] = []): string | null {
+  const own = typeof shot.object_name === 'string' ? shot.object_name.trim() : '';
+  if (own) return [...own].slice(0, OBJECT_NAME_MAX).join('');
+  const names = propNames.map((n) => n.trim()).filter((n) => n.length >= 2).sort((a, b) => b.length - a.length);
+  for (const text of [shot.action, shot.narrative_purpose]) {
+    const hit = names.find((n) => text?.includes(n));
+    if (hit) return [...hit].slice(0, OBJECT_NAME_MAX).join('');
+  }
+  return null;
+}
+
+/** Rough frame-px width of a label at the overlay's 26 px (CJK ≈ 1 em, others ≈ 0.66 em) plus its tab padding. */
+function labelWidthPx(t: string, size = 26): number {
+  let w = 0;
+  for (const ch of t) w += (ch.codePointAt(0) ?? 0) >= 0x2e80 ? size : size * 0.66;
+  return w + size * 0.6;
+}
+
+/** S5b: where the light comes from at each time of day (day is the S0 light, unchanged). */
+export const TIME_LIGHT: Record<TimeOfDay, { azimuth_deg: number; elevation_deg: number }> = {
+  day: { azimuth_deg: 45, elevation_deg: 40 },
+  dusk: { azimuth_deg: 70, elevation_deg: 14 },
+  night: { azimuth_deg: 30, elevation_deg: 55 },
+};
 
 /** Default prop sizes (w × h × d, metres). */
 export const PROP_SIZE: Record<PropKind, { w: number; h: number; d: number }> = {
@@ -74,6 +113,8 @@ export const PROP_SIZE: Record<PropKind, { w: number; h: number; d: number }> = 
   cup: { w: 0.09, h: 0.11, d: 0.09 },
   book: { w: 0.17, h: 0.03, d: 0.24 },
   bag: { w: 0.4, h: 0.32, d: 0.18 },
+  can: { w: 0.085, h: 0.11, d: 0.085 },
+  bottle: { w: 0.075, h: 0.28, d: 0.075 },
 };
 
 export const SCREEN_X: Record<ScreenPos, number> = { L: 1 / 3, C: 0.5, R: 2 / 3 };
@@ -114,13 +155,13 @@ const DESK_CHAIR = { w: 0.44, h: 0.82, d: 0.44 } as const;
 /** S4c corridor cross-section (half width, ceiling height) and its door spacing. */
 const CORRIDOR = { half: 1.25, h: 2.8, doorEvery: 3.6 } as const;
 /** Small things that sit on a tabletop: an insert of one gets a table under it. */
-const TABLETOP_ITEMS: ReadonlySet<PropKind> = new Set<PropKind>(['phone', 'cup', 'book']);
+const TABLETOP_ITEMS: ReadonlySet<PropKind> = new Set<PropKind>(['phone', 'cup', 'book', 'can', 'bottle']);
 /** S4c kinds placed by the generic rules below (featured in an insert, on a table, beside a person). */
-const SMALL_ITEMS: ReadonlySet<PropKind> = new Set<PropKind>(['phone', 'cup', 'book', 'bag']);
+const SMALL_ITEMS: ReadonlySet<PropKind> = new Set<PropKind>(['phone', 'cup', 'book', 'bag', 'can', 'bottle']);
 /** Kinds that existed before S4c keep their own placement rules, also when featured in an insert. */
 const PROP_SIZE_LEGACY: ReadonlySet<PropKind> = new Set<PropKind>(['door', 'table', 'chair', 'car', 'wall', 'building', 'stairs', 'window', 'box']);
 /** Props are placed in this order, so a table exists before what goes on it. */
-const PLACE_ORDER: PropKind[] = ['table', 'chair', 'bed', 'sofa', 'shelf', 'lamp', 'door', 'window', 'wall', 'building', 'stairs', 'car', 'tree', 'box', 'phone', 'cup', 'book', 'bag'];
+const PLACE_ORDER: PropKind[] = ['table', 'chair', 'bed', 'sofa', 'shelf', 'lamp', 'door', 'window', 'wall', 'building', 'stairs', 'car', 'tree', 'box', 'phone', 'cup', 'book', 'bag', 'can', 'bottle'];
 
 /**
  * Heights of a shelf's compartment floors, bottom up (the plinth top first).
@@ -317,20 +358,26 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
 
   // ---- subject placement ------------------------------------------------------
   const placed: BoardSubject[] = new Array(subs.length);
-  const make = (s: Resolved, x: number, z: number, yaw: number, pose: Pose): BoardSubject => ({
-    id: `s${s.idx}`,
-    entity_id: s.entity_id,
-    label: s.label,
-    badge: s.badge,
-    x: r4(x),
-    z: r4(z),
-    yaw_deg: round(yaw, 2),
-    pose,
-    height_m: s.height,
-    silhouette: s.silhouette,
-    tone_override: null,
-    z_override: null,
-  });
+  // S5b: what each person feels — set on the shot, else read from its action text
+  const felt = shotEmotions(shot, subs.map((s) => ({ alias: s.alias, label: s.label })));
+  const make = (s: Resolved, x: number, z: number, yaw: number, pose: Pose): BoardSubject => {
+    const emotion = s.spec.emotion ?? felt.get(s.alias) ?? null;
+    return {
+      id: `s${s.idx}`,
+      entity_id: s.entity_id,
+      label: s.label,
+      badge: s.badge,
+      x: r4(x),
+      z: r4(z),
+      yaw_deg: round(yaw, 2),
+      pose,
+      height_m: s.height,
+      silhouette: s.silhouette,
+      tone_override: null,
+      z_override: null,
+      ...(emotion && emotion !== 'neutral' ? { emotion } : {}),
+    };
+  };
   const fxOf = (s: Resolved, fallback: number) => (s.spec.screen ? SCREEN_X[s.spec.screen] : fallback);
   const depthOf = (s: Resolved, fallback: DepthPlane = 'mg') => DEPTH_FACTOR[s.spec.depth ?? fallback];
   /** fx: frame x; k: distance factor relative to the framed subject (fg 0.6 / mg 1 / bg 2). */
@@ -464,7 +511,8 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
   }
 
   const subjects = placed.filter(Boolean);
-  const focusZ = primary ? (placed[primary.idx]?.z ?? d) : d;
+  // with nobody framed, an overhead camera looks straight down at z = 0 (S5b: an overhead insert's object sits there, not off frame)
+  const focusZ = primary ? (placed[primary.idx]?.z ?? d) : overhead || camera.pitch_deg < -80 ? camera.z : d;
   const focusX = primary ? (placed[primary.idx]?.x ?? 0) : 0;
   const maxZ = subjects.reduce((m, s) => Math.max(m, s.z), focusZ);
 
@@ -688,10 +736,12 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
       }
       case 'phone':
       case 'cup':
-      case 'book': {
+      case 'book':
+      case 'can':
+      case 'bottle': {
         // on the table; without one the person holds it (or it is left out of the frame)
         if (tableTop) {
-          const at = { phone: [0.22, -0.12, 20], cup: [-0.3, -0.06, 0], book: [0.02, 0.12, -8] }[kind] as [number, number, number];
+          const at = { phone: [0.22, -0.12, 20], cup: [-0.3, -0.06, 0], book: [0.02, 0.12, -8], can: [0.32, 0.04, 0], bottle: [-0.12, 0.16, 0] }[kind] as [number, number, number];
           props.push(box(nextId(kind), kind, tableTop.x + at[0], tableTop.z + at[1], PROP_SIZE.table.h, dims, at[2]));
         }
         break;
@@ -850,19 +900,45 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
     });
   }
 
+  // ---- S5b: the object's name, next to it ------------------------------------
+  // An insert names its featured object; another shot the first small thing it
+  // lists (a tin on the table, a letter in a hand) — when it is in frame.
+  const labels: BoardSpec['overlay']['labels'] = [{ id: 'l-shot', text: shotLabelZh(isInsert ? 'INSERT' : shot.shot_size, camera.focal_mm), x: 0.012, y: 0.955 }];
+  const objectName = objectNameFor(shot, ctx.prop_names);
+  const namedKind = isInsert ? featuredKind : (shot.props.find((k) => SMALL_ITEMS.has(k) || k === 'box') ?? null);
+  const named = objectName && namedKind ? props.find((p) => p.kind === namedKind) : undefined;
+  if (objectName && named) {
+    const c = projectPoint(basis, [named.x, named.y + named.h / 2, named.z]);
+    if (c.visible && c.x > 0.02 && c.x < 0.98 && c.y > 0.04 && c.y < 0.96) {
+      // the frame's px size (scene.ts frameSize; not imported — scene.ts depends on this module)
+      const FW = 1840;
+      const FH = FW / Number(aspect);
+      const tw = labelWidthPx(objectName) / FW;
+      const right = c.x < 0.62;
+      let x = right ? c.x + 0.07 : c.x - 0.07 - tw;
+      let y = c.y - 0.16;
+      if (y < 0.12) y = c.y + 0.22;
+      x = clamp(x, 0.02, 0.98 - tw);
+      y = clamp(y, 0.12, 0.86 - 10 / FH);
+      labels.push({ id: 'l-object', text: objectName, x: round(x, 4), y: round(y, 4), prop_id: named.id });
+    }
+  }
+
   const guides: BoardSpec['frame']['guides'] = aspect === '2.39' && ctx.look.center_guide ? ['1.43'] : [];
+  const time = timeOfDay(ctx.time_label);
   const spec = {
     version: 1 as const,
     frame: { aspect, guides },
     camera,
     scene: {
       env,
-      light: { azimuth_deg: 45, elevation_deg: 40 },
+      light: { ...TIME_LIGHT[time] },
       subjects,
       props: [...envProps, ...props],
+      ...(time !== 'day' ? { time } : {}),
     },
     overlay: {
-      labels: [{ id: 'l-shot', text: shotLabelZh(isInsert ? 'INSERT' : shot.shot_size, camera.focal_mm), x: 0.012, y: 0.955 }],
+      labels,
       arrows,
       camera_move: shot.movement,
       offset: { x: 0, y: 0 },

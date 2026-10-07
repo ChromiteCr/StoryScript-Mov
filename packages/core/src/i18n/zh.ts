@@ -6,6 +6,7 @@ import type {
   BoardTemplate,
   CameraAngle,
   DepthPlane,
+  Emotion,
   EnvKind,
   Facing,
   FrameFormat,
@@ -16,6 +17,7 @@ import type {
   ScreenPos,
   ShotSize,
   SubjectMotion,
+  TimeOfDay,
 } from '@storyscript/contracts';
 
 export const ZH_SHOT_SIZE: Record<ShotSize, string> = {
@@ -85,6 +87,20 @@ export const ZH_POSE: Record<Pose, string> = {
   phone: '打电话',
 };
 
+/** S5b */
+export const ZH_EMOTION: Record<Emotion, string> = {
+  neutral: '平静',
+  happy: '开心',
+  sad: '难过',
+  angry: '生气',
+  afraid: '害怕',
+  surprised: '吃惊',
+  tense: '紧张',
+};
+
+/** S5b */
+export const ZH_TIME_OF_DAY: Record<TimeOfDay, string> = { day: '日', dusk: '黄昏', night: '夜' };
+
 export const ZH_PROP_KIND: Record<PropKind, string> = {
   door: '门',
   table: '桌',
@@ -104,6 +120,8 @@ export const ZH_PROP_KIND: Record<PropKind, string> = {
   cup: '杯',
   book: '书',
   bag: '包',
+  can: '罐',
+  bottle: '瓶',
 };
 
 export const ZH_ENV_KIND: Record<EnvKind, string> = {

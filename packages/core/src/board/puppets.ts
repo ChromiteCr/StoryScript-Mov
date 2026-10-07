@@ -34,7 +34,7 @@
  * cuffs, waist — placed on a head ellipsoid / the torso in 3D, so they turn
  * with the view. Gesture variants (gesturesFor) override arm joints.
  */
-import type { Pose, Silhouette } from '@storyscript/contracts';
+import type { Emotion, Pose, Silhouette } from '@storyscript/contracts';
 import { rngFor } from '../util/random.ts';
 import { DEG, chaikin, clamp, clipPolygon, convexHull, mix2, type V2, wrapDeg } from './math.ts';
 import { DEFAULT_FIGURE_STYLE, type FigureStyle, type HairStyle } from './puppet-style.ts';
@@ -761,6 +761,8 @@ export interface PuppetLine {
   key: string;
   kind: PuppetLineKind;
   pts: V2[];
+  /** S5b: a small solid shape (pupil, open mouth): the closed polygon is filled, not stroked */
+  closed?: boolean;
 }
 
 export interface PuppetShape {
@@ -779,9 +781,137 @@ export interface BuildPuppetOptions {
   /** gesture variant index (taken modulo the pose's count) */
   gesture?: number;
   style?: FigureStyle;
+  /** S5b: face and body language (absent: calm) */
+  emotion?: Emotion | null;
 }
 
 type J3 = { L: number; F: number; y: number };
+
+// ---------------------------------------------------------------------------
+// S5b: emotions — body language and the face
+// ---------------------------------------------------------------------------
+
+/**
+ * Body language per emotion: `lean` turns everything above the pelvis about it
+ * (deg, + toward the face), `shrug` lifts the shoulders (the arms follow 60 %),
+ * `drop` / `fwd` lower and push the head forward, `tilt` adds to the gesture's
+ * head tilt (deg), `nod` moves the features on the face (fraction of the head's
+ * half height, − = looking down).
+ */
+export interface EmotionBody {
+  lean: number;
+  shrug: number;
+  drop: number;
+  fwd: number;
+  tilt: number;
+  nod: number;
+}
+
+export const EMOTION_BODY: Record<Emotion, EmotionBody> = {
+  neutral: { lean: 0, shrug: 0, drop: 0, fwd: 0, tilt: 0, nod: 0 },
+  happy: { lean: -2, shrug: 0, drop: -0.004, fwd: 0, tilt: 5, nod: 0.03 },
+  sad: { lean: 6, shrug: -0.008, drop: 0.022, fwd: 0.03, tilt: -2, nod: -0.1 },
+  angry: { lean: 8, shrug: 0.006, drop: 0.006, fwd: 0.022, tilt: 0, nod: -0.03 },
+  afraid: { lean: -5, shrug: 0.018, drop: 0.012, fwd: -0.006, tilt: -3, nod: 0 },
+  surprised: { lean: -6, shrug: 0.007, drop: 0, fwd: -0.012, tilt: 0, nod: 0.03 },
+  tense: { lean: 2, shrug: 0.011, drop: 0.004, fwd: 0, tilt: 0, nod: 0 },
+};
+
+/** Poses that keep their body as drawn (in motion, or lying): only the face changes. */
+const FACE_ONLY = new Set<Pose>(['run', 'lie']);
+
+const UPPER: readonly Joint[] = ['head', 'neck', 'chest', 'shA', 'shB', 'elA', 'elB', 'wrA', 'wrB', 'haA', 'haB'];
+const ARM_FOLLOW: readonly Joint[] = ['elA', 'elB', 'wrA', 'wrB', 'haA', 'haB'];
+
+/** The joints with an emotion's body language applied (a copy; unchanged for calm, running, lying). */
+export function emotionJoints(J: Record<Joint, J3>, pose: Pose, emotion: Emotion | null | undefined): Record<Joint, J3> {
+  if (!emotion || emotion === 'neutral' || FACE_ONLY.has(pose)) return J;
+  const b = EMOTION_BODY[emotion];
+  const out = {} as Record<Joint, J3>;
+  for (const j of JOINTS) out[j] = { ...J[j] };
+  // shrug / slump first, in the upright frame
+  for (const j of ['shA', 'shB'] as const) out[j].y += b.shrug;
+  for (const j of ARM_FOLLOW) out[j].y += b.shrug * 0.6;
+  out.head.y -= b.drop;
+  out.head.F += b.fwd;
+  out.neck.y -= b.drop * 0.4;
+  out.neck.F += b.fwd * 0.4;
+  // then lean the upper body about the pelvis (the waist goes half way)
+  const p = J.pelvis;
+  const turn = (j: J3, deg: number) => {
+    const a = deg * DEG;
+    const dF = j.F - p.F;
+    const dy = j.y - p.y;
+    j.F = p.F + dF * Math.cos(a) + dy * Math.sin(a);
+    j.y = p.y + dy * Math.cos(a) - dF * Math.sin(a);
+  };
+  if (b.lean) {
+    for (const j of UPPER) turn(out[j], b.lean);
+    turn(out.waist, b.lean / 2);
+  }
+  return out;
+}
+
+/**
+ * The face per emotion. Brows: `lift` (height of the brow's middle, in head
+ * half heights), `arch`, `slope` (+ raises the inner end: sad, afraid; − lowers
+ * it: angry), `inset` (deg the brows move toward the nose: a frown). Eyes:
+ * 'lid' (upper lid + pupil), 'smile' (a ∩ crease, no pupil) or 'wide' (the whole
+ * eye outlined, a small pupil); `lid` and `droop` shape the lid; `look` lowers
+ * the pupil. Mouth: 'line' (`w` deg half width, `curve` + corners up, `wave`) or
+ * 'open' (a solid oval `w` × `h`).
+ */
+interface FaceSpec {
+  brow: { lift: number; arch: number; slope: number; inset: number };
+  eye: { shape: 'lid' | 'smile' | 'wide'; lid: number; droop: number; base: number; look: number };
+  mouth: { shape: 'line' | 'open'; w: number; curve: number; h: number; wave: number; y: number };
+  tear: boolean;
+}
+
+export const FACES: Record<Emotion, FaceSpec> = {
+  neutral: {
+    brow: { lift: 0.19, arch: 0.05, slope: 0.025, inset: 0 },
+    eye: { shape: 'lid', lid: 0.075, droop: 0, base: -0.05, look: 0 },
+    mouth: { shape: 'line', w: 15, curve: 0, h: 0, wave: 0, y: -0.6 },
+    tear: false,
+  },
+  happy: {
+    brow: { lift: 0.23, arch: 0.07, slope: 0, inset: 0 },
+    eye: { shape: 'smile', lid: 0.1, droop: 0, base: -0.075, look: 0 },
+    mouth: { shape: 'line', w: 17, curve: 0.1, h: 0, wave: 0, y: -0.62 },
+    tear: false,
+  },
+  sad: {
+    brow: { lift: 0.17, arch: 0.02, slope: 0.1, inset: 1 },
+    eye: { shape: 'lid', lid: 0.055, droop: 0.04, base: -0.06, look: -0.03 },
+    mouth: { shape: 'line', w: 13, curve: -0.08, h: 0, wave: 0, y: -0.58 },
+    tear: true,
+  },
+  angry: {
+    brow: { lift: 0.14, arch: 0, slope: -0.1, inset: 3 },
+    eye: { shape: 'lid', lid: 0.03, droop: -0.03, base: -0.065, look: 0 },
+    mouth: { shape: 'line', w: 12, curve: -0.05, h: 0, wave: 0, y: -0.6 },
+    tear: false,
+  },
+  afraid: {
+    brow: { lift: 0.27, arch: 0.03, slope: 0.08, inset: 1 },
+    eye: { shape: 'wide', lid: 0.075, droop: 0, base: -0.045, look: 0 },
+    mouth: { shape: 'open', w: 7, curve: 0, h: 0.055, wave: 0, y: -0.63 },
+    tear: false,
+  },
+  surprised: {
+    brow: { lift: 0.31, arch: 0.09, slope: 0, inset: 0 },
+    eye: { shape: 'wide', lid: 0.085, droop: 0, base: -0.045, look: 0 },
+    mouth: { shape: 'open', w: 6, curve: 0, h: 0.09, wave: 0, y: -0.66 },
+    tear: false,
+  },
+  tense: {
+    brow: { lift: 0.17, arch: 0.02, slope: -0.035, inset: 2 },
+    eye: { shape: 'lid', lid: 0.05, droop: 0, base: -0.055, look: 0 },
+    mouth: { shape: 'line', w: 9, curve: -0.01, h: 0, wave: 0.014, y: -0.6 },
+    tear: false,
+  },
+};
 
 function joints3(pose: Pose, gesture: number): Record<Joint, J3> {
   const { front, side } = POSE_TABLES[pose];
@@ -858,10 +988,11 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   const gi = (((opts.gesture ?? 0) % n) + n) % n;
   const gv = GESTURES[pose][gi];
   const style = opts.style ?? DEFAULT_FIGURE_STYLE;
+  const emotion: Emotion = opts.emotion ?? 'neutral';
   const a = VIEW_ANGLE[view] * DEG;
   const ca = Math.cos(a);
   const sa = Math.sin(a);
-  const J = joints3(pose, gi);
+  const J = emotionJoints(joints3(pose, gi), pose, emotion);
   const sx = (j: J3) => j.L * ca + j.F * sa;
   const tz = (j: J3) => -j.L * sa + j.F * ca;
   const P = (k: Joint): V2 => [sx(J[k]), J[k].y];
@@ -872,14 +1003,22 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   const drafts: Draft[] = [];
   const LAYER = { hairBehind: -1, farArm: 0, legBehind: 1, torso: 2, legFront: 3, skirt: 4, arm: 5, head: 6, hairOver: 6.5, armOverHead: 7 } as const;
   const push = (d: Omit<Draft, 'far'> & { far?: boolean }) => drafts.push({ far: false, ...d });
-  type Seg = readonly [string, Joint, Joint, readonly [number, number], PuppetMaterial];
+  /** key, from, to, radii, material, and (S5b) how far down the limb the segment starts */
+  type Seg = readonly [string, Joint, Joint, readonly [number, number], PuppetMaterial, number?];
 
   // One depth per whole limb (mean of its joints): segments of a limb never interleave.
   const limbDepth = (js: readonly Joint[]) => js.reduce((acc, j) => acc + T(j), 0) / js.length;
   const limb = (group: string, layer: number, t: number, far: boolean, segs: readonly Seg[]) => {
     const k = far ? 0.88 : 1;
-    for (const [key, j0, j1, r, material] of segs) {
-      push({ key, group, far, layer, t, pts: capsule(P(j0), P(j1), r[0] * k, r[1] * k), fill: 'body', material, stroke: true, silhouette: true });
+    for (const [key, j0, j1, r, material, inset] of segs) {
+      let p0 = P(j0);
+      const p1 = P(j1);
+      const len = Math.hypot(p1[0] - p0[0], p1[1] - p0[1]);
+      // the inset applies to a limb hanging down; a raised arm keeps its round shoulder
+      const down = len > 1e-9 ? clamp((p0[1] - p1[1]) / len, 0, 1) : 0;
+      const k0 = (inset ?? 0) * down;
+      if (k0 && len > k0 * 2) p0 = [p0[0] + ((p1[0] - p0[0]) / len) * k0, p0[1] + ((p1[1] - p0[1]) / len) * k0];
+      push({ key, group, far, layer, t, pts: capsule(p0, p1, r[0] * k, r[1] * k), fill: 'body', material, stroke: true, silhouette: true });
     }
   };
   type Line = PuppetLine & { after: string };
@@ -1041,7 +1180,8 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
     const far = turned && t < -0.02;
     const overHead = pose === 'phone' && s === 'A' && !far;
     limb(`arm${s}`, far ? LAYER.farArm : overHead ? LAYER.armOverHead : LAYER.arm, t, far, [
-      [`upperArm${s}`, `sh${s}`, `el${s}`, R.upperArm, 'top'],
+      // S5b: the upper arm starts a little down the arm, its round top tucked under the shoulder line (no shoulder pads)
+      [`upperArm${s}`, `sh${s}`, `el${s}`, [0.029, R.upperArm[1]], 'top', 0.038],
       [`foreArm${s}`, `el${s}`, `wr${s}`, R.foreArm, 'top'],
       [`hand${s}`, `wr${s}`, `ha${s}`, R.hand, 'skin'],
     ]);
@@ -1083,6 +1223,19 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
     const F = HEAD.rxSide * q * Math.cos(phi * DEG);
     return { p: [hc[0] + L * cah + F * sah, hc[1] + yf * ry], t: -L * sah + F * cah };
   };
+  type Sample = readonly [number, number, number];
+  /** A small solid shape on the head (pupil, open mouth): filled when all of it faces the viewer, else its visible runs as lines. */
+  const surfaceShape = (key: string, kind: PuppetLineKind, after: string, samples: readonly Sample[], minT = 0.007) => {
+    const qs = samples.map(([phi, yf, k]) => headPt(phi, yf, k));
+    if (qs.every((q) => q.t > minT)) headLines.push({ key, kind, after, pts: qs.map((q) => q.p), closed: true });
+    else surfaceLine(key, kind, after, [...samples, samples[0] as Sample], minT);
+  };
+  /** n points round an oval on the head surface (deg across, head half heights up). */
+  const oval = (phi: number, yf: number, rPhi: number, rY: number, k: number, n = 10): Sample[] =>
+    Array.from({ length: n }, (_, i) => {
+      const th = (2 * Math.PI * i) / n;
+      return [phi + rPhi * Math.cos(th), yf + rY * Math.sin(th), k] as const;
+    });
   const surfaceLine = (key: string, kind: PuppetLineKind, after: string, samples: readonly (readonly [number, number, number])[], minT = 0.007) => {
     let run: V2[] = [];
     const flush = () => {
@@ -1191,23 +1344,65 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   }
   pushHead({ key: 'headLine', pts: outline, fill: 'none', material: 'hair', stroke: true, silhouette: false, t: 0.0002 });
 
-  // Features: sketchy storyboard marks — lids with an iris tick, brows, nose, mouth.
+  // Hair strands (S5b): a few flowing lines over the hair from the crown toward
+  // the hairline, so the hair reads as hair rather than a cap.
+  if (cap && view !== 'back') {
+    const k = vol.k - 1 + 0.015;
+    for (const phi0 of [-34, -12, 10, 32]) {
+      const end = hairlineAt(hair, phi0) + 0.1;
+      if (end > 0.8) continue;
+      const dir = phi0 === 0 ? 1 : Math.sign(phi0);
+      surfaceLine(
+        'strand',
+        'hair',
+        'hair',
+        span(5).map((u) => {
+          const t = (u + 1) / 2;
+          return [phi0 + 12 * t * dir, 0.9 - (0.9 - end) * t, k] as const;
+        }),
+        0.01,
+      );
+    }
+  }
+
+  // Features: sketchy storyboard marks — lids with a pupil, brows, nose, mouth —
+  // shaped by the emotion (S5b, FACES). `nod` moves them all (a lowered face).
   if (view !== 'back') {
+    const face = FACES[emotion];
+    const nod = EMOTION_BODY[emotion].nod;
+    const e = face.eye;
+    const b = face.brow;
     for (const side of [-1, 1]) {
       const pc0 = 27 * side;
-      surfaceLine('eye', 'face', 'headLine', span(9).map((u) => [pc0 + 10 * u, -0.05 + 0.075 * (1 - u * u), 0] as const));
-      surfaceLine('iris', 'face', 'headLine', [
-        [pc0 + 1.5, -0.02, 0],
-        [pc0 + 1.5, -0.13, 0],
-      ]);
-      surfaceLine('brow', 'face', 'headLine', span(7).map((u) => [pc0 + 13 * u, 0.19 + 0.05 * (1 - u * u) - 0.025 * u * side, 0.03] as const));
+      const ey = e.base + nod;
+      if (e.shape === 'wide') {
+        // the whole eye outlined, a small pupil in the middle
+        const ring = oval(pc0, ey, 9.5, e.lid, 0, 14);
+        surfaceLine('eye', 'face', 'headLine', [...ring, ring[0] as Sample]);
+        surfaceShape('pupil', 'face', 'headLine', oval(pc0 + 1, ey + e.look, 2.4, 0.03, 0.006));
+      } else if (e.shape === 'smile') {
+        surfaceLine('eye', 'face', 'headLine', span(9).map((u) => [pc0 + 9 * u, ey + e.lid * (1 - u * u), 0] as const));
+      } else {
+        // upper lid (outer end lowered by droop: + sad, − angry) and the pupil under it
+        surfaceLine('eye', 'face', 'headLine', span(9).map((u) => [pc0 + 10 * u, ey + e.lid * (1 - u * u) - e.droop * u * side, 0] as const));
+        surfaceShape('pupil', 'face', 'headLine', oval(pc0 + 1.5, ey - 0.012 + e.look, 3.2, 0.045, 0.006));
+      }
+      // brow: + slope raises the inner end (u·side = −1 inner, +1 outer)
+      const bc = pc0 - b.inset * side;
+      surfaceLine('brow', 'face', 'headLine', span(7).map((u) => [bc + 13 * u, b.lift + nod + b.arch * (1 - u * u) - b.slope * u * side, 0.03] as const));
+      if (face.tear && side === 1)
+        surfaceLine('tear', 'faceMinor', 'headLine', [
+          [pc0 + 5, ey - 0.12, 0.01],
+          [pc0 + 5.6, ey - 0.22, 0.01],
+          [pc0 + 5, ey - 0.33, 0.01],
+        ]);
     }
     if (view !== 'side')
       surfaceLine('nose', 'face', 'headLine', [
-        [-5, -0.06, 0.02],
-        [-7, -0.3, 0.1],
-        [-2, -0.4, 0.17],
-        [6, -0.37, 0.07],
+        [-5, -0.06 + nod, 0.02],
+        [-7, -0.3 + nod, 0.1],
+        [-2, -0.4 + nod, 0.17],
+        [6, -0.37 + nod, 0.07],
       ]);
     else
       headLines.push({
@@ -1215,11 +1410,14 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
         kind: 'faceMinor',
         after: 'headLine',
         pts: [
-          [hc[0] + rx * 0.8, hc[1] - 0.021],
-          [hc[0] + rx * 0.92, hc[1] - 0.028],
+          [hc[0] + rx * 0.8, hc[1] - 0.021 + nod * ry],
+          [hc[0] + rx * 0.92, hc[1] - 0.028 + nod * ry],
         ],
       });
-    surfaceLine('mouth', 'face', 'headLine', span(7).map((u) => [15 * u, -0.6, 0.03] as const));
+    const m = face.mouth;
+    const my = m.y + nod;
+    if (m.shape === 'open') surfaceShape('mouth', 'face', 'headLine', oval(0, my, m.w, m.h, 0.03, 12));
+    else surfaceLine('mouth', 'face', 'headLine', span(7).map((u) => [m.w * u, my + m.curve * (u * u - 0.5) + m.wave * Math.sin(2 * Math.PI * u), 0.03] as const));
     if (style.hair === 'side') surfaceLine('fringe', 'hair', 'headLine', span(6).map((u) => [-38 + 34 * (u + 1), 0.5 - 0.12 * u, 0.07] as const), 0.012);
   } else {
     // hair whorl at the crown
@@ -1233,7 +1431,7 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
   }
 
   // Gesture head tilt: the whole head (hair, ears, features) about the top of the neck.
-  const tilt = (gv?.head?.tilt ?? 0) * DEG;
+  const tilt = ((gv?.head?.tilt ?? 0) + (FACE_ONLY.has(pose) ? 0 : EMOTION_BODY[emotion].tilt)) * DEG;
   if (tilt) {
     const c = Math.cos(tilt);
     const s = Math.sin(tilt);
@@ -1270,7 +1468,8 @@ export function buildPuppet(pose: Pose, view: PuppetView, mirror: boolean, silho
     silhouette: d.silhouette,
   }));
   const idxOf = (key: string) => parts.findIndex((p) => p.key === key);
-  let outLines: PuppetLine[] = lines.map((l) => ({ key: l.key, kind: l.kind, pts: l.pts }));
+  // a solid shape repeats its first point, so a projection by segments keeps it closed
+  let outLines: PuppetLine[] = lines.map((l) => (l.closed ? { key: l.key, kind: l.kind, pts: [...l.pts, l.pts[0] as V2], closed: true } : { key: l.key, kind: l.kind, pts: l.pts }));
   const lineAfter = lines.map((l) => {
     const i = idxOf(l.after);
     return i >= 0 ? i : parts.length - 1;

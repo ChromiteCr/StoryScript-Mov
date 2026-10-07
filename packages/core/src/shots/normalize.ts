@@ -103,6 +103,16 @@ const POSE = table({
   reach: ['reaching', 'reach out', 'reaching out', '伸手'],
   phone: ['on phone', 'on the phone', 'phoning', 'calling', 'phone call', '打电话', '接电话'],
 });
+// S5b: the seven emotions a board can show
+const EMOTION = table({
+  neutral: ['calm', 'none', 'normal', 'neutral face', '平静', '中性', '无表情', '面无表情', '冷静'],
+  happy: ['joy', 'joyful', 'smile', 'smiling', 'glad', 'excited', 'laughing', '开心', '高兴', '喜悦', '快乐', '兴奋', '微笑', '笑'],
+  sad: ['sadness', 'upset', 'crying', 'grief', 'sorrow', 'down', '难过', '悲伤', '伤心', '哭', '失落', '沮丧'],
+  angry: ['anger', 'mad', 'furious', 'rage', 'annoyed', '生气', '愤怒', '恼怒', '发火'],
+  afraid: ['fear', 'scared', 'frightened', 'terrified', 'fearful', '害怕', '恐惧', '惊恐', '畏惧'],
+  surprised: ['surprise', 'shocked', 'shock', 'astonished', 'stunned', '吃惊', '惊讶', '震惊', '惊愕'],
+  tense: ['nervous', 'anxious', 'worried', 'uneasy', 'tension', 'stressed', '紧张', '不安', '焦虑', '担心', '忐忑'],
+});
 const PROP = table({
   door: ['doors', '门'],
   table: ['tables', 'desk', 'counter', '桌'],
@@ -122,6 +132,8 @@ const PROP = table({
   cup: ['cups', 'mug', 'mugs', 'teacup', 'coffee cup', '杯', '杯子', '茶杯'],
   book: ['books', 'diary', '书', '本子', '日记本'],
   bag: ['bags', 'backpack', 'handbag', 'schoolbag', 'satchel', '包', '书包', '背包'],
+  can: ['cans', 'tin', 'tin can', 'tins', 'jar', 'jars', 'canister', '罐', '罐子', '罐头', '易拉罐', '铁罐', '玻璃罐'],
+  bottle: ['bottles', 'flask', 'vial', '瓶', '瓶子', '酒瓶', '水瓶', '药瓶', '饮料瓶'],
 });
 const ENV = table({
   open: ['outdoor', 'outdoors', 'exterior', 'ext', 'outside', '室外', '外景'],
@@ -189,7 +201,7 @@ function arr(v: Json): Json {
 function normalizeSubject(s: Json): Json {
   if (typeof s === 'string') return { alias: s.trim(), screen: null, depth: null, facing: null, pose: null };
   if (!isRec(s)) return s;
-  return {
+  const out: Rec = {
     ...s,
     alias: typeof s.alias === 'string' ? s.alias.trim() : s.alias,
     screen: mapNullableEnum(s.screen, SCREEN),
@@ -197,6 +209,9 @@ function normalizeSubject(s: Json): Json {
     facing: mapNullableEnum(s.facing, FACING),
     pose: mapNullableEnum(s.pose, POSE),
   };
+  // S5b: emotion is optional — absent stays absent
+  if (s.emotion !== undefined) out.emotion = mapNullableEnum(s.emotion, EMOTION);
+  return out;
 }
 
 export function normalizeShotFieldsJson(shot: Json): Json {
@@ -224,6 +239,10 @@ export function normalizeShotFieldsJson(shot: Json): Json {
   // camera_notes is optional: absent stays absent; blank text becomes null.
   if (shot.camera_notes !== undefined) {
     out.camera_notes = typeof shot.camera_notes === 'string' ? (shot.camera_notes.trim() === '' ? null : shot.camera_notes.trim()) : shot.camera_notes;
+  }
+  // S5b object_name: optional like camera_notes
+  if (shot.object_name !== undefined) {
+    out.object_name = typeof shot.object_name === 'string' ? (shot.object_name.trim() === '' ? null : shot.object_name.trim()) : shot.object_name;
   }
   out.assumptions = arr(shot.assumptions);
   out.questions = arr(shot.questions);

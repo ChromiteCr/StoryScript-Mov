@@ -39,6 +39,11 @@ export function scriptReplayKey(paragraphs: readonly { text: string }[]): string
   return contentHash(['script', paragraphs.map((p) => normalizeForMatch(p.text))]);
 }
 
+/** Replay key of one pasted segment (S5a): hash of its normalised text. */
+export function pasteReplayKey(text: string): string {
+  return contentHash(['paste', normalizeForMatch(text)]);
+}
+
 /**
  * Replay key of a shooting-order suggestion: the setups as the prompt lists
  * them, key and normalised label in prompt order. The model names setups only

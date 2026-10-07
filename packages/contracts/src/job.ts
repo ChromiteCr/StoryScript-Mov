@@ -24,6 +24,7 @@ export const JobKind = z.enum([
   'research_style',
   'polish_shots',
   'check_script',
+  'organize_paste',
 ]);
 export type JobKind = z.infer<typeof JobKind>;
 

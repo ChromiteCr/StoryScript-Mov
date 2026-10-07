@@ -17,6 +17,7 @@ import { CommentSummary, CreateCommentInput, MarkCommentsReadInput, ShotComment,
 import { Take, TakeRating } from './take.ts';
 import { ScriptCheckView, ScriptRisk, SetRiskHandledInput } from './check.ts';
 import { SaveUsagePriceInput, UsagePrice, UsageReport } from './usage.ts';
+import { ApplyPasteInput, ApplyPasteResult, CreatePasteInput, CreateTodoInput, PasteNoteSummary, PasteNoteView, Todo, UpdateTodoInput } from './paste.ts';
 
 /**
  * Local REST API (prefix /api/v1). Internal, not a stable public API.
@@ -817,6 +818,17 @@ export const Api = {
   setRiskHandled: { method: 'PUT', path: '/api/v1/scripts/risks/:id/handled', input: SetRiskHandledInput, output: ScriptRisk },
   getUsage: { method: 'GET', path: '/api/v1/usage', output: UsageReport },
   saveUsagePrice: { method: 'PUT', path: '/api/v1/usage/price', input: SaveUsagePriceInput, output: UsagePrice },
+  // S5a — paste organize and todos
+  listPasteNotes: { method: 'GET', path: '/api/v1/paste', output: z.array(PasteNoteSummary) },
+  createPasteNote: { method: 'POST', path: '/api/v1/paste', input: CreatePasteInput, output: PasteNoteView },
+  getPasteNote: { method: 'GET', path: '/api/v1/paste/:id', output: PasteNoteView },
+  retryPasteSegment: { method: 'POST', path: '/api/v1/paste/:id/segments/:idx/retry', output: PasteNoteView },
+  applyPasteNote: { method: 'POST', path: '/api/v1/paste/:id/apply', input: ApplyPasteInput, output: ApplyPasteResult },
+  closePasteNote: { method: 'POST', path: '/api/v1/paste/:id/close', output: PasteNoteView },
+  listTodos: { method: 'GET', path: '/api/v1/todos', output: z.array(Todo) },
+  createTodo: { method: 'POST', path: '/api/v1/todos', input: CreateTodoInput, output: Todo },
+  updateTodo: { method: 'PATCH', path: '/api/v1/todos/:id', input: UpdateTodoInput, output: Todo },
+  deleteTodo: { method: 'DELETE', path: '/api/v1/todos/:id', output: z.object({ id: Uuid }) },
 
   // M3 — jobs
   getJob: { method: 'GET', path: '/api/v1/jobs/:id', output: Job },

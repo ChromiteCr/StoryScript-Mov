@@ -84,6 +84,13 @@ export const AREA_OF: Record<WriteRoute, readonly CollabArea[] | 'ignore'> = {
   startScriptCheck: ['jobs'],
   setRiskHandled: ['script'],
   saveUsagePrice: ['settings'],
+  createPasteNote: ['jobs', 'drafts'],
+  retryPasteSegment: ['jobs', 'drafts'],
+  applyPasteNote: ['plan', 'takes', 'entities', 'drafts'],
+  closePasteNote: ['drafts'],
+  createTodo: ['plan'],
+  updateTodo: ['plan'],
+  deleteTodo: ['plan'],
   cancelJob: ['jobs'],
   createResource: ['plan'],
   updateResource: ['plan'],
@@ -163,6 +170,7 @@ export const JOB_AREAS: Record<JobKind, readonly CollabArea[]> = {
   research_style: ['jobs', 'drafts'],
   polish_shots: ['jobs', 'drafts'],
   check_script: ['jobs', 'script'],
+  organize_paste: ['jobs', 'drafts'],
 };
 
 const ALL_AREAS: readonly CollabArea[] = [

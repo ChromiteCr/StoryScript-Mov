@@ -18,6 +18,7 @@ export const USAGE_KIND_LABEL: Partial<Record<JobKind, string>> = {
   breakdown_scene: 'AI 拆镜',
   polish_shots: 'AI 润色',
   check_script: '剧本体检',
+  organize_paste: '粘贴整理',
   research_style: '风格研究',
   extract_entities: '抽取角色地点道具',
   suggest_order: '排序建议',

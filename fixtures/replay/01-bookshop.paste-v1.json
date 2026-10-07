@@ -1,0 +1,315 @@
+{
+  "format": "storyscript-replay-v1",
+  "prompt_version": "paste-v1",
+  "key": "1fc29da2b885fa067e48a06f2ec7",
+  "origin": "handwritten",
+  "output_json": {
+    "items": [
+      {
+        "kind": "location",
+        "quote": "周六下午借到学校图书馆三楼阅览室了，14:00 到 18:00",
+        "name": "图书馆三楼阅览室",
+        "detail": "进去前要跟管理员王老师打个招呼",
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [
+          {
+            "date": "2026-10-10",
+            "weekday": "周六",
+            "start": "14:00",
+            "end": "18:00",
+            "vague": false
+          }
+        ],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "person",
+        "quote": "我周六上午有课，下午 2 点以后可以，周日全天都行",
+        "name": "小雨",
+        "detail": null,
+        "character": "林晓",
+        "owner": null,
+        "quantity": null,
+        "slots": [
+          {
+            "date": "2026-10-10",
+            "weekday": "周六",
+            "start": "14:00",
+            "end": "18:00",
+            "vague": true
+          },
+          {
+            "date": "2026-10-11",
+            "weekday": "周日",
+            "start": "08:00",
+            "end": "20:00",
+            "vague": true
+          }
+        ],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "person",
+        "quote": "我只有周日上午有空",
+        "name": "老陈",
+        "detail": null,
+        "character": "老周",
+        "owner": null,
+        "quantity": null,
+        "slots": [
+          {
+            "date": "2026-10-11",
+            "weekday": "周日",
+            "start": "09:00",
+            "end": "12:00",
+            "vague": true
+          }
+        ],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "equipment",
+        "quote": "稳定器我带",
+        "name": "稳定器",
+        "detail": null,
+        "character": null,
+        "owner": "小林",
+        "quantity": 1,
+        "slots": [],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "equipment",
+        "quote": "补光灯我再去借一个",
+        "name": "补光灯",
+        "detail": null,
+        "character": null,
+        "owner": "小林",
+        "quantity": 1,
+        "slots": [],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": "还没借到"
+      },
+      {
+        "kind": "schedule",
+        "quote": "第 2 场放周日上午拍",
+        "name": null,
+        "detail": null,
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [
+          {
+            "date": "2026-10-11",
+            "weekday": "周日",
+            "start": "09:00",
+            "end": "12:00",
+            "vague": true
+          }
+        ],
+        "scenes": [
+          "2"
+        ],
+        "rule": "within",
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "schedule",
+        "quote": "第 1 场放在第 2 场后面",
+        "name": null,
+        "detail": null,
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [],
+        "scenes": [
+          "1"
+        ],
+        "rule": "after",
+        "other_scenes": [
+          "2"
+        ],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "prop",
+        "quote": "林晓的外套就用我自己的蓝色风衣吧",
+        "name": "林晓的蓝色风衣",
+        "detail": "用小雨自己的衣服",
+        "character": null,
+        "owner": "小雨",
+        "quantity": null,
+        "slots": [],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "todo",
+        "quote": "下周五前把日记本做旧",
+        "name": null,
+        "detail": null,
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [
+          {
+            "date": "2026-10-16",
+            "weekday": "周五",
+            "start": null,
+            "end": null,
+            "vague": false
+          }
+        ],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": "阿丽",
+        "task": "把日记本做旧",
+        "unsure": null
+      },
+      {
+        "kind": "todo",
+        "quote": "再打印一张褪色的老合影",
+        "name": null,
+        "detail": null,
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [
+          {
+            "date": "2026-10-16",
+            "weekday": "周五",
+            "start": null,
+            "end": null,
+            "vague": false
+          }
+        ],
+        "scenes": [],
+        "rule": null,
+        "other_scenes": [],
+        "shot": null,
+        "take": null,
+        "rating": null,
+        "clip": null,
+        "assignee": "阿丽",
+        "task": "打印一张褪色的老合影",
+        "unsure": null
+      },
+      {
+        "kind": "take",
+        "quote": "1 场 3 镜第 2 条可以用",
+        "name": null,
+        "detail": null,
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [],
+        "scenes": [
+          "1"
+        ],
+        "rule": null,
+        "other_scenes": [],
+        "shot": "3",
+        "take": 2,
+        "rating": "good",
+        "clip": null,
+        "assignee": null,
+        "task": null,
+        "unsure": null
+      },
+      {
+        "kind": "take",
+        "quote": "第 1 条跑焦了，素材 C0012",
+        "name": null,
+        "detail": "跑焦",
+        "character": null,
+        "owner": null,
+        "quantity": null,
+        "slots": [],
+        "scenes": [
+          "1"
+        ],
+        "rule": null,
+        "other_scenes": [],
+        "shot": "3",
+        "take": 1,
+        "rating": "reject",
+        "clip": "C0012",
+        "assignee": null,
+        "task": null,
+        "unsure": "素材 C0012 可能是第 2 条的"
+      }
+    ]
+  }
+}

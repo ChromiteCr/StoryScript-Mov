@@ -43,6 +43,11 @@ const EXPECTED_TABLES = [
   // S5
   'script_check',
   'script_risk',
+  // S5a
+  'paste_note',
+  'paste_segment',
+  'paste_applied',
+  'todo',
 ];
 
 let root: string;

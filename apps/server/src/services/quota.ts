@@ -10,7 +10,7 @@ import { AppError } from '../http/errors.ts';
  * no cap.
  */
 
-export const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order', 'research_style', 'polish_shots', 'check_script'] as const;
+export const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order', 'research_style', 'polish_shots', 'check_script', 'organize_paste'] as const;
 export const IMAGE_JOB_KINDS = ['image_redraw'] as const;
 const DAY_MS = 24 * 3600 * 1000;
 
@@ -37,11 +37,13 @@ export function quotaUsage(deps: AppDeps, db: DbPort, lane: 'llm' | 'image', now
   return { limit, used, remaining: Math.max(0, limit - used) };
 }
 
-export function assertJobQuota(deps: AppDeps, db: DbPort, lane: 'llm' | 'image', now: number = Date.now()): void {
+/** `need`: jobs about to be queued at once (S5a: one per pasted segment); all or none. */
+export function assertJobQuota(deps: AppDeps, db: DbPort, lane: 'llm' | 'image', now: number = Date.now(), need = 1): void {
   // S4: the cap protects the group's key; a member calling with their own key spends their own money
   if (modelDir(deps, lane === 'llm' ? 'text' : 'image').source === 'own') return;
   const q = quotaUsage(deps, db, lane, now);
-  if (!q || q.used < q.limit) return;
+  if (!q || q.used + need <= q.limit) return;
   const what = lane === 'llm' ? '文本模型' : '图像模型';
-  throw new AppError('QUOTA_EXCEEDED', `本组 24 小时内的${what}调用已达 ${q.limit} 次上限（防止意外花费），稍后再试，或请管理员调高`, 409, { lane, limit: q.limit, used: q.used });
+  const left = need > 1 ? `，这次要 ${need} 次，只剩 ${q.remaining} 次` : '';
+  throw new AppError('QUOTA_EXCEEDED', `本组 24 小时内的${what}调用已达 ${q.limit} 次上限${left}（防止意外花费），稍后再试，或请管理员调高`, 409, { lane, limit: q.limit, used: q.used, need });
 }

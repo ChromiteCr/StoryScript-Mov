@@ -21,6 +21,7 @@ export const JOB_KIND_LABEL: Record<JobKind, string> = {
   research_style: '风格研究',
   polish_shots: 'AI 润色',
   check_script: '剧本体检',
+  organize_paste: '粘贴整理',
 };
 
 export const JOB_STATUS_LABEL: Record<JobStatus, string> = {

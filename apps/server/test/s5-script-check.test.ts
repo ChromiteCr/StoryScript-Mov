@@ -114,6 +114,31 @@ describe('the check job', () => {
     expect(v.check!.issues.map((i) => i.code)).toContain('quote_not_found');
   });
 
+  test('rounds used up with nothing that matches: no check is written, the last one and its ticks stay', async () => {
+    fake.enqueue(reply.json(DEMO));
+    await runCheck();
+    const before = await view();
+    await app.put(`/api/v1/scripts/risks/${before.risks[0]!.id}/handled`, { handled: true });
+    const paraphrased = { risks: DEMO.risks.map((r) => ({ ...r, quote: `${r.quote}（改写过）的另一种说法` })) };
+    for (let i = 0; i < 3; i++) fake.enqueue(reply.json(paraphrased));
+    const job = await runCheck();
+    expect(job.status).toBe('failed');
+    const after = await view();
+    expect(after.check!.id).toBe(before.check!.id);
+    expect(after.risks[0]!.handled).not.toBeNull();
+  });
+
+  test('a tick on a list a teammate has just re-checked is refused, so the page refreshes', async () => {
+    fake.enqueue(reply.json(DEMO));
+    await runCheck();
+    const old = (await view()).risks[0]!;
+    fake.enqueue(reply.json(DEMO));
+    await runCheck();
+    const res = await app.put(`/api/v1/scripts/risks/${old.id}/handled`, { handled: true });
+    expect(res.status).toBe(409);
+    expect(res.text).toContain('重新体检');
+  });
+
   test('no usable answer: the job fails and no check is stored', async () => {
     for (let i = 0; i < 3; i++) fake.enqueue(reply.invalid());
     const job = await runCheck();

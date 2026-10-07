@@ -81,6 +81,8 @@ export function scriptCheckView(db: DbPort, project: Project): ScriptCheckView {
 export function setRiskHandled(db: DbPort, id: string, handled: boolean): ScriptRisk {
   const row = getRisk(db, id);
   if (!row) throw new AppError('NOT_FOUND', '找不到这条难点，可能已经重新体检过了', 404, { risk_id: id });
+  // a teammate's re-check replaced this list: the tick would land on history nobody sees
+  if (row.check_id !== latestCheck(db)?.id) throw new AppError('REVISION_CONFLICT', '剧本刚刚重新体检过，清单已经更新，请在新清单里勾选', 409, { risk_id: id });
   if (Boolean(row.handled_at) !== handled) setRiskHandledRow(db, id, handled ? new Date().toISOString() : null);
   return riskView(getRisk(db, id)!, placement(db, checkVersionOf(db, row.check_id)), actorResolver(db));
 }

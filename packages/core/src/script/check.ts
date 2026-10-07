@@ -20,7 +20,8 @@ import { matchQuote, normalizeForMatch, quoteIsExact } from './quote.ts';
  *   script, an empty or overlong text); a quote found in another paragraph
  *   is simply moved there, and repeats are merged, neither is an error
  * - finalizeScriptCheck: what is kept once the rounds are used up (quotes not
- *   found are dropped, long texts cut, at most 4 a scene and 60 in all)
+ *   found are dropped, long texts cut, at most 4 a scene and 60 in all; a
+ *   quote copied nearly right is stored in the script's own words)
  * - anchorQuote / sameRisk: finding a difficulty again in a later script
  *   version, and recognising it in a re-check (so its tick carries over)
  */
@@ -74,7 +75,8 @@ export function normalizeScriptCheckJson(raw: unknown): unknown {
   let list: unknown = raw;
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const o = raw as Record<string, unknown>;
-    list = o.risks ?? o.items ?? o.difficulties ?? o.issues ?? [];
+    // an answer of another shape is not "no difficulties": zod rejects it and the repair round asks again
+    list = o.risks ?? o.items ?? o.difficulties ?? o.issues;
   }
   if (!Array.isArray(list)) return raw;
   return {
@@ -103,11 +105,50 @@ interface Placed {
   index: number;
 }
 
+function levenshtein(a: readonly string[], b: readonly string[]): number {
+  let prev = Array.from({ length: b.length + 1 }, (_, j) => j);
+  for (let i = 1; i <= a.length; i++) {
+    const cur = [i];
+    for (let j = 1; j <= b.length; j++) cur[j] = Math.min(prev[j - 1]! + (a[i - 1] === b[j - 1] ? 0 : 1), prev[j]! + 1, cur[j - 1]! + 1);
+    prev = cur;
+  }
+  return prev[b.length]!;
+}
+
+/**
+ * The paragraph's own words for a quote the model copied nearly but not
+ * exactly (a fuzzy match): the stretch of the paragraph closest to it. Stored
+ * that way, the quote is found verbatim later, so only a real change to the
+ * script makes the difficulty stale.
+ */
+export function snapQuote(quote: string, text: string): string {
+  if (quoteIsExact(quote, text)) return quote;
+  const q = Array.from(normalizeForMatch(quote));
+  const chars = Array.from(text);
+  const slack = Math.max(2, Math.ceil(q.length * 0.3));
+  // a very long paragraph keeps the model's wording rather than costing seconds
+  if (chars.length * (2 * slack + 1) * q.length * q.length > 4_000_000) return quote;
+  let best: { d: number; s: string } | null = null;
+  for (let start = 0; start < chars.length; start++) {
+    for (let n = Math.max(1, q.length - slack); n <= q.length + slack && start + n <= chars.length; n++) {
+      const cand = chars.slice(start, start + n).join('');
+      const d = levenshtein(Array.from(normalizeForMatch(cand)), q);
+      if (!best || d < best.d || (d === best.d && Math.abs(n - q.length) < Math.abs(Array.from(best.s).length - q.length))) best = { d, s: cand };
+    }
+  }
+  const snapped = best?.s.trim() ?? '';
+  return snapped && quoteIsExact(snapped, text) ? snapped : quote;
+}
+
 function place(out: ScriptCheckOutput, paragraphs: readonly Para[]): Placed[] {
   const byId = new Map(paragraphs.map((p) => [p.id, p] as const));
   return out.risks.map((item, index) => {
     const own = byId.get(item.paragraph_id);
-    if (own && item.quote.trim() && matchQuote(item.quote, own.text).level !== 'rejected') return { item, paragraph: own, index };
+    if (own && item.quote.trim()) {
+      const level = matchQuote(item.quote, own.text).level;
+      if (level === 'exact') return { item, paragraph: own, index };
+      if (level === 'fuzzy') return { item: { ...item, quote: snapQuote(item.quote, own.text) }, paragraph: own, index };
+    }
     const other = item.quote.trim() ? paragraphs.find((p) => quoteIsExact(item.quote, p.text)) : undefined;
     return other ? { item: { ...item, paragraph_id: other.id }, paragraph: other, index } : { item, paragraph: null, index };
   });
@@ -189,13 +230,14 @@ export function finalizeScriptCheck(out: ScriptCheckOutput, paragraphs: readonly
 
 /**
  * Where a quote is in (another version of) the script: its own paragraph if
- * the quote still matches there, else the first paragraph holding it
- * exactly; null when it is gone (the difficulty is then stale).
+ * the quote is still there word for word, else the first paragraph holding
+ * it; null when it is gone (the difficulty is then stale). Exact only: an
+ * edit like 夜晚 → 白天 is what removes a night exterior.
  */
 export function anchorQuote(quote: string, paragraphId: string, paragraphs: readonly Pick<Paragraph, 'id' | 'text'>[]): string | null {
   if (!quote.trim()) return null;
   const own = paragraphs.find((p) => p.id === paragraphId);
-  if (own && matchQuote(quote, own.text).level !== 'rejected') return own.id;
+  if (own && quoteIsExact(quote, own.text)) return own.id;
   return paragraphs.find((p) => quoteIsExact(quote, p.text))?.id ?? null;
 }
 

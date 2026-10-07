@@ -7,6 +7,7 @@ import {
   normalizeScriptCheckJson,
   sameRisk,
   SCRIPT_CHECK_PROMPT_VERSION,
+  snapQuote,
   stripTriggerTerms,
   validateScriptCheck,
 } from '../../src/index.ts';
@@ -65,6 +66,13 @@ describe('normalizeScriptCheckJson', () => {
     expect(parsed.risks[0]!.quote).toBe('大雨里');
     expect(parsed.risks[0]!.problem).toBe('');
     expect(ScriptCheckOutput.parse(normalizeScriptCheckJson([])).risks).toEqual([]);
+    expect(ScriptCheckOutput.parse(normalizeScriptCheckJson({ risks: [] })).risks).toEqual([]);
+  });
+
+  test('an answer of another shape is not "no difficulties": zod rejects it', () => {
+    for (const raw of [{ 风险: [] }, { result: { risks: [] } }, { paragraph_id: 'p-003', category: 'rain_water' }]) {
+      expect(ScriptCheckOutput.safeParse(normalizeScriptCheckJson(raw)).success).toBe(false);
+    }
   });
 });
 
@@ -129,6 +137,20 @@ describe('finding a difficulty again', () => {
     expect(anchorQuote('大雨里，阿哲沿着江堤一路狂奔', 'p-003', next)).toBe('p-004');
     expect(anchorQuote('一辆出租车急刹', 'p-004', next)).toBeNull();
     expect(anchorQuote('  ', 'p-004', next)).toBeNull();
+  });
+
+  test('anchorQuote is exact: a small edit that changes the meaning makes the difficulty stale', () => {
+    const next = [{ id: 'p-003', text: '大雨里，阿哲沿着江堤一路慢走，几次差点滑倒。' }];
+    expect(anchorQuote('大雨里，阿哲沿着江堤一路狂奔', 'p-003', next)).toBeNull();
+  });
+
+  test('a quote copied nearly right is stored in the script\'s own words', () => {
+    const text = P[2]!.text;
+    expect(snapQuote('大雨中，阿哲沿着江堤一路狂奔', text)).toBe('大雨里，阿哲沿着江堤一路狂奔');
+    expect(snapQuote('阿哲沿着江堤', text)).toBe('阿哲沿着江堤');
+    const fin = finalizeScriptCheck({ risks: [item({ quote: '大雨中，阿哲沿着江堤一路狂奔' })] }, P);
+    expect(fin.items[0]!.quote).toBe('大雨里，阿哲沿着江堤一路狂奔');
+    expect(anchorQuote(fin.items[0]!.quote, 'p-003', P)).toBe('p-003');
   });
 
   test('sameRisk: same kind and one quote holds the other', () => {

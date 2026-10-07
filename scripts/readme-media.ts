@@ -106,6 +106,14 @@ async function screenshots(page: Page): Promise<void> {
   };
   await stage(page, '剧本');
   await take('script');
+  // S5 体检: the length estimate and the recorded difficulties, beside the script
+  await page.getByRole('button', { name: /^体检/ }).click();
+  const check = page.getByRole('region', { name: '剧本体检' });
+  await check.getByRole('button', { name: '找出拍摄难点' }).click();
+  await page.getByRole('dialog', { name: '剧本体检' }).getByRole('button', { name: '开始体检' }).click();
+  await check.getByText(/条 · 未处理/).waitFor({ timeout: 30_000 });
+  await take('check');
+  await page.getByRole('button', { name: /^体检/ }).click();
   await stage(page, '分镜');
   await take('boards');
   await stage(page, '计划');

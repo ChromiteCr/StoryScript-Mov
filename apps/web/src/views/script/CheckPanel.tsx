@@ -77,7 +77,7 @@ function Estimate({ estimate }: { estimate: ScriptEstimate }) {
         预估片长
       </h3>
       <p className="mt-1 flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
-        <span className="text-2xl font-semibold text-graphite-100 tabular-nums">{clock(estimate.seconds)}</span>
+        <span className="text-xl font-semibold text-graphite-100 tabular-nums">{clock(estimate.seconds)}</span>
         <span className="text-xs text-graphite-300 tabular-nums">
           {clock(estimate.low_seconds)}–{clock(estimate.high_seconds)}，按字数粗估
         </span>
@@ -293,8 +293,10 @@ function RiskItem({ risk }: { risk: ScriptRisk }) {
           id={checkboxId}
           type="checkbox"
           checked={handled}
-          disabled={pending}
+          aria-busy={pending || undefined}
           onChange={(e) => {
+            // stays enabled (and focused) while saving; a second click waits for the first
+            if (pending) return;
             const on = e.target.checked;
             setTicked(on);
             set.mutate({ id: risk.id, handled: on }, { onSettled: () => setTicked(null) });

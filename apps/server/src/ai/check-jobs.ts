@@ -71,12 +71,17 @@ export function startScriptCheck(deps: AppDeps): Job {
         return { status: 'failed', attempts: res.attempts, usage, error: res.error ? { code: res.error.code, message: res.error.message } : null };
       }
       const fin = finalizeScriptCheck(parsed, version.paragraphs);
+      // the rounds ran out and nothing survived: no check is written (the last one and its ticks stay)
+      const partial = res.value === undefined;
+      if (partial && fin.items.length === 0) {
+        const error = res.error ?? { code: 'ATTEMPTS_EXHAUSTED', message: '模型的回答在剧本里对不上，没有可用的难点' };
+        return { status: 'failed', attempts: res.attempts, usage, error: { code: error.code, message: error.message } };
+      }
       const issues: DraftIssue[] = [];
       if (fin.dropped) issues.push({ level: 'warning', code: 'quote_not_found', message: `有 ${fin.dropped} 条难点的引用在剧本里找不到，已略去`, item: null });
       if (fin.truncated) issues.push({ level: 'warning', code: 'text_truncated', message: `有 ${fin.truncated} 条难点的说明过长，已截短`, item: null });
       if (fin.capped) issues.push({ level: 'warning', code: 'too_many', message: `难点太多，每场只保留最严重的 4 条（略去 ${fin.capped} 条）`, item: null });
       // a usable answer is kept even when the rounds ran out; the error stays on the check as a note
-      const partial = res.value === undefined;
       if (partial) issues.push(...errorIssue(res).map((i) => ({ ...i, level: 'warning' as const })));
       const raw = res.value_raw ?? res.raw_outputs.at(-1) ?? null;
       return {

@@ -1,4 +1,4 @@
-import { useId, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useId, useState, type FormEvent, type ReactNode } from 'react';
 import type { UsageCurrency, UsageDay, UsagePrice, UsageReport, UsageSourceReport, UsageTotals } from '@storyscript/contracts';
 import { actorPhrase } from '../../lib/crew.ts';
 import { JOB_KIND_LABEL } from '../../lib/jobs.ts';
@@ -251,6 +251,18 @@ function PriceForm({ report }: { report: UsageSourceReport }) {
   const [output, setOutput] = useState(asText(report.price.output_per_m));
   const [image, setImage] = useState(asText(report.price.per_image));
   const [error, setError] = useState<string | null>(null);
+  const [dirty, setDirty] = useState(false);
+  // open at first when there is spending to price; after that the person decides
+  const [startOpen] = useState(() => report.can_edit_price && report.price.input_per_m === null && report.total.jobs > 0);
+  // a price saved elsewhere (the leader, another tab) shows here unless this form has edits
+  const { currency: c0, input_per_m: i0, output_per_m: o0, per_image: p0 } = report.price;
+  useEffect(() => {
+    if (dirty) return;
+    setCurrency(c0);
+    setInput(asText(i0));
+    setOutput(asText(o0));
+    setImage(asText(p0));
+  }, [c0, i0, o0, p0, dirty]);
   const readOnly = !report.can_edit_price;
   const sign = currency === 'CNY' ? '¥' : '$';
 
@@ -263,7 +275,7 @@ function PriceForm({ report }: { report: UsageSourceReport }) {
     }
     setError(null);
     const [input_per_m, output_per_m, per_image] = values as (number | null)[];
-    save.mutate({ source: report.source, price: { currency, input_per_m: input_per_m!, output_per_m: output_per_m!, per_image: per_image! } });
+    save.mutate({ source: report.source, price: { currency, input_per_m: input_per_m!, output_per_m: output_per_m!, per_image: per_image! } }, { onSuccess: () => setDirty(false) });
   };
 
   const field = (label: string, value: string, set: (v: string) => void, hint: ReactNode) => (
@@ -274,7 +286,10 @@ function PriceForm({ report }: { report: UsageSourceReport }) {
           aria-describedby={describedBy}
           inputMode="decimal"
           value={value}
-          onChange={(e) => set(e.target.value)}
+          onChange={(e) => {
+            set(e.target.value);
+            setDirty(true);
+          }}
           disabled={readOnly || save.isPending}
           placeholder="不估算"
           className="tabular-nums"
@@ -284,7 +299,7 @@ function PriceForm({ report }: { report: UsageSourceReport }) {
   );
 
   return (
-    <details className="mx-3 mt-4 rounded-panel border border-graphite-800 px-3 py-2" open={!readOnly && report.price.input_per_m === null && report.total.jobs > 0}>
+    <details className="mx-3 mt-4 rounded-panel border border-graphite-800 px-3 py-2" open={startOpen}>
       <summary className="cursor-pointer text-sm text-graphite-100 select-none">单价（用来估算花费）</summary>
       <form id={formId} onSubmit={submit} className="mt-3 grid grid-cols-1 gap-3 pb-2 sm:grid-cols-2" noValidate>
         {readOnly ? (
@@ -294,7 +309,10 @@ function PriceForm({ report }: { report: UsageSourceReport }) {
         ) : null}
         <Field label="币种">
           {({ id, describedBy }) => (
-            <SelectInput id={id} aria-describedby={describedBy} value={currency} onChange={(e) => setCurrency(e.target.value as UsageCurrency)} disabled={readOnly || save.isPending}>
+            <SelectInput id={id} aria-describedby={describedBy} value={currency} onChange={(e) => {
+                setCurrency(e.target.value as UsageCurrency);
+                setDirty(true);
+              }} disabled={readOnly || save.isPending}>
               {CURRENCIES.map((c) => (
                 <option key={c} value={c}>
                   {CURRENCY_LABEL[c]}

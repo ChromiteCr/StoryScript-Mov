@@ -114,7 +114,6 @@ function PasteForm({ initialHint, onCreated }: { initialHint: PasteHint; onCreat
   const gate = useAiGate();
   const providers = useProviders();
   const create = useCreatePaste();
-  const textId = useId();
   const [text, setText] = useState('');
   const [date, setDate] = useState(() => (project ? todayIn(project.timezone) : new Date().toISOString().slice(0, 10)));
   const [hint, setHint] = useState<PasteHint>(initialHint);
@@ -125,7 +124,15 @@ function PasteForm({ initialHint, onCreated }: { initialHint: PasteHint; onCreat
   const host = gate.demo ? '演示回放（不外发）' : hostOf(providers.data?.text?.base_url);
   const groupKey = health?.hosted && health.text_model_source !== 'own';
   const tooLong = chars > PASTE_MAX_CHARS || segments > PASTE_MAX_SEGMENTS;
-  const cannot = gate.reason ?? (clean.length === 0 ? '先贴入要整理的文字' : tooLong ? `最多 ${PASTE_MAX_CHARS.toLocaleString('zh-CN')} 字` : null);
+  const cannot =
+    gate.reason ??
+    (clean.length === 0
+      ? '先贴入要整理的文字'
+      : chars > PASTE_MAX_CHARS
+        ? `最多 ${PASTE_MAX_CHARS.toLocaleString('zh-CN')} 字`
+        : tooLong
+          ? `最多分 ${PASTE_MAX_SEGMENTS} 段（每段约 3000 字）`
+          : null);
 
   const submit = (e: FormEvent) => {
     e.preventDefault();
@@ -142,7 +149,7 @@ function PasteForm({ initialHint, onCreated }: { initialHint: PasteHint; onCreat
       <Field label="要整理的文字" hint={<span className="tabular-nums">{chars.toLocaleString('zh-CN')}/{PASTE_MAX_CHARS.toLocaleString('zh-CN')} 字{segments > 1 ? `，分 ${segments} 段` : ''}</span>}>
         {({ id, describedBy }) => (
           <TextArea
-            id={id || textId}
+            id={id}
             aria-describedby={describedBy}
             value={text}
             onChange={(e) => {
@@ -323,7 +330,7 @@ function NoteReview({ id, apply }: { id: string; apply: ReturnType<typeof useApp
         </div>
 
         {groups.map((g) => (
-          <KindSection key={g.kind} kind={g.kind} items={g.items} selected={selected} edits={edits} onToggle={toggle} onEdit={(k, it) => setEdits((cur) => ({ ...cur, [k]: it }))} />
+          <KindSection key={g.kind} kind={g.kind} items={g.items} selected={selected} edits={edits} refDate={data.ref_date} onToggle={toggle} onEdit={(k, it) => setEdits((cur) => ({ ...cur, [k]: it }))} />
         ))}
         {data.items.length === 0 && data.pending_segments === 0 ? <p className="mt-4 text-sm text-graphite-300">没有整理出条目。</p> : null}
 
@@ -356,10 +363,12 @@ function KindSection({
   items,
   selected,
   edits,
+  refDate,
   onToggle,
   onEdit,
 }: {
   kind: PasteKind;
+  refDate: string;
   items: readonly PasteItemView[];
   selected: ReadonlySet<string>;
   edits: Readonly<Record<string, PasteItem>>;
@@ -375,7 +384,7 @@ function KindSection({
       </h3>
       <ul className="flex flex-col gap-2">
         {items.map((v) => (
-          <ItemRow key={v.key} view={v} edited={edits[v.key] ?? null} checked={selected.has(v.key)} onToggle={onToggle} onEdit={onEdit} />
+          <ItemRow key={v.key} view={v} edited={edits[v.key] ?? null} checked={selected.has(v.key)} refDate={refDate} onToggle={onToggle} onEdit={onEdit} />
         ))}
       </ul>
     </section>
@@ -386,10 +395,12 @@ function ItemRow({
   view,
   edited,
   checked,
+  refDate,
   onToggle,
   onEdit,
 }: {
   view: PasteItemView;
+  refDate: string;
   edited: PasteItem | null;
   checked: boolean;
   onToggle: (key: string, on: boolean) => void;
@@ -399,7 +410,7 @@ function ItemRow({
   const [editing, setEditing] = useState(false);
   const item = edited ?? view.item;
   const locked = view.applied !== null || view.blocked !== null;
-  const how = resolutionText({ item, resolution: view.resolution });
+  const how = resolutionText({ item: view.item, resolution: view.resolution });
 
   return (
     <li className={`rounded-panel border border-graphite-700 px-3 py-2.5 ${view.applied ? 'bg-transparent opacity-80' : 'bg-graphite-800/50'}`}>
@@ -419,25 +430,26 @@ function ItemRow({
           <p className="mt-0.5 flex flex-wrap items-center gap-1.5 text-xs text-graphite-300">
             {view.applied ? <ActorLabel actor={view.applied.actor} after="已应用" /> : null}
             {view.applied && !view.applied.actor ? <span>已应用</span> : null}
-            {!view.applied && how ? <span>{how}</span> : null}
-            {view.unconfirmed ? <Tag tone="warn">需确认</Tag> : null}
+            {!view.applied && how && !edited ? <span>{how}</span> : null}
+            {edited ? <span>改过的内容在应用时重新对照（合并还是新建、需不需要确认）</span> : null}
+            {view.unconfirmed && !edited ? <Tag tone="warn">需确认</Tag> : null}
             {edited ? <Tag>已修改</Tag> : null}
           </p>
           {view.blocked && !view.applied ? <p className="mt-1 text-xs text-graphite-100">不能应用：{view.blocked}</p> : null}
-          {view.warnings.length ? (
+          {view.warnings.length && !edited ? (
             <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-graphite-300">
               {view.warnings.map((w) => (
                 <li key={w}>{w}</li>
               ))}
             </ul>
           ) : null}
-          <p className="mt-1 text-xs break-words text-graphite-500">「{item.quote}」</p>
+          <p className="mt-1 text-xs break-words text-graphite-300">「{item.quote}」</p>
           {!view.applied ? (
             <button type="button" className="mt-1 text-xs text-graphite-300 underline decoration-graphite-700 underline-offset-2 hover:text-graphite-100" onClick={() => setEditing((e) => !e)} aria-expanded={editing}>
               {editing ? '收起编辑' : '编辑'}
             </button>
           ) : null}
-          {editing && !view.applied ? <ItemEditor item={item} onChange={(it) => onEdit(view.key, it)} /> : null}
+          {editing && !view.applied ? <ItemEditor item={item} refDate={refDate} onChange={(it) => onEdit(view.key, it)} /> : null}
         </div>
       </div>
     </li>
@@ -445,11 +457,12 @@ function ItemRow({
 }
 
 /** A few fields per kind; changes are checked again on the server when applied. */
-function ItemEditor({ item, onChange }: { item: PasteItem; onChange: (it: PasteItem) => void }) {
+function ItemEditor({ item, refDate, onChange }: { item: PasteItem; refDate: string; onChange: (it: PasteItem) => void }) {
   const named = NAMED_KINDS.includes(item.kind);
   const slot = item.slots[0] ?? null;
   const setSlot = (patch: Partial<NonNullable<typeof slot>>) => {
-    const base = slot ?? { date: new Date().toISOString().slice(0, 10), weekday: null, start: null, end: null, vague: false };
+    // a new slot starts on the messages' date (the note's own reference, not the browser's UTC day)
+    const base = slot ?? { date: refDate, weekday: null, start: null, end: null, vague: false };
     onChange({ ...item, slots: [{ ...base, ...patch, weekday: patch.date ? null : base.weekday }, ...item.slots.slice(1)] });
   };
   return (

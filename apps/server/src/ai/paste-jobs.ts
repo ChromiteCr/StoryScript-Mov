@@ -15,7 +15,7 @@ import { pasteReplayKey } from '../adapters/llm/replay-chat.ts';
 import { structuredCall } from '../adapters/llm/structured.ts';
 import { currentRequest } from '../collab/actor.ts';
 import type { DbPort } from '../db/port.ts';
-import { finishSegment, getNote, insertNote, listSegments, setSegmentJob, type NoteRow } from '../db/repos/paste.ts';
+import { finishSegment, getNote, insertNote, listApplied, listSegments, setSegmentJob, type NoteRow } from '../db/repos/paste.ts';
 import { listEntities } from '../db/repos/entity.ts';
 import { listResources } from '../db/repos/resource.ts';
 import { latestScriptVersion, listScenes } from '../db/repos/script.ts';
@@ -124,8 +124,18 @@ export function startPasteNote(deps: AppDeps, input: CreatePasteInput, now = new
   const note: NoteRow = { id, text, ref_date: input.ref_date, timezone: project.project().timezone, hint: input.hint, actor_id: null, created_at: now, closed_at: null };
   db.tx(() => insertNote(db, note, segments));
   for (const [idx, seg] of segments.entries()) {
-    const job = segmentJob(deps, ai, note, idx, seg.text);
-    db.tx(() => setSegmentJob(db, id, idx, job.id));
+    try {
+      const job = segmentJob(deps, ai, note, idx, seg.text);
+      db.tx(() => setSegmentJob(db, id, idx, job.id));
+    } catch (err) {
+      // the rest stay unqueued and show as failed with a retry; jobs already queued run on
+      const message = err instanceof Error ? err.message : String(err);
+      for (let rest = idx; rest < segments.length; rest++) {
+        db.tx(() => finishSegment(db, id, rest, { status: 'failed', model: null, prompt_version: PASTE_PROMPT_VERSION, items: [], issues: [], raw_output: null, error: { code: 'NOT_QUEUED', message } }));
+      }
+      if (idx === 0) throw err;
+      break;
+    }
   }
   return id;
 }
@@ -138,9 +148,12 @@ export function retryPasteSegment(deps: AppDeps, noteId: string, idx: number): s
   if (!note) throw new AppError('NOT_FOUND', '这次整理不存在', 404, { note_id: noteId });
   const seg = listSegments(db, noteId).find((s) => s.idx === idx);
   if (!seg) throw new AppError('NOT_FOUND', '没有这一段', 404, { note_id: noteId, idx });
-  if (seg.status === 'pending' && seg.job_id) {
-    const running = db.get<{ status: string }>('SELECT status FROM job WHERE id = ?', seg.job_id)?.status;
-    if (running === 'queued' || running === 'running') throw new AppError('VALIDATION_ERROR', '这一段还在整理中', 409, { note_id: noteId, idx });
+  // only a segment that gave nothing is sorted again: applied items are recorded by their place in the segment
+  const jobStatus = seg.job_id ? db.get<{ status: string }>('SELECT status FROM job WHERE id = ?', seg.job_id)?.status : undefined;
+  const failed = seg.status === 'failed' || (seg.status === 'pending' && (!seg.job_id || (jobStatus !== 'queued' && jobStatus !== 'running')));
+  if (!failed) throw new AppError('VALIDATION_ERROR', seg.status === 'pending' ? '这一段还在整理中' : '这一段已经整理好了，不能重来', 409, { note_id: noteId, idx });
+  if (listApplied(db, noteId).some((a) => a.item_key.startsWith(`${idx}:`))) {
+    throw new AppError('VALIDATION_ERROR', '这一段已经有条目应用过了，不能重来', 409, { note_id: noteId, idx });
   }
   const ai = resolveAi(deps);
   if (ai.remote) assertJobQuota(deps, db, 'llm');

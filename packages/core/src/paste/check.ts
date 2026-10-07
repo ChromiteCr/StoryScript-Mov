@@ -131,12 +131,17 @@ export function isCalendarDate(date: string): boolean {
 }
 
 const NAMED: ReadonlySet<PasteKind> = new Set(['person', 'location', 'equipment', 'prop']);
+/** A todo's text (contracts Todo.text) and a name's length. */
+export const TODO_TEXT_MAX = 200;
+const NAME_MAX = 80;
 
 /** Missing pieces an item of its kind needs (for the repair round and the review). */
 export function pasteItemProblems(item: PasteItem): string[] {
   const out: string[] = [];
   if (NAMED.has(item.kind) && !item.name) out.push('缺少 name');
-  if (item.kind === 'todo' && !item.task) out.push('缺少 task');
+  if (item.kind === 'todo' && !item.task?.trim()) out.push('缺少 task');
+  if (item.task && Array.from(item.task.trim()).length > TODO_TEXT_MAX) out.push(`task 超过 ${TODO_TEXT_MAX} 字，请缩短`);
+  if (item.name && Array.from(item.name.trim()).length > NAME_MAX) out.push(`name 超过 ${NAME_MAX} 字，请缩短`);
   if (item.kind === 'take' && !item.scenes[0] && !item.shot) out.push('场记缺少场号或镜号');
   if (item.kind === 'schedule') {
     if (!item.scenes.length) out.push('拍摄安排缺少 scenes');
@@ -146,6 +151,8 @@ export function pasteItemProblems(item: PasteItem): string[] {
   }
   for (const s of item.slots) {
     if (!isCalendarDate(s.date)) out.push(`日期 ${s.date} 不存在`);
+    // a todo's slot is only its due date and time; anything else is a span that must end after it starts
+    else if (item.kind !== 'todo' && s.start && s.end && s.end <= s.start) out.push(`${s.date} 的结束时间 ${s.end} 要晚于开始时间 ${s.start}`);
   }
   return out;
 }

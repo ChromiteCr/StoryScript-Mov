@@ -15,10 +15,11 @@ import type {
   Take,
   TimeWindow,
 } from '@storyscript/contracts';
-import { localWindowToUtc, normalizeForMatch, pasteItemProblems, placeQuote, slotTimes, uncoveredLines, weekdayOf } from '@storyscript/core';
+import { randomUUID } from 'node:crypto';
+import { localWindowToUtc, normalizeForMatch, pasteItemProblems, placeQuote, slotTimes, TODO_TEXT_MAX, uncoveredLines, weekdayOf } from '@storyscript/core';
 import { actorResolver, currentRequest } from '../collab/actor.ts';
 import { listConstraints } from '../db/repos/constraint.ts';
-import { listEntities } from '../db/repos/entity.ts';
+import { insertEntity, listEntities, nextAlias } from '../db/repos/entity.ts';
 import { closeNoteRow, getNote, insertApplied, listApplied, listNotes, listSegments, type NoteRow, type SegmentRow } from '../db/repos/paste.ts';
 import { listResources } from '../db/repos/resource.ts';
 import { latestScriptVersion, listScenes, type SceneRecord } from '../db/repos/script.ts';
@@ -27,7 +28,6 @@ import { listActiveShots } from '../db/repos/shot.ts';
 import { listTakes, shotSetKey } from '../db/repos/take.ts';
 import type { DbPort } from '../db/port.ts';
 import { AppError } from '../http/errors.ts';
-import { createEntity, updateEntity } from './entities.ts';
 import { createTake } from './media/takes.ts';
 import { createConstraint } from './plan/constraints.ts';
 import { createResource, requireResource, updateResource } from './plan/resources.ts';
@@ -103,11 +103,17 @@ interface Resolved {
   windows: TimeWindow[];
 }
 
+/** Kinds whose slots are spans of time (a todo's slot is only a due date). */
+const SPANS: ReadonlySet<PasteItem['kind']> = new Set(['person', 'location', 'equipment', 'schedule']);
+
 function windowsOf(item: PasteItem, ctx: Ctx): { windows: TimeWindow[]; problem: string | null } {
   const windows: TimeWindow[] = [];
+  if (!SPANS.has(item.kind)) return { windows, problem: null };
   for (const s of item.slots) {
     try {
       const t = slotTimes(s);
+      // never read as overnight: 19:00–18:00 is a typo, not 23 hours
+      if (t.end <= t.start) return { windows, problem: `${s.date} 的结束时间要晚于开始时间` };
       windows.push(localWindowToUtc(s.date, t.start, t.end, ctx.tz));
     } catch {
       return { windows, problem: `时间「${s.date} ${s.start ?? ''}–${s.end ?? ''}」写得不对` };
@@ -279,7 +285,9 @@ export function resolveItem(item: PasteItem, ctx: Ctx): Resolved {
 // ---------------------------------------------------------------------- views
 
 function segmentStatus(db: DbPort, s: SegmentRow): Pick<PasteSegmentView, 'status' | 'error'> {
-  if (s.status !== 'pending' || !s.job_id) return { status: s.status, error: s.error };
+  if (s.status !== 'pending') return { status: s.status, error: s.error };
+  // queued nowhere (the enqueue failed): offer a retry instead of waiting forever
+  if (!s.job_id) return { status: 'failed', error: s.error ?? { code: 'NOT_QUEUED', message: '这一段没有排上队' } };
   const job = db.get<{ status: string; error_json: string | null }>('SELECT status, error_json FROM job WHERE id = ?', s.job_id);
   if (!job || job.status === 'queued' || job.status === 'running') return { status: 'pending', error: null };
   const error = job.error_json ? (JSON.parse(job.error_json) as { code: string; message: string }) : { code: job.status.toUpperCase(), message: job.status === 'cancelled' ? '已取消' : '这一段没有整理完' };
@@ -376,6 +384,7 @@ export function unionWindows(list: readonly TimeWindow[]): TimeWindow[] {
 }
 
 const uniq = <T>(xs: readonly T[]) => [...new Set(xs)];
+const clip = (s: string, max: number) => (Array.from(s).length <= max ? s : `${Array.from(s).slice(0, max - 1).join('')}…`);
 
 export function applyPaste(db: DbPort, noteId: string, input: ApplyPasteInput, now = new Date().toISOString()): ApplyPasteResult {
   const counts = { resources_created: 0, resources_updated: 0, constraints: 0, takes: 0, entities: 0, todos: 0 };
@@ -384,10 +393,12 @@ export function applyPaste(db: DbPort, noteId: string, input: ApplyPasteInput, n
     const segs = listSegments(db, noteId);
     const applied = new Set(listApplied(db, noteId).map((a) => a.item_key));
     const seen = new Set<string>();
-    for (const { key, item } of input.items) {
-      const [segIdx, itemIdx] = key.split(':').map(Number);
-      const seg = segs.find((s) => s.idx === segIdx);
-      if (!seg || !Number.isInteger(itemIdx) || !seg.items[itemIdx!]) throw new AppError('VALIDATION_ERROR', `没有这一条：${key}`, 400, { key });
+    for (const { key: given, item } of input.items) {
+      // only the canonical "段:序号" form: "0:00" must not reach the same item under another name
+      const m = /^(0|[1-9]\d*):(0|[1-9]\d*)$/.exec(given);
+      const seg = m ? segs.find((s) => s.idx === Number(m[1])) : undefined;
+      if (!m || !seg || !seg.items[Number(m[2])]) throw new AppError('VALIDATION_ERROR', `没有这一条：${given}`, 400, { key: given });
+      const key = `${seg.idx}:${Number(m[2])}`;
       if (applied.has(key) || seen.has(key)) throw new AppError('VALIDATION_ERROR', '这一条已经应用过了', 409, { key });
       seen.add(key);
       const text = note.text.slice(seg.start_at, seg.end_at);
@@ -397,9 +408,11 @@ export function applyPaste(db: DbPort, noteId: string, input: ApplyPasteInput, n
       if (res.blocked) throw new AppError('VALIDATION_ERROR', `「${item.name ?? item.task ?? item.quote}」不能应用：${res.blocked}`, 409, { key });
       const refs: Record<string, string[]> = {};
       const add = (k: string, id: string) => (refs[k] ??= []).push(id);
-      const todoFor = (text: string, who: string | null, date: string | null, time: string | null) => {
+      const todoFor = (raw: string, who: string | null, date: string | null, time: string | null) => {
+        const text = clip(raw.trim(), TODO_TEXT_MAX);
         const r = resolveItem({ ...item, kind: 'todo', assignee: who, task: text }, context(db, note)).resolution;
-        const t = createTodo(db, { text, assignee_id: r.assignee_id, assignee_name: r.assignee_id ? null : r.target_name, due_date: date, due_time: time, source_note_id: noteId }, now);
+        const name = r.assignee_id ? null : r.target_name ? clip(r.target_name, 40) : null;
+        const t = createTodo(db, { text, assignee_id: r.assignee_id, assignee_name: name, due_date: date, due_time: time, source_note_id: noteId }, now);
         add('todos', t.id);
         counts.todos++;
       };
@@ -431,8 +444,9 @@ export function applyPaste(db: DbPort, noteId: string, input: ApplyPasteInput, n
         }
         case 'prop': {
           if (res.resolution.action === 'create') {
-            const e = createEntity(db, { type: 'prop', name: item.name!, aliases: [] });
-            if (res.unconfirmed) updateEntity(db, e.id, { confirmed: false });
+            // like an AI entity draft: origin ai, to be confirmed on the script page
+            const e: Entity = { id: randomUUID(), type: 'prop', alias: nextAlias(db, 'prop'), name: item.name!.trim(), aliases: [], origin: 'ai', confirmed: false, actor_name: null, revision: 0 };
+            insertEntity(db, e);
             add('entities', e.id);
             counts.entities++;
           }

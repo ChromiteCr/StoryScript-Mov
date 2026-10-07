@@ -65,8 +65,11 @@ export function itemSummary(it: PasteItem): string {
       const code = [it.scenes[0] ? `${it.scenes[0]} 场` : null, it.shot ? `${it.shot} 镜` : null, it.take ? `第 ${it.take} 条` : null].filter(Boolean).join(' ');
       return [code, it.rating ? RATING_TEXT[it.rating] : null, it.detail, it.clip ? `素材 ${it.clip}` : null].filter(Boolean).join(' · ');
     }
-    case 'todo':
-      return [it.assignee ? `${it.assignee}：${it.task}` : it.task, it.slots[0] ? `${slotText({ ...it.slots[0], start: null })}前` : null].filter(Boolean).join(' · ');
+    case 'todo': {
+      const due = it.slots[0];
+      const by = due ? `${slotText({ ...due, start: null, end: null })}${due.end ? ` ${due.end}` : ''}前` : null;
+      return [it.assignee ? `${it.assignee}：${it.task}` : it.task, by].filter(Boolean).join(' · ');
+    }
     case 'other':
       return it.detail ?? it.quote;
   }

@@ -328,7 +328,7 @@ function RiskItem({ risk }: { risk: ScriptRisk }) {
                 「{risk.quote}」
               </button>
             ) : (
-              <span className="min-w-0 text-xs break-words text-graphite-500">「{risk.quote}」</span>
+              <span className="min-w-0 text-xs break-words text-graphite-300 line-through decoration-graphite-500">「{risk.quote}」</span>
             )}
             {risk.handled ? <ActorLabel actor={risk.handled.actor} after="已处理" className="text-xs text-graphite-300" /> : null}
           </div>

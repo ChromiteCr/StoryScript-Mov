@@ -124,6 +124,16 @@ async function screenshots(page: Page): Promise<void> {
   await take('media');
   await stage(page, '交付');
   await take('deliver');
+  // S5a 粘贴整理: the sample chat sorted by kind, reviewed before anything is written
+  await stage(page, '计划');
+  await page.getByRole('button', { name: '粘贴整理', exact: true }).first().click();
+  const paste = page.getByRole('dialog', { name: '粘贴整理' });
+  await paste.getByRole('button', { name: '填入示例' }).click();
+  await paste.getByRole('button', { name: '整理', exact: true }).click();
+  await paste.getByRole('button', { name: '确认发送' }).click();
+  await paste.getByRole('heading', { name: /演员档期/ }).waitFor({ timeout: 30_000 });
+  await take('paste');
+  await paste.getByRole('button', { name: '关闭' }).click();
 }
 
 /**

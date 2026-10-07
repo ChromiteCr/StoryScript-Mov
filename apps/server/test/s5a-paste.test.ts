@@ -131,6 +131,33 @@ describe('a pasted chat', () => {
 
     const again = await app.post(`/api/v1/paste/${note.id}/apply`, { items: picks.slice(0, 1) });
     expect(again.status).toBe(409);
+    // the same item under another spelling of its key is not a new item
+    for (const alias of ['0:00', ' 0:0', '0:0:9', '0:0.0']) {
+      const r = await app.post(`/api/v1/paste/${note.id}/apply`, { items: [{ key: alias.replace('0:0', picks[0]!.key), item: picks[0]!.item }] });
+      expect(r.status, alias).toBeGreaterThanOrEqual(400);
+    }
+    expect((await app.get<Todo[]>('/api/v1/todos')).data).toHaveLength(5);
+    // a pasted prop is like an AI draft: to be confirmed on the script page
+    const prop = (await app.get<{ name: string; origin: string; confirmed: boolean }[]>('/api/v1/entities')).data.find((e) => e.name === '林晓的蓝色风衣')!;
+    expect(prop).toMatchObject({ origin: 'ai', confirmed: false });
+    // a segment that gave items (some applied) is not sorted again
+    expect((await app.post(`/api/v1/paste/${note.id}/segments/0/retry`)).status).toBe(409);
+    expect(fake.chatRequests()).toHaveLength(1);
+  });
+
+  test('an end before the start is refused, not read as overnight; a too-long todo is refused', async () => {
+    fake.enqueue(reply.json(SAMPLE));
+    const note = await paste();
+    const room = byName(note, '图书馆三楼阅览室');
+    const backwards: PasteItem = { ...room.item, slots: [{ ...room.item.slots[0]!, start: '19:00', end: '18:00' }] };
+    const r = await app.post(`/api/v1/paste/${note.id}/apply`, { items: [{ key: room.key, item: backwards }] });
+    expect(r.status).toBe(409);
+    expect(r.text).toContain('结束时间');
+    const todo = byName(note, '把日记本做旧');
+    const long = await app.post(`/api/v1/paste/${note.id}/apply`, { items: [{ key: todo.key, item: { ...todo.item, task: '做'.repeat(300) } }] });
+    expect(long.status).toBe(409);
+    expect((await app.post('/api/v1/todos', { text: '  ', assignee_id: null, assignee_name: null, due_date: null, due_time: null })).status).toBe(400);
+    expect((await app.get<Todo[]>('/api/v1/todos')).status).toBe(200);
   });
 
   test('an existing performer is merged into; edits are applied as edited; a scene without setups waits', async () => {

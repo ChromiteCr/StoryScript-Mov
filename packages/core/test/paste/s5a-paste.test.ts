@@ -127,6 +127,12 @@ describe('checking the items', () => {
     expect(pasteItemProblems(item({ kind: 'schedule', scenes: ['2'], rule: 'within' }))).toContain('rule 为 within 时要写 slots');
     expect(pasteItemProblems(item({ kind: 'other', slots: [{ date: '2026-02-30', weekday: null, start: null, end: null, vague: false }] }))).toContain('日期 2026-02-30 不存在');
     expect(isCalendarDate('2028-02-29')).toBe(true);
+    // a span must end after it starts (never read as overnight); a todo's slot is only a due time
+    const late = { date: '2026-10-10', weekday: null, start: '19:00', end: '18:00', vague: false };
+    expect(pasteItemProblems(item({ kind: 'location', name: '教室', slots: [late] }))).toContain('2026-10-10 的结束时间 18:00 要晚于开始时间 19:00');
+    expect(pasteItemProblems(item({ kind: 'todo', task: '借灯', slots: [late] }))).toEqual([]);
+    expect(pasteItemProblems(item({ kind: 'todo', task: '   ' }))).toContain('缺少 task');
+    expect(pasteItemProblems(item({ kind: 'todo', task: '做'.repeat(201) }))).toContain('task 超过 200 字，请缩短');
   });
 
   test('validate → repair messages; finalize drops what is still wrong and keeps the rest', () => {

@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import type { CreateTodoInput, Todo, UpdateTodoInput } from '@storyscript/contracts';
+import { CreateTodoInput, UpdateTodoInput, type Todo } from '@storyscript/contracts';
 import { actorId, actorResolver, currentRequest } from '../collab/actor.ts';
 import type { DbPort } from '../db/port.ts';
 import { AppError } from '../http/errors.ts';
@@ -53,7 +53,7 @@ const getRow = (db: DbPort, id: string) => db.get<TodoRow>(`SELECT ${COLS} FROM 
 export function listTodos(db: DbPort): Todo[] {
   const who = actorResolver(db);
   return db
-    .all<TodoRow>(`SELECT ${COLS} FROM todo ORDER BY done_at IS NOT NULL, CASE WHEN done_at IS NULL THEN due_date IS NULL END, due_date, due_time, done_at DESC, created_at`)
+    .all<TodoRow>(`SELECT ${COLS} FROM todo ORDER BY done_at IS NOT NULL, CASE WHEN done_at IS NULL THEN due_date IS NULL END, CASE WHEN done_at IS NULL THEN due_date END, CASE WHEN done_at IS NULL THEN due_time END, done_at DESC, created_at`)
     .map((r) => view(r, who));
 }
 
@@ -64,8 +64,12 @@ function checkAssignee(id: string | null | undefined): void {
   if (!roster.some((m) => m.id === id)) throw new AppError('VALIDATION_ERROR', '负责人不是本组成员', 400, { assignee_id: id });
 }
 
-export function createTodo(db: DbPort, input: CreateTodoInput & { source_note_id?: string | null }, now = new Date().toISOString()): Todo {
+export function createTodo(db: DbPort, raw: CreateTodoInput & { source_note_id?: string | null }, now = new Date().toISOString()): Todo {
   return db.tx(() => {
+    // the same limits as the route's body, for todos made by 粘贴整理 too (a bad row would break the list)
+    const parsed = CreateTodoInput.safeParse(raw);
+    if (!parsed.success) throw new AppError('VALIDATION_ERROR', '待办的内容不合要求（1–200 字，负责人最多 40 字）', 400);
+    const input = { ...parsed.data, source_note_id: raw.source_note_id ?? null };
     checkAssignee(input.assignee_id);
     const id = randomUUID();
     db.run(
@@ -76,7 +80,7 @@ export function createTodo(db: DbPort, input: CreateTodoInput & { source_note_id
       input.assignee_id ? null : input.assignee_name?.trim() || null,
       input.due_date,
       input.due_date ? input.due_time : null,
-      input.source_note_id ?? null,
+      input.source_note_id,
       actorId(),
       now,
       now,
@@ -92,6 +96,7 @@ export function updateTodo(db: DbPort, id: string, input: UpdateTodoInput, now =
     if (input.expected_revision !== undefined && input.expected_revision !== cur.revision) {
       throw new AppError('REVISION_CONFLICT', '这条待办刚被别人改过，请看一下最新的内容', 409, { todo_id: id, current_revision: cur.revision });
     }
+    if (!UpdateTodoInput.safeParse(input).success) throw new AppError('VALIDATION_ERROR', '待办的内容不合要求（1–200 字，负责人最多 40 字）', 400);
     if (input.assignee_id !== undefined) checkAssignee(input.assignee_id);
     const assigneeId = input.assignee_id !== undefined ? input.assignee_id : cur.assignee_id;
     const assigneeName = assigneeId ? null : input.assignee_name !== undefined ? input.assignee_name?.trim() || null : input.assignee_id !== undefined ? null : cur.assignee_name;

@@ -1,0 +1,105 @@
+# 发布流水线：每完成一项大开发，推一个版本 tag 就自动出包。
+#
+# 为什么不监听 main 上的 README 改动：任何 README 编辑都会误触发，而且拿不到
+# “这是哪个版本号”的语义。tag 才是确定性的交付点（见 AGENTS.md 的版本规则）。
+#
+# 用法：
+#   git tag -a S5a -m "S5a 粘贴整理" && git push origin S5a
+# 推完在 Actions 页看 release 跑，跑完 Releases 里出现 S5a，附件是 tgz；
+# Actions 那次运行的 Artifacts 里也有一份（默认 90 天）。
+#
+# 本文件不需要任何 secret：GITHUB_TOKEN 由 GitHub 自动注入。
+
+name: release
+
+on:
+  push:
+    tags:
+      # 匹配 S5 / S5a / S5a1 这类版本号，不匹配其他 tag
+      - 'S[0-9]*'
+  # 手动触发：只出 Artifacts，不建 Release（手动跑通常没有 tag）
+  workflow_dispatch:
+
+# 建 Release 需要写权限；其余步骤只用读权限
+permissions:
+  contents: write
+
+# 同一个 tag 重复触发时排队，不并发
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+
+      # media 测试要用 ffmpeg/ffprobe（与 ci.yml 一致）。
+      # 如果只想快速出包、跳过测试，把这一步和下面的 typecheck/test 一起删掉。
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+
+      - run: npm ci
+
+      # 发版门禁：不过就不出包
+      - run: npm run typecheck
+      - run: npm test
+
+      # 打包前必须先 build：root build = web 构建 → copy-web → server tsdown。
+      # 发布包的 files 只收 dist/、web/、demo-data/，这三个都是构建产物。
+      - name: Build (web + server package)
+        run: npm run build
+
+      - name: Licenses (THIRD_PARTY_NOTICES.md 必须已提交且最新)
+        run: |
+          npm run licenses
+          git diff --exit-code THIRD_PARTY_NOTICES.md
+
+      # 版本号是双轨的：README 用 S5a1 这类版本，package.json 用 0.10.0。
+      # 这里只打印对照，不阻断；想让包名带上 S 版本号，就得发版时同步 bump
+      # root 与 apps/server 的 version。
+      - name: Report version mapping
+        run: |
+          {
+            echo "tag: \`${GITHUB_REF_NAME}\`"
+            echo
+            echo "package: \`$(node -p "require('./apps/server/package.json').version")\`"
+            echo
+            echo "npm pack 的产物文件名取自 package.json 的 version，与 tag 无关。"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # 与 scripts/smoke-install.mjs 同一套做法：在 apps/server 里 npm pack
+      - name: Pack
+        run: |
+          mkdir -p dist-artifacts
+          (cd apps/server && npm pack --pack-destination "$GITHUB_WORKSPACE/dist-artifacts")
+          ls -l dist-artifacts
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: storyscript-mov-${{ github.ref_name }}
+          path: dist-artifacts/*.tgz
+          retention-days: 90
+
+      # 用 runner 自带的 gh CLI，避免引入第三方 action。
+      # 重复运行同一次 workflow 时不会因为 Release 已存在而失败。
+      - name: GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release upload "$GITHUB_REF_NAME" dist-artifacts/*.tgz --clobber
+          else
+            gh release create "$GITHUB_REF_NAME" dist-artifacts/*.tgz \
+              --title "$GITHUB_REF_NAME" \
+              --generate-notes
+          fi

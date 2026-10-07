@@ -206,7 +206,7 @@ test('S4c boards: renderer upgrade → 重排 → counts and new versions; gestu
     await page.getByRole('region', { name: /镜头表/ }).waitFor();
     await page.locator('li[id^="shot-"]').first().locator('[data-shot-summary]').click();
     const props = page.getByRole('group', { name: '道具与陈设' });
-    await expect(props.getByRole('button')).toHaveCount(18);
+    await expect(props.getByRole('button')).toHaveCount(20); // S5b: + 罐子, 瓶子
     for (const label of ['床', '沙发', '书架', '灯', '树', '手机', '杯子', '书', '包']) await expect(props.getByRole('button', { name: label, exact: true })).toBeVisible();
     const env = page.getByRole('combobox', { name: '环境' });
     await expect(env.locator('option')).toHaveText(['未指定', '开阔外景', '室内', '街道', '野外（树林、山坡）', '走廊', '教室']);

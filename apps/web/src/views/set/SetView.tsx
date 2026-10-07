@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Clapperboard, Download, ScrollText } from 'lucide-react';
+import { ClipboardPaste, Clapperboard, Download, ScrollText } from 'lucide-react';
 import { DEFAULT_SLATE_FORMAT } from '@storyscript/core';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, Spinner, Tag } from '../../components/ui.tsx';
 import { EmptyState, PageHeader, Panel, Workspace } from '../../components/workspace.tsx';
+import { openPaste } from '../../lib/queries-paste.ts';
 import { useCurrentProject } from '../../lib/queries.ts';
 import { useAssets, useLinks, useMediaScript, useMediaShots, usePlansForSet, useSetupsForSet, useTakes } from '../../lib/queries-media.ts';
 import { pageHref, stageDef } from '../../lib/stages.ts';
@@ -90,10 +91,16 @@ export function SetView() {
       lead={lead}
       status={order.source === 'plan' ? <Tag>按已批准计划 {order.plan?.date}</Tag> : refs.length > 0 ? <Tag>按叙事顺序</Tag> : undefined}
       actions={
-        <Button size="sm" onClick={exportCsv} disabled={(takes.data ?? []).length === 0}>
-          <Download aria-hidden className="size-3.5" />
-          导出场记 CSV
-        </Button>
+        <>
+          <Button size="sm" onClick={() => openPaste('set')} title="把群聊或备忘录里的场记整理成条次">
+            <ClipboardPaste aria-hidden className="size-3.5" />
+            粘贴场记
+          </Button>
+          <Button size="sm" onClick={exportCsv} disabled={(takes.data ?? []).length === 0}>
+            <Download aria-hidden className="size-3.5" />
+            导出场记 CSV
+          </Button>
+        </>
       }
     />
   );

@@ -1,6 +1,7 @@
 import type { KeyboardEvent } from 'react';
 import type { Project } from '@storyscript/contracts';
 import {
+  ClipboardPaste,
   CalendarClock,
   Check,
   CircleAlert,
@@ -19,6 +20,7 @@ import { navigate, type View } from '../lib/route.ts';
 import { useSaveState, type SaveState } from '../lib/saveStatus.ts';
 import { currentPage, nextIndex, pageHref, STAGES, type PageId, type StageId } from '../lib/stages.ts';
 import { JobsIndicator } from './JobsIndicator.tsx';
+import { openPaste } from '../lib/queries-paste.ts';
 
 /**
  * The workflow page bar, fixed to the bottom of the window (Resolve's page
@@ -204,6 +206,12 @@ export function PageBar({ project, view }: PageBarProps) {
       {project ? <ProjectSlot project={project} /> : <ManagerSlot current={view !== 'settings'} />}
       <StageNav enabled={open} current={current} />
       <div className="flex shrink-0 items-center justify-end gap-1">
+        {open ? (
+          <button type="button" title="粘贴整理：把群聊里的档期、安排、场记和分工整理进项目" onClick={() => openPaste('auto')} className={pageButtonClass(false, 'w-9 md:w-10')}>
+            <ClipboardPaste aria-hidden className="size-[18px]" strokeWidth={1.75} />
+            <span className="sr-only">粘贴整理</span>
+          </button>
+        ) : null}
         <JobsIndicator enabled={open} />
         <a
           href={pageHref('settings')}

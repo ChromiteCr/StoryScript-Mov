@@ -16,6 +16,7 @@ import {
 import { takeJoinFromLocation } from './lib/join.ts';
 import { keys, useCloseProject, useCurrentProject, useHealth } from './lib/queries.ts';
 import { useCollabSync } from './lib/collab.ts';
+import { usePasteOpen } from './lib/queries-paste.ts';
 import { useView } from './lib/route.ts';
 import { isStage, type StageId } from './lib/stages.ts';
 import { resetSaveState } from './lib/saveStatus.ts';
@@ -40,6 +41,7 @@ const SetView = lazy(() => import('./views/set/SetView.tsx').then((m) => ({ defa
 const MediaView = lazy(() => import('./views/media/MediaView.tsx').then((m) => ({ default: m.MediaView })));
 const BoardsView = lazy(() => import('./views/boards/BoardsPage.tsx'));
 const DeliverView = lazy(() => import('./views/deliver/DeliverView.tsx'));
+const PasteDialog = lazy(() => import('./components/PasteDialog.tsx').then((m) => ({ default: m.PasteDialog })));
 
 // One bootstrap per attempt, shared across StrictMode's double effects so the
 // token is posted once.
@@ -137,6 +139,8 @@ function Workbench({ onGroupChanged }: { onGroupChanged: () => void }) {
   const view = useView();
 
   const current = project.data ?? null;
+  // S5a: 粘贴整理 opens over any page of an open project
+  const pasteOpen = usePasteOpen().open && current !== null;
 
   // S4a: teammates' changes arrive by polling while a project is open (hosted and local); the tab says which page it is on
   useCollabSync(view ?? (current ? 'script' : 'home'), current !== null);
@@ -213,6 +217,11 @@ function Workbench({ onGroupChanged }: { onGroupChanged: () => void }) {
       </main>
       {health.data?.demo ? <DemoBanner /> : null}
       <PageBar project={current} view={view} />
+      {pasteOpen ? (
+        <Suspense fallback={null}>
+          <PasteDialog />
+        </Suspense>
+      ) : null}
     </div>
   );
 }

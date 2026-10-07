@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import { CalendarClock, CalendarPlus } from 'lucide-react';
+import { CalendarClock, CalendarPlus, ClipboardPaste } from 'lucide-react';
 import type { Project } from '@storyscript/contracts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button, SelectInput, Spinner } from '../../components/ui.tsx';
@@ -17,6 +17,8 @@ import { PlanInspector } from './PlanInspector.tsx';
 import { PrintPreview, type PrintMode } from './PrintViews.tsx';
 import { ResourcesPanel } from './ResourcesPanel.tsx';
 import { SetupsPanel } from './SetupsPanel.tsx';
+import { TodoPanel } from './TodoPanel.tsx';
+import { openPaste } from '../../lib/queries-paste.ts';
 
 /**
  * #/plan — shooting-day plan (U-03, FR-06). Left: resources and setups in
@@ -146,6 +148,10 @@ function PlanPage({ project }: { project: Project }) {
                     ))}
                   </SelectInput>
                 ) : null}
+                <Button onClick={() => openPaste('plan')} title="把群聊里的档期、场地、器材和拍摄安排整理进计划">
+                  <ClipboardPaste aria-hidden className="size-3.5" />
+                  粘贴整理
+                </Button>
                 <Button onClick={() => setCreating(true)}>
                   <CalendarPlus aria-hidden className="size-3.5" />
                   新建计划
@@ -158,6 +164,7 @@ function PlanPage({ project }: { project: Project }) {
           <div className="flex min-h-0 flex-1 flex-col gap-1">
             <ResourcesPanel data={data} refDate={refDate} />
             <SetupsPanel data={data} detail={detail} selected={setupId} onSelect={setSetupId} />
+            <TodoPanel timezone={tz} />
           </div>
         }
         right={

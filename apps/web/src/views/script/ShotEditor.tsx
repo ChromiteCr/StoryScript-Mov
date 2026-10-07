@@ -3,6 +3,7 @@ import {
   BoardTemplate,
   CameraAngle,
   DepthPlane,
+  Emotion,
   EnvKind,
   Facing,
   FrameFormat,
@@ -18,13 +19,14 @@ import {
   type Shot,
   type ShotSubject,
 } from '@storyscript/contracts';
-import { TECHNIQUES } from '@storyscript/core';
+import { cleanShotFields, OBJECT_NAME_MAX, TECHNIQUES } from '@storyscript/core';
 import { Check, Copy, History, Lock, LockOpen, Plus, RefreshCw, Sparkles, Trash2 } from 'lucide-react';
 import { unsavedShotText, useCollabFeed, watchersOf, watchersText } from '../../lib/collab.ts';
 import { isRevisionConflict } from '../../lib/errors.ts';
 import {
   ANGLE_LABEL,
   DEPTH_LABEL,
+  EMOTION_LABEL,
   ENV_LABEL,
   FACING_LABEL,
   FRAME_FORMAT_LABEL,
@@ -60,10 +62,9 @@ import { useGoneShotId } from './goneShot.ts';
 const EST_SECONDS_MAX = 120;
 const CAMERA_NOTES_MAX = 300;
 
-/** Old shots have no camera_notes key; null, '' and a missing key all mean "no notes". */
+/** Old shots have no camera_notes / object_name / emotion keys; null, '' and a missing key all mean "none" (core cleanShotFields). */
 function withoutEmptyNotes(fields: ShotFields): ShotFields {
-  const { camera_notes, ...rest } = fields;
-  return typeof camera_notes === 'string' && camera_notes.trim() !== '' ? { ...rest, camera_notes } : (rest as ShotFields);
+  return cleanShotFields(fields);
 }
 
 // ------------------------------------------------------------ primitives ---
@@ -134,12 +135,14 @@ function MiniSelect<T extends string>({
   options,
   labels,
   onChange,
+  nullLabel = '默认',
 }: {
   label: string;
   value: T | null;
   options: readonly T[];
   labels: Record<T, string>;
   onChange: (v: T | null) => void;
+  nullLabel?: string;
 }) {
   const id = useId();
   return (
@@ -148,7 +151,7 @@ function MiniSelect<T extends string>({
         {label}
       </label>
       <SelectInput id={id} value={value ?? ''} onChange={(e) => onChange(e.target.value === '' ? null : (e.target.value as T))}>
-        <option value="">默认</option>
+        <option value="">{nullLabel}</option>
         {options.map((o) => (
           <option key={o} value={o}>
             {labels[o]}
@@ -329,6 +332,7 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
       est_seconds: est.value ?? form.fields.est_seconds,
       dialogue_quote: form.dialogue.trim() === '' ? null : form.dialogue.trim(),
       camera_notes: form.notes.trim() === '' ? null : form.notes.trim(),
+      object_name: form.fields.object_name?.trim() ? form.fields.object_name.trim() : null,
       narrative_purpose: form.fields.narrative_purpose.trim(),
       action: form.fields.action.trim(),
       assumptions: linesToList(form.assumptions),
@@ -579,6 +583,14 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
                   <MiniSelect label="景深" value={s.depth} options={DepthPlane.options} labels={DEPTH_LABEL} onChange={(v) => setSubject(i, { depth: v })} />
                   <MiniSelect label="朝向" value={s.facing} options={Facing.options} labels={FACING_LABEL} onChange={(v) => setSubject(i, { facing: v })} />
                   <MiniSelect label="姿势" value={s.pose} options={Pose.options} labels={POSE_LABEL} onChange={(v) => setSubject(i, { pose: v })} />
+                  <MiniSelect
+                    label="情绪"
+                    value={s.emotion ?? null}
+                    options={Emotion.options}
+                    labels={EMOTION_LABEL}
+                    nullLabel="自动（按动作）"
+                    onChange={(v) => setSubject(i, { emotion: v })}
+                  />
                 </div>
               </div>
             ))}
@@ -634,6 +646,17 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
                 })}
               </div>
             </div>
+            <Stacked label="物件名称" hint="特写或插入镜头拍的那件东西叫什么（如「水果罐头」），分镜上会写在它旁边">
+              {(id) => (
+                <TextInput
+                  id={id}
+                  value={f.object_name ?? ''}
+                  onChange={(e) => setF('object_name', e.target.value === '' ? null : e.target.value)}
+                  maxLength={OBJECT_NAME_MAX}
+                  placeholder="不填时按道具条目和动作描写推断"
+                />
+              )}
+            </Stacked>
             <EnumRow label="环境" value={f.env} options={EnvKind.options} labels={ENV_LABEL} nullLabel="未指定" onChange={(v) => setF('env', v)} />
             <EnumRow label="主体运动" value={f.subject_motion} options={SubjectMotion.options} labels={SUBJECT_MOTION_LABEL} onChange={(v) => v && setF('subject_motion', v)} />
             <label className="flex items-center gap-2 text-sm text-graphite-100">

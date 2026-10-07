@@ -20,6 +20,7 @@ import {
   DEPTH_LABEL,
   DRAFT_STATUS_LABEL,
   ENV_LABEL,
+  EMOTION_LABEL,
   FACING_LABEL,
   FRAME_FORMAT_LABEL,
   POSE_LABEL,
@@ -163,6 +164,7 @@ function ItemCard({ item, checked, code, disabled, onToggle }: { item: Breakdown
                     s.depth ? DEPTH_LABEL[s.depth] : null,
                     s.facing ? FACING_LABEL[s.facing] : null,
                     s.pose ? POSE_LABEL[s.pose] : null,
+                    s.emotion ? EMOTION_LABEL[s.emotion] : null,
                   ]
                     .filter(Boolean)
                     .join(' '),

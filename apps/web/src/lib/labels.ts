@@ -3,6 +3,7 @@ import type {
   CameraAngle,
   DepthPlane,
   DraftStatus,
+  Emotion,
   EntityType,
   EnvKind,
   Facing,
@@ -19,6 +20,7 @@ import type {
   ShotFields,
   ShotSize,
   SubjectMotion,
+  TimeOfDay,
 } from '@storyscript/contracts';
 
 /**
@@ -121,6 +123,26 @@ export const PROP_LABEL: Record<PropKind, string> = {
   cup: '杯子',
   book: '书',
   bag: '包',
+  can: '罐子',
+  bottle: '瓶子',
+};
+
+/** S5b: what a person feels in the shot (face and body on the board) */
+export const EMOTION_LABEL: Record<Emotion, string> = {
+  neutral: '平静',
+  happy: '开心',
+  sad: '难过',
+  angry: '生气',
+  afraid: '害怕',
+  surprised: '吃惊',
+  tense: '紧张',
+};
+
+/** S5b: the light of a board */
+export const TIME_OF_DAY_LABEL: Record<TimeOfDay, string> = {
+  day: '日',
+  dusk: '黄昏',
+  night: '夜',
 };
 
 export const ENV_LABEL: Record<EnvKind, string> = {
@@ -212,6 +234,7 @@ export const SHOT_FIELD_LABEL: Record<keyof ShotFields, string> = {
   focal_mm: '焦段',
   movement: '运动',
   camera_notes: '拍法说明',
+  object_name: '物件名称',
   subjects: '人物',
   props: '道具',
   env: '环境',

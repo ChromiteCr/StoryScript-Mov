@@ -1,5 +1,5 @@
 import { useEffect, useId, useState, type ReactNode } from 'react';
-import { Pose, type BoardArrow, type BoardSpec, type FrameFormat, type ShotFields, type Silhouette } from '@storyscript/contracts';
+import { Emotion, Pose, TimeOfDay, type BoardArrow, type BoardSpec, type FrameFormat, type ShotFields, type Silhouette } from '@storyscript/contracts';
 import { lintBoard } from '@storyscript/core';
 import { CircleAlert, TriangleAlert } from 'lucide-react';
 import {
@@ -14,6 +14,7 @@ import {
   setAspect,
   setCameraHeight,
   setDepthBand,
+  setEmotion,
   setFacing8,
   setFocal,
   setGuide143,
@@ -24,6 +25,7 @@ import {
   setPose,
   setRoll,
   setSilhouette,
+  setTimeOfDay,
   setTone,
   type DepthBand,
   type Facing8,
@@ -38,7 +40,7 @@ import {
   SILHOUETTE_LABEL,
   TONE_OPTIONS,
 } from '../../lib/labels-boards.ts';
-import { FRAME_FORMAT_LABEL, POSE_LABEL } from '../../lib/labels.ts';
+import { EMOTION_LABEL, FRAME_FORMAT_LABEL, POSE_LABEL, TIME_OF_DAY_LABEL } from '../../lib/labels.ts';
 import { CommentsPanel } from '../../components/CommentsPanel.tsx';
 import { Button, SelectInput, TextInput } from '../../components/ui.tsx';
 import { Inspector, InspectorGroup, InspectorRow } from '../../components/workspace.tsx';
@@ -226,6 +228,20 @@ export function BoardInspector({ editor, readOnly, fields, keepSize, onKeepSize,
                 ))}
               </SelectInput>
             </InspectorRow>
+            <InspectorRow label="情绪">
+              <SelectInput
+                aria-label="情绪"
+                disabled={readOnly}
+                value={subject.emotion ?? 'neutral'}
+                onChange={(e) => commit('改情绪', (s) => setEmotion(s, subject.id, e.target.value as Emotion))}
+              >
+                {Emotion.options.map((x) => (
+                  <option key={x} value={x}>
+                    {EMOTION_LABEL[x]}
+                  </option>
+                ))}
+              </SelectInput>
+            </InspectorRow>
             {gesture && subject ? (
               <InspectorRow label="手势">
                 <div className="flex items-center gap-2">
@@ -368,11 +384,20 @@ export function BoardInspector({ editor, readOnly, fields, keepSize, onKeepSize,
             1.43 中心保护线
           </Check>
         </InspectorRow>
+        <InspectorRow label="时段">
+          <SelectInput aria-label="时段" disabled={readOnly} value={spec.scene.time ?? 'day'} onChange={(e) => commit('改时段', (s) => setTimeOfDay(s, e.target.value as TimeOfDay))}>
+            {TimeOfDay.options.map((t) => (
+              <option key={t} value={t}>
+                {TIME_OF_DAY_LABEL[t]}
+              </option>
+            ))}
+          </SelectInput>
+        </InspectorRow>
       </InspectorGroup>
 
       <InspectorGroup title="标注" note={spec.overlay.arrows.length ? <p className="text-xs text-graphite-300">拖动箭头两端的小方块改端点。</p> : null}>
         {spec.overlay.labels.map((l) => (
-          <InspectorRow key={l.id} label="标签">
+          <InspectorRow key={l.id} label={l.prop_id ? '物件名称' : '标签'}>
             <LabelField id={l.id} text={l.text} disabled={readOnly} onCommit={(t) => commit('改标签文字', (s) => setLabelText(s, l.id, t))} />
           </InspectorRow>
         ))}

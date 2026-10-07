@@ -182,7 +182,7 @@ describe('the new poses, props and places reach the editors', () => {
   it('the pose select can offer 躺 跪 伸手 打电话, the shot editor the nine new props and three new places', () => {
     expect([POSE_LABEL.lie, POSE_LABEL.kneel, POSE_LABEL.reach, POSE_LABEL.phone]).toEqual(['躺', '跪', '伸手', '打电话']);
     expect(['bed', 'sofa', 'shelf', 'lamp', 'tree', 'phone', 'cup', 'book', 'bag'].every((p) => PropKind.options.includes(p as never))).toBe(true);
-    expect(PropKind.options).toHaveLength(18);
+    expect(PropKind.options).toHaveLength(20); // S5b: + can, bottle
     expect(['nature', 'corridor', 'classroom'].every((e) => EnvKind.options.includes(e as never))).toBe(true);
   });
 });

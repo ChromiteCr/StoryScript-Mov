@@ -16,6 +16,7 @@ import type { InputOf } from './api.ts';
 import {
   DEPTH_LABEL,
   ENV_LABEL,
+  EMOTION_LABEL,
   FACING_LABEL,
   FRAME_FORMAT_LABEL,
   POSE_LABEL,
@@ -308,7 +309,7 @@ export function fieldText(key: keyof ShotFields, f: PolishedShotFields, aliasLab
         ? NONE
         : f.subjects
             .map((s) =>
-              [aliasLabel(s.alias), s.screen ? SCREEN_POS_LABEL[s.screen] : null, s.depth ? DEPTH_LABEL[s.depth] : null, s.facing ? FACING_LABEL[s.facing] : null, s.pose ? POSE_LABEL[s.pose] : null]
+              [aliasLabel(s.alias), s.screen ? SCREEN_POS_LABEL[s.screen] : null, s.depth ? DEPTH_LABEL[s.depth] : null, s.facing ? FACING_LABEL[s.facing] : null, s.pose ? POSE_LABEL[s.pose] : null, s.emotion ? EMOTION_LABEL[s.emotion] : null]
                 .filter(Boolean)
                 .join(' '),
             )
@@ -337,6 +338,8 @@ export function fieldText(key: keyof ShotFields, f: PolishedShotFields, aliasLab
       return f.dialogue_quote ? `「${f.dialogue_quote}」` : NONE;
     case 'camera_notes':
       return f.camera_notes?.trim() || NONE;
+    case 'object_name':
+      return f.object_name?.trim() || NONE;
     case 'assumptions':
       return f.assumptions.length === 0 ? NONE : f.assumptions.join('；');
     case 'questions':

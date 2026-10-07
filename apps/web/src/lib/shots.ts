@@ -144,8 +144,16 @@ export function emptySubject(alias: string): ShotSubject {
 /** ShotFields keys that differ between two revisions (label order, see SHOT_FIELD_LABEL). */
 export function changedFieldKeys(prev: ShotFields | null, next: ShotFields): (keyof ShotFields)[] {
   if (!prev) return [];
-  // camera_notes: a missing key, null and '' all mean "no notes"
-  const val = (f: ShotFields, k: keyof ShotFields): unknown => (k === 'camera_notes' ? f.camera_notes?.trim() || null : f[k]);
+  // camera_notes / object_name: a missing key, null and '' all mean "none"; a subject's
+  // emotion: missing and null both mean "read from the action" (S5b)
+  const val = (f: ShotFields, k: keyof ShotFields): unknown =>
+    k === 'camera_notes'
+      ? f.camera_notes?.trim() || null
+      : k === 'object_name'
+        ? f.object_name?.trim() || null
+        : k === 'subjects'
+          ? f.subjects.map(({ emotion, ...rest }) => (emotion ? { ...rest, emotion } : rest))
+          : f[k];
   return (Object.keys(SHOT_FIELD_LABEL) as (keyof ShotFields)[]).filter((k) => stableKey(val(prev, k)) !== stableKey(val(next, k)));
 }
 

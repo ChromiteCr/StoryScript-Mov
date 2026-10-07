@@ -1,4 +1,4 @@
-import type { BoardArrow, BoardSpec, BoardSubject, FrameFormat, Pose, ShotFields, Silhouette } from '@storyscript/contracts';
+import type { BoardArrow, BoardSpec, BoardSubject, Emotion, FrameFormat, Pose, ShotFields, Silhouette, TimeOfDay } from '@storyscript/contracts';
 import {
   arrowWorldHeights,
   cameraBasis,
@@ -7,6 +7,7 @@ import {
   frameSize,
   gestureCount,
   LOOK_WIDE_PENCIL,
+  TIME_LIGHT,
   NEAR_M,
   placeArrow,
   poseTopY,
@@ -199,6 +200,24 @@ export function setPose(spec: BoardSpec, id: string, pose: Pose): BoardSpec {
     if (s.pose !== pose && s.gesture != null) s.gesture = null; // a gesture belongs to its pose: back to the seed's pick
     s.pose = pose;
   });
+}
+
+/** S5b: a person's feeling (null or neutral: a calm face, stored as absent). */
+export function setEmotion(spec: BoardSpec, id: string, emotion: Emotion | null): BoardSpec {
+  return withSubject(spec, id, (s) => {
+    if (emotion && emotion !== 'neutral') s.emotion = emotion;
+    else delete s.emotion;
+  });
+}
+
+/** S5b: the board's light (day is stored as absent, like boards laid out before S5b). */
+export function setTimeOfDay(spec: BoardSpec, time: TimeOfDay): BoardSpec {
+  const next = clone(spec);
+  const light = TIME_LIGHT[time];
+  next.scene.light = { ...light };
+  if (time === 'day') delete next.scene.time;
+  else next.scene.time = time;
+  return next;
 }
 
 /** How a pose's gesture variants are read: core's tables, or others injected by a test. */

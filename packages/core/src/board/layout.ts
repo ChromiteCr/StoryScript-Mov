@@ -914,10 +914,24 @@ export function layoutBoard(shot: ShotFields, ctx: LayoutContext): BoardSpec {
       const FW = 1840;
       const FH = FW / Number(aspect);
       const tw = labelWidthPx(objectName) / FW;
-      const right = c.x < 0.62;
-      let x = right ? c.x + 0.07 : c.x - 0.07 - tw;
-      let y = c.y - 0.16;
-      if (y < 0.12) y = c.y + 0.22;
+      const th = 34 / FH;
+      // the object's extent in frame (its box corners): the label goes beside it, not on it
+      const r = Math.max(named.w, named.d) / 2;
+      const corners = [named.y, named.y + named.h].flatMap((y) =>
+        [-1, 1].flatMap((sx) => [-1, 1].map((sz) => projectPoint(basis, [named.x + sx * r, y, named.z + sz * r]))),
+      );
+      const seen = corners.filter((q) => q.visible);
+      const box = seen.length
+        ? { x0: Math.min(...seen.map((q) => q.x)), x1: Math.max(...seen.map((q) => q.x)), y0: Math.min(...seen.map((q) => q.y)), y1: Math.max(...seen.map((q) => q.y)) }
+        : { x0: c.x, x1: c.x, y0: c.y, y1: c.y };
+      const gap = 0.025;
+      const baseline = (top: number) => top + th * 0.8;
+      let x: number;
+      let y: number;
+      if (box.x1 + gap + tw <= 0.98) [x, y] = [box.x1 + gap, baseline(Math.max(box.y0, 0.1))];
+      else if (box.x0 - gap - tw >= 0.02) [x, y] = [box.x0 - gap - tw, baseline(Math.max(box.y0, 0.1))];
+      else if (box.y0 - gap - th >= 0.1) [x, y] = [c.x - tw / 2, box.y0 - gap];
+      else [x, y] = [c.x + 0.07, c.y - 0.16 < 0.12 ? c.y + 0.22 : c.y - 0.16];
       x = clamp(x, 0.02, 0.98 - tw);
       y = clamp(y, 0.12, 0.86 - 10 / FH);
       labels.push({ id: 'l-object', text: objectName, x: round(x, 4), y: round(y, 4), prop_id: named.id });

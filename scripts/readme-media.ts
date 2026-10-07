@@ -2,7 +2,9 @@
  * README images, taken from the real `--demo` project (nothing staged by
  * hand): a short hero GIF of the workflow, a contact sheet of the demo's
  * pencil boards rendered by the same core renderer the app uses, and one
- * screenshot per feature group.
+ * screenshot per feature group. Plus (S5b) board-moods.png: six of the
+ * renderer's fixture shots — feelings, night, dusk, a named object — since the
+ * demo's scenes are all by day; the README says where it comes from.
  *
  *   npm run readme:media -- [--out docs/media] [--skip-build] [--no-gif]
  *
@@ -14,8 +16,8 @@ import { mkdir, stat, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { chromium, type Browser, type Page } from '@playwright/test';
-import type { BoardView, Shot } from '@storyscript/contracts';
-import { renderBoard } from '@storyscript/core';
+import type { BoardView, Emotion, Shot } from '@storyscript/contracts';
+import { layoutBoard, renderBoard, shotFields, standardBoard, STANDARD_LOOK, STANDARD_ROSTER, standardSubject as subject, VARIETY_SHOTS } from '@storyscript/core';
 import { api, buildWeb, ROOT, signInAnywhere, startApp, type RunningApp } from '../e2e/support.ts';
 
 const { values } = parseArgs({
@@ -63,6 +65,9 @@ function pickBoards(boards: BoardView[], shots: Shot[]): BoardView[] {
     if (b && !picked.includes(b) && picked.length < 6) picked.push(b);
   };
   add(scene.find((b) => people(b) >= 2));
+  // S5b: a face with a feeling, and an insert that names its object
+  add(scene.find((b) => b.spec.scene.subjects.some((x) => x.emotion)));
+  add(scene.find((b) => b.spec.overlay.labels.some((l) => l.prop_id)));
   const sizes = new Set(picked.map((b) => sizeOf.get(b.shot_id)));
   for (const b of scene) {
     const size = sizeOf.get(b.shot_id);
@@ -92,6 +97,37 @@ async function contactSheet(browser: Browser, page: Page): Promise<void> {
   await sheet.setContent(html);
   await sheet.waitForTimeout(300);
   const path = join(OUT, 'pencil-boards.png');
+  await sheet.locator('.grid').screenshot({ path });
+  await ctx.close();
+  await report(path);
+}
+
+/** S5b: feelings, night, dusk and a named object, from the renderer's fixture shots. */
+async function moodSheet(browser: Browser): Promise<void> {
+  const ctxOf = (o: { time_label?: string } = {}) => ({ scene_sides: null, roster: STANDARD_ROSTER, look: STANDARD_LOOK, technique: null, aspect: '2.39' as const, seed: 7, ...o });
+  const face = (alias: string, emotion: Emotion, facing: 'camera' | '3q_left' | '3q_right') =>
+    layoutBoard(shotFields({ shot_size: 'CU', env: 'interior', subjects: [subject(alias, { facing, emotion })] }), ctxOf());
+  const variety = (key: string) => standardBoard(VARIETY_SHOTS.find((s) => s.key === key)!);
+  const can = layoutBoard(shotFields({ template: 'insert', shot_size: 'INSERT', angle: 'high', env: 'interior', props: ['table', 'can'], object_name: '水果罐头' }), ctxOf());
+  const specs = [
+    { spec: face('c2', 'happy', '3q_right'), code: '开心' },
+    { spec: face('c1', 'sad', 'camera'), code: '难过' },
+    { spec: face('c4', 'surprised', '3q_left'), code: '吃惊' },
+    { spec: variety('v13-night-street'), code: '夜' },
+    { spec: variety('v14-dusk-field'), code: '黄昏' },
+    { spec: can, code: '物件名称' },
+  ];
+  const cells = specs.map(({ spec, code }) => `<div class="cell">${renderBoard(spec, 'pencil', { overlay: true, code })}</div>`);
+  const html = `<!doctype html><meta charset="utf-8"><style>
+    html,body{margin:0;background:#1d1e20}
+    .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:12px;width:1572px}
+    .cell svg{display:block;width:100%;height:auto}
+  </style><div class="grid">${cells.join('')}</div>`;
+  const ctx = await browser.newContext({ viewport: { width: 1600, height: 900 }, deviceScaleFactor: 1 });
+  const sheet = await ctx.newPage();
+  await sheet.setContent(html);
+  await sheet.waitForTimeout(300);
+  const path = join(OUT, 'board-moods.png');
   await sheet.locator('.grid').screenshot({ path });
   await ctx.close();
   await report(path);
@@ -206,6 +242,7 @@ async function main(): Promise<void> {
     if (title !== '剧本') throw new Error(`expected the demo project's script page, got "${title}"`);
     await screenshots(page);
     await contactSheet(browser, page);
+    await moodSheet(browser);
     await ctx.close();
     if (!values['no-gif']) await heroGif(browser, app);
   } finally {

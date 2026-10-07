@@ -34,6 +34,7 @@ import {
 import { allRoots, AREA_ROOTS, COLLAB_AREAS, isCoveredKey, rootsOfAreas } from '../src/lib/collab-areas.ts';
 import { boardKeys } from '../src/lib/queries-boards.ts';
 import { castKeys } from '../src/lib/queries-cast.ts';
+import { checkKeys } from '../src/lib/queries-check.ts';
 import { deliverKeys } from '../src/lib/queries-deliver.ts';
 import { mediaKeys } from '../src/lib/queries-media.ts';
 import { planKeys } from '../src/lib/queries-plan.ts';
@@ -88,7 +89,7 @@ describe('area → query roots', () => {
   it('covers every query key the app uses', () => {
     const cases: [string, readonly unknown[]][] = [];
     const add = (name: string, k: unknown) => cases.push([name, (typeof k === 'function' ? (k as (...a: string[]) => unknown[])('x', 'y', 'z') : k) as unknown[]]);
-    const sources: Record<string, Record<string, unknown>> = { keys, planKeys, boardKeys, mediaKeys, deliverKeys, styleKeys, castKeys, rasterKeys };
+    const sources: Record<string, Record<string, unknown>> = { keys, planKeys, boardKeys, mediaKeys, deliverKeys, styleKeys, castKeys, rasterKeys, checkKeys };
     for (const [group, obj] of Object.entries(sources)) {
       for (const [name, k] of Object.entries(obj)) {
         if (name === 'all' || name === 'plan') continue; // whole-page prefixes, not queries

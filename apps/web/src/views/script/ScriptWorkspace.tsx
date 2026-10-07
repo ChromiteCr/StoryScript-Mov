@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CurrentScript, Paragraph, Project, Shot, ShotDraft } from '@storyscript/contracts';
-import { Palette, ScrollText, Upload } from 'lucide-react';
+import { ListChecks, Palette, ScrollText, Upload } from 'lucide-react';
 import { setCollabFocus } from '../../lib/collab.ts';
 import { actorPhrase } from '../../lib/crew.ts';
 import { draftSceneId } from '../../lib/drafts.ts';
@@ -11,6 +11,9 @@ import { locateParagraph } from '../../lib/shots.ts';
 import { stageDef } from '../../lib/stages.ts';
 import { useMediaQuery, WIDE_QUERY } from '../../lib/useMediaQuery.ts';
 import { ActorLabel } from '../../components/ActorLabel.tsx';
+import { useScriptCheck } from '../../lib/queries-check.ts';
+import { riskList } from '../../lib/check.ts';
+import { CheckPanel } from './CheckPanel.tsx';
 import { Dialog } from '../../components/Dialog.tsx';
 import { Button, Tag } from '../../components/ui.tsx';
 import { PageHeader, Panel, Workspace } from '../../components/workspace.tsx';
@@ -54,6 +57,7 @@ const TABS: { id: MainTab; label: string }[] = [
   { id: 'shots', label: '镜头表' },
   { id: 'script', label: '剧本原文' },
   { id: 'roster', label: '角色、地点与道具' },
+  { id: 'check', label: '体检' },
 ];
 
 /**
@@ -78,6 +82,9 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   );
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [tab, setTab] = useState<MainTab>('shots');
+  // S5: on wide screens the check takes the shot table's place beside the script
+  const [checkOpen, setCheckOpen] = useState(false);
+  const check = useScriptCheck();
   const [draftId, setDraftId] = useState<string | null>(null);
   const [entityDraftId, setEntityDraftId] = useState<string | null>(null);
   const [revisionsOf, setRevisionsOf] = useState<Shot | null>(null);
@@ -109,7 +116,11 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
     [entityList],
   );
 
-  const showTab = useCallback((t: MainTab) => setTab(t), []);
+  const showTab = useCallback((t: MainTab) => {
+    setTab(t);
+    if (t === 'shots') setCheckOpen(false);
+    if (t === 'check') setCheckOpen(true);
+  }, []);
   const openStyles = useCallback(() => setStylesOpen(true), []);
 
   // Ticks: only live, unlocked shots; a shot that disappears or gets locked drops out.
@@ -336,6 +347,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   );
 
   const relinkCount = useMemo(() => liveShots.filter((s) => s.needs_relink).length, [liveShots]);
+  const openRisks = useMemo(() => (check.data ? riskList(check.data.risks, script.scenes, false).counts.open : 0), [check.data, script.scenes]);
 
   const versionNo = useMemo(() => {
     const list = versions.data ?? [];
@@ -384,6 +396,16 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
               {relinkOnly ? '显示全部镜头' : `${relinkCount} 个待重新关联`}
             </Button>
           ) : null}
+          <Button
+            onClick={() => (wide ? setCheckOpen((o) => !o) : setTab('check'))}
+            aria-pressed={wide ? checkOpen : tab === 'check'}
+            title="剧本体检：预估片长，以及 AI 找出的拍摄难点"
+            className={(wide ? checkOpen : tab === 'check') ? 'bg-graphite-800 text-graphite-100' : ''}
+          >
+            <ListChecks aria-hidden className="size-3.5" />
+            体检
+            {openRisks > 0 ? <span className="text-xs text-graphite-300 tabular-nums">{openRisks}</span> : null}
+          </Button>
           <Button onClick={openStyles} title="风格库：内置和本组的风格卡、研究新风格、默认难度">
             <Palette aria-hidden className="size-3.5" />
             风格
@@ -401,6 +423,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
   const shotPanel = <ShotTable shotsQuery={shots} relinkOnly={relinkOnly} notice={notice} onDismissNotice={() => onNotice(null)} />;
   const scenesPanel = <ScenesPanel shots={liveShots} />;
   const entitiesPanel = <EntitiesPanel entitiesQuery={entities} />;
+  const checkPanel = <CheckPanel onClose={wide ? () => setCheckOpen(false) : undefined} />;
 
   const inspectorKey = !inspector ? 'none' : inspector.kind === 'shot' ? `shot:${inspector.shotId}` : `${inspector.kind}:${inspector.sceneId}:${inspector.kind === 'scene' ? (inspector.focus ?? '') : ''}`;
   const inspectorPanel = (
@@ -425,7 +448,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
       >
         <div className="grid min-h-0 flex-1 grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] gap-1">
           {scriptPanel}
-          {shotPanel}
+          {checkOpen ? checkPanel : shotPanel}
         </div>
       </Workspace>
     );
@@ -442,7 +465,8 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
                 aria-selected={tab === t.id}
                 onClick={() => setTab(t.id)}
                 className={
-                  'h-8 flex-1 rounded-control text-sm focus-visible:outline-offset-[-2px] ' +
+                  // sized by their labels, so four fit a phone
+                  'h-8 flex-auto rounded-control px-2 text-sm whitespace-nowrap focus-visible:outline-offset-[-2px] ' +
                   (tab === t.id ? 'bg-graphite-800 font-medium text-graphite-100' : 'text-graphite-300 hover:text-graphite-100')
                 }
               >
@@ -451,7 +475,7 @@ export function ScriptWorkspace({ project, script, onImportNew, notice, onNotice
             ))}
           </div>
           <div role="tabpanel" className="flex min-h-[60dvh] flex-1 flex-col gap-1">
-            {tab === 'script' ? scriptPanel : tab === 'shots' ? shotPanel : (
+            {tab === 'script' ? scriptPanel : tab === 'shots' ? shotPanel : tab === 'check' ? checkPanel : (
               <>
                 {scenesPanel}
                 {entitiesPanel}

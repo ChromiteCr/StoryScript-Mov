@@ -279,6 +279,8 @@ export function useImportScript() {
       void qc.invalidateQueries({ queryKey: keys.scriptVersions });
       void qc.invalidateQueries({ queryKey: keys.shots });
       void qc.invalidateQueries({ queryKey: keys.drafts });
+      // S5: the check places its items in the new version
+      void qc.invalidateQueries({ queryKey: ['script', 'check'] });
     },
   });
 }

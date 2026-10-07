@@ -33,7 +33,7 @@ export type InspectorTarget =
   | { kind: 'create'; sceneId: string };
 
 /** Narrow screens: the main area shows one panel at a time. */
-export type MainTab = 'script' | 'shots' | 'roster';
+export type MainTab = 'script' | 'shots' | 'roster' | 'check';
 
 export type AnchorLike = { paragraph_id: string; quote: string; script_version_id?: string };
 

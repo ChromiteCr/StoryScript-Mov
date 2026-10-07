@@ -4,7 +4,7 @@
 
 ## 1 目标
 
-1. **剧本体检**（剧本页新标签「体检」）：
+1. **剧本体检**（剧本页标题栏的「体检」按钮）：
    - **预估片长**：按场给出，由规则计算，不用模型，没有 key 也能看。
    - **拍摄难点**：AI 按场标出，每条有类别、严重程度、剧本原文引用、一句难点说明，以及一条适合学生的替代方案（最多 80 字）。
    - 难点显示为待办清单，可以勾选「已处理」。剧本改版后，引用对不上的条目标为过期。
@@ -35,7 +35,7 @@
   - 全片对照项目的目标时长 `target_duration_s`（有设时才显示）。
 - **标签：** 每场从标题读出内景、外景或内外景（内、外、内景、外景、INT、EXT），再加上已有的 `time_label`（日、夜……），作为标签显示。
 
-数字用 01-bookshop 样例校准：第 1 场约 1 分半，第 2 场约 40 秒。
+数字用 01-bookshop 样例校准：第 1 场 1:48，第 2 场 0:37，全片 2:25。
 
 ## 3 拍摄难点（AI）
 
@@ -113,14 +113,16 @@ CREATE TABLE script_risk (
 
 | 路由 | 说明 |
 |---|---|
-| `GET /api/v1/script/check` → `ScriptCheckView` | `{ estimate, check, risks }`。`check` 包括 id、版本、时间、发起人、模型、状态、issues、是否是当前版本。每条 risk 带当前的 `paragraph_id`、`scene_id`、`stale` 和 `handled: {at, actor} \| null` |
-| `POST /api/v1/script/check` → `Job` | 发起体检。没有剧本时返回 409 |
-| `PUT /api/v1/script/risks/:id/handled` `{handled}` → `ScriptRisk` | 任何组员都可以勾选或取消 |
+| `GET /api/v1/scripts/check` → `ScriptCheckView` | `{ estimate, check, risks }`。`check` 包括 id、版本、时间、发起人、模型、状态、issues、是否是当前版本。每条 risk 带当前的 `paragraph_id`、`scene_id`、`stale` 和 `handled: {at, actor} \| null` |
+| `POST /api/v1/scripts/check` → `Job` | 发起体检。没有剧本时返回 409 |
+| `PUT /api/v1/scripts/risks/:id/handled` `{handled}` → `ScriptRisk` | 任何组员都可以勾选或取消 |
 
 - 改动流：发起体检记 `jobs`；任务结束时记 `jobs`、`script`；勾选记 `script`。
 - 服务器版的 actor 规则不变：体检记录发起人，勾选记录勾选人。
 
-### 3.6 界面（剧本页 → 「体检」标签）
+### 3.6 界面（剧本页 → 「体检」）
+
+- **位置：** 标题栏的「体检」按钮（旁边显示未处理条数）。宽屏时体检面板替换主区右半边的镜头表，剧本原文仍在左边，点引用可以直接看到高亮；再点按钮或面板的关闭按钮回到镜头表。窄屏时是第四个标签「体检」。
 
 - **片长卡片：**
   - 「预估片长 约 6 分 10 秒（4:40–8:00），按字数粗估」。设了目标时长时，后面加「目标 5 分钟，超出约 23%」。

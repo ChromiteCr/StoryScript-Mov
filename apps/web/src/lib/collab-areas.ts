@@ -38,7 +38,8 @@ export const AREA_ROOTS: Readonly<Record<CollabArea, readonly QueryRoot[]>> = {
   drafts: [['drafts'], ['plan', 'draft']],
   jobs: [['jobs'], ['m6', 'job'], ['plan', 'job']],
   project: [['project'], ['health']],
-  settings: [['settings'], ['health']],
+  // S5: a unit price the leader changes shows in the usage report
+  settings: [['settings'], ['health'], ['jobs', 'usage']],
   members: [['me']],
   comments: [['comments']],
 };

@@ -11,6 +11,7 @@ import { Inspector, InspectorGroup, InspectorRow, PageHeader, Panel, Workspace }
 import { TextProviderPanel } from './TextProviderPanel.tsx';
 import { HostedModels } from './settings/HostedModels.tsx';
 import { ImageProviderPanel } from './settings/ImageProviderPanel.tsx';
+import { UsagePanel } from './settings/UsagePanel.tsx';
 
 /**
  * Settings: category list on the left, an inspector on the right. Not a
@@ -21,6 +22,7 @@ const CATEGORIES = [
   { id: 'general', label: '常规' },
   { id: 'environment', label: '环境检查' },
   { id: 'models', label: '模型' },
+  { id: 'usage', label: '用量' },
 ] as const;
 type Category = (typeof CATEGORIES)[number]['id'];
 
@@ -284,6 +286,8 @@ export function SettingsView() {
     content = <General health={health.data} project={project.data ?? null} />;
   } else if (category === 'environment') {
     content = <Environment health={health.data} />;
+  } else if (category === 'usage') {
+    content = project.data ? <UsagePanel /> : <p className="p-3 text-sm text-graphite-300">打开一个项目后，这里显示它的模型用量。</p>;
   } else {
     content = <Models />;
   }

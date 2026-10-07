@@ -191,7 +191,7 @@ describe('AT-01 project open/lock rules', () => {
 
     writeFileSync(manifestFile, original);
     const db = openDb(join(data(dir), 'project.sqlite'));
-    db.exec('PRAGMA user_version = 7');
+    db.exec(`PRAGMA user_version = ${PROJECT_SCHEMA_VERSION + 1}`);
     db.close();
     await expectAppError(openProject(dir), 'SCHEMA_VERSION_UNSUPPORTED');
     expect(existsSync(join(data(dir), LOCK_FILE))).toBe(false);

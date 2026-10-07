@@ -58,10 +58,12 @@ export interface JobLineProps {
   onSucceeded: (job: Job) => void | Promise<void>;
   /** a failed job may still have written a draft (e.g. the last attempt with errors): offer to open it */
   onOpenDraft?: (draftId: string) => void;
+  /** what happens once the job succeeded (default: the draft opens) */
+  successNote?: string;
 }
 
 /** Status of the AI job followed in `slot`: queued / running / failure reason / attempts / usage (FR-11). */
-export function JobLine({ slot, onSucceeded, onOpenDraft }: JobLineProps) {
+export function JobLine({ slot, onSucceeded, onOpenDraft, successNote = '正在打开草案…' }: JobLineProps) {
   const qc = useQueryClient();
   const tracked = useTrackedJob(slot);
   const job = useJob(tracked?.jobId ?? null);
@@ -119,7 +121,7 @@ export function JobLine({ slot, onSucceeded, onOpenDraft }: JobLineProps) {
         {data.actor && isOtherActor(data.actor, myId) ? <span className="text-xs text-graphite-300">{data.actor.name}的任务</span> : null}
         <span className="text-xs text-graphite-300 tabular-nums">{attemptsText(data.attempts)}</span>
         {usage ? <span className="text-xs text-graphite-300 tabular-nums">{usage}</span> : null}
-        {data.status === 'succeeded' ? <span className="text-xs text-graphite-300">正在打开草案…</span> : null}
+        {data.status === 'succeeded' ? <span className="text-xs text-graphite-300">{successNote}</span> : null}
         <span className="ml-auto flex items-center gap-1">
           {active ? (
             <Button variant="ghost" size="sm" busy={cancel.isPending} onClick={() => cancel.mutate(data.id)}>

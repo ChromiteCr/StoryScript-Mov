@@ -151,10 +151,15 @@ describe('tips: stale', () => {
 
   it('after the job: says how many shots got nothing usable', () => {
     const [a, b, c] = [uuid(), uuid(), uuid()];
-    const all = tipsByShot({ tips: [aiTip(a), aiTip(b), aiTip(c, { stale: true })] });
-    expect(tipsDoneNotice('1', [a, b, c], all)).toBeNull();
-    const some = tipsByShot({ tips: [aiTip(a), ruleTip(b), ruleTip(c)] });
-    expect(tipsDoneNotice('1', [a, b, c], some)).toBe('第 1 场的拍摄提示已生成；2 个镜头没有拿到可用的提示，仍按镜头字段估计。');
+    const since = '2026-10-12T02:00:00.000Z';
+    const now = { created_at: '2026-10-12T02:00:05.000Z' };
+    const all = tipsByShot({ tips: [aiTip(a, now), aiTip(b, now), aiTip(c, { ...now, stale: true })] });
+    expect(tipsDoneNotice('1', [a, b, c], all, since)).toBeNull();
+    const some = tipsByShot({ tips: [aiTip(a, now), ruleTip(b), ruleTip(c)] });
+    expect(tipsDoneNotice('1', [a, b, c], some, since)).toBe('第 1 场的拍摄提示已生成；2 个镜头没有拿到可用的提示，已略去（保留原来的提示或按镜头字段估计）。');
+    // a shot left out of a re-run keeps its earlier AI tip: still counted as left out
+    const rerun = tipsByShot({ tips: [aiTip(a, now), aiTip(b, now), aiTip(c, { created_at: '2026-10-11T09:00:00.000Z' })] });
+    expect(tipsDoneNotice('1', [a, b, c], rerun, since)).toContain('1 个镜头没有拿到可用的提示');
   });
 });
 

@@ -93,7 +93,8 @@ const GEAR_OF = new Map<string, ShotGear>(Object.entries(GEAR_WORDS).flatMap(([g
 const asText = (v: unknown): unknown => (v == null ? '' : typeof v === 'string' ? v.trim() : v);
 const asList = (v: unknown): unknown => {
   if (v == null) return [];
-  if (typeof v === 'string') return v.split(/[\n；;]+/).map((s) => s.replace(/^\s*(?:\d+[.、)）]|[-•·])\s*/, '').trim()).filter(Boolean);
+  // a list marker is a number followed by . 、 ) — not the 1 of 「1.5 米」
+  if (typeof v === 'string') return v.split(/[\n；;]+/).map((s) => s.replace(/^\s*(?:\d+[.、)）](?!\d)|[-•·])\s*/, '').trim()).filter(Boolean);
   return v;
 };
 
@@ -104,13 +105,27 @@ function normRef(v: unknown): unknown {
   return m ? `s${Number(m[1])}` : v.trim();
 }
 
+/** Gear words mapped to the list; anything off the list is left out (gear may be empty), so one odd word does not sink the scene's answer. */
 function normGear(v: unknown): unknown {
   const list = typeof v === 'string' ? v.split(/[,，、;；\s]+/).filter(Boolean) : v == null ? [] : v;
   if (!Array.isArray(list)) return list;
-  return list.map((g) => (typeof g === 'string' ? (GEAR_OF.get(key(g)) ?? g.trim()) : g));
+  return list.flatMap((g) => {
+    const m = typeof g === 'string' ? GEAR_OF.get(key(g)) : undefined;
+    return m ? [m] : [];
+  });
 }
 
-/** Lenient pre-normalisation before zod: shapes, Chinese words for the enums, a string where a list belongs. */
+function normDifficulty(d: unknown): ShotDifficulty | null {
+  if (typeof d !== 'string') return null;
+  return DIFFICULTY_WORDS[key(d)] ?? DIFFICULTY_WORDS[d.trim()] ?? null;
+}
+
+/**
+ * Lenient pre-normalisation before zod: shapes, Chinese words for the enums, a
+ * string where a list belongs. An item whose difficulty is not one of the
+ * three is left out here (validation then asks for that shot again), so the
+ * other items of the answer stay usable.
+ */
 export function normalizeShotTipsJson(raw: unknown): unknown {
   let list: unknown = raw;
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
@@ -119,18 +134,21 @@ export function normalizeShotTipsJson(raw: unknown): unknown {
   }
   if (!Array.isArray(list)) return raw;
   return {
-    shots: list.map((item) => {
-      if (!item || typeof item !== 'object') return item;
+    shots: list.flatMap((item) => {
+      if (!item || typeof item !== 'object') return [item];
       const it = item as Record<string, unknown>;
-      const d = it.difficulty ?? it.level;
+      const difficulty = normDifficulty(it.difficulty ?? it.level);
+      if (!difficulty) return [];
       const mistake = it.mistake ?? it.common_mistake ?? it.pitfall;
-      return {
-        ref: normRef(it.ref ?? it.shot ?? it.id),
-        difficulty: typeof d === 'string' ? (DIFFICULTY_WORDS[key(d)] ?? DIFFICULTY_WORDS[d.trim()] ?? d.trim()) : d,
-        gear: normGear(it.gear ?? it.equipment),
-        tips: asList(it.tips ?? it.advice),
-        mistake: Array.isArray(mistake) ? asText(mistake[0]) : asText(mistake),
-      };
+      return [
+        {
+          ref: normRef(it.ref ?? it.shot ?? it.id),
+          difficulty,
+          gear: normGear(it.gear ?? it.equipment),
+          tips: asList(it.tips ?? it.advice),
+          mistake: Array.isArray(mistake) ? asText(mistake[0]) : asText(mistake),
+        },
+      ];
     }),
   };
 }

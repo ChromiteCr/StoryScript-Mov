@@ -31,6 +31,8 @@ describe('job polling', () => {
   it('describes attempts, usage and errors in Chinese', () => {
     expect(attemptsText(0)).toBe('尚未外发');
     expect(attemptsText(2)).toContain('2 次');
+    // the demo's replay is not remote: nothing left the machine
+    expect(attemptsText(1, false)).toBe('未外发');
     expect(usageText(null)).toBeNull();
     expect(usageText({ prompt_tokens: 1200, completion_tokens: 300 })).toContain('输入');
     expect(describeJobError({ code: 'ATTEMPTS_EXHAUSTED', message: 'x' })?.title).toContain('最大尝试次数');

@@ -1,5 +1,5 @@
 import { TIP_TEXT_MAX, TIPS_MAX, TIPS_MIN, type ShotFields, type TimeOfDay } from '@storyscript/contracts';
-import { ZH_CAMERA_ANGLE, ZH_LENS_CLASS, ZH_MOVEMENT, ZH_POSE, ZH_PROP_KIND, ZH_SHOT_DIFFICULTY, ZH_SHOT_GEAR, ZH_SHOT_SIZE, ZH_TIME_OF_DAY } from '../i18n/zh.ts';
+import { ZH_CAMERA_ANGLE, ZH_ENV_KIND, ZH_LENS_CLASS, ZH_MOVEMENT, ZH_POSE, ZH_PROP_KIND, ZH_SHOT_DIFFICULTY, ZH_SHOT_GEAR, ZH_SHOT_SIZE, ZH_TIME_OF_DAY } from '../i18n/zh.ts';
 import { ruleTips } from '../shots/tips.ts';
 import type { ChatMessage } from './breakdown.ts';
 
@@ -56,6 +56,7 @@ function shotLine(s: ShotTipsPromptShot, time: TimeOfDay): string {
     `${s.ref} 镜 ${s.code}：${ZH_SHOT_SIZE[f.shot_size]} · ${ZH_CAMERA_ANGLE[f.angle]} · ${lens} · ${ZH_MOVEMENT[f.movement]}`,
     people,
     f.props.length ? `道具 ${f.props.map((p) => ZH_PROP_KIND[p]).join('、')}` : null,
+    f.env ? `环境 ${ZH_ENV_KIND[f.env]}` : null,
     f.set_piece ? '重点段落' : null,
     `动作：${clip(f.action, 40)}`,
     f.dialogue_quote?.trim() ? '有台词' : '无台词',

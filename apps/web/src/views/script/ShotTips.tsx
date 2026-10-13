@@ -1,6 +1,6 @@
 import { useCallback, useId, useMemo, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
-import type { Scene, Shot, ShotTipsView } from '@storyscript/contracts';
+import type { Job, Scene, Shot, ShotTipsView } from '@storyscript/contracts';
 import { RefreshCw, Sparkles } from 'lucide-react';
 import { isTerminalJob, tipsSlot, trackJob, useTrackedJob } from '../../lib/jobs.ts';
 import { useHealth, useJob, useShots } from '../../lib/queries.ts';
@@ -56,9 +56,9 @@ export function ShotTipsGroup({ shot, scene, unsaved }: { shot: Shot; scene: Sce
   const action = tipsAction(tip);
   const blocked = tipsBlockedReason({ ai: ws.ai, shots: sceneShotIds.length, running });
 
-  const onSucceeded = useCallback(async () => {
+  const onSucceeded = useCallback(async (job: Job) => {
     await qc.invalidateQueries({ queryKey: tipsKeys.view });
-    const note = tipsDoneNotice(sceneNo, sceneShotIds, tipsByShot(qc.getQueryData<ShotTipsView>(tipsKeys.view)));
+    const note = tipsDoneNotice(sceneNo, sceneShotIds, tipsByShot(qc.getQueryData<ShotTipsView>(tipsKeys.view)), job.created_at);
     if (note) ws.notify(note);
   }, [qc, sceneNo, sceneShotIds, ws]);
 

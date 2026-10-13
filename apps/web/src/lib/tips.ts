@@ -85,14 +85,22 @@ export function tipsBlockedReason(a: { ai: AiGateLike; shots: number; running: b
 }
 
 /**
- * After the job: 「第 1 场的拍摄提示已生成；2 个镜头没有拿到可用的提示，仍按镜头字段估计。」
- * when some shots of the scene got none (the model's items for them were
- * unusable); null when every shot has the model's tips.
+ * After the job: 「第 1 场的拍摄提示已生成；2 个镜头没有拿到可用的提示，已略去……」
+ * when some shots of the scene got nothing from this job (the model's items
+ * for them were unusable, so they keep their earlier tips or the first
+ * guess); null when every shot got new tips. A tip is this job's when the
+ * model wrote it after the job was created.
  */
-export function tipsDoneNotice(sceneNo: string, shotIds: readonly string[], tips: ReadonlyMap<string, Pick<ShotTip, 'source'>>): string | null {
-  const missing = shotIds.filter((id) => tips.get(id)?.source !== 'ai').length;
+export function tipsDoneNotice(
+  sceneNo: string,
+  shotIds: readonly string[],
+  tips: ReadonlyMap<string, Pick<ShotTip, 'source' | 'created_at'>>,
+  since: string,
+): string | null {
+  const fresh = (t: Pick<ShotTip, 'source' | 'created_at'> | undefined) => t?.source === 'ai' && t.created_at !== null && Date.parse(t.created_at) >= Date.parse(since);
+  const missing = shotIds.filter((id) => !fresh(tips.get(id))).length;
   if (missing === 0) return null;
-  return `第 ${sceneNo} 场的拍摄提示已生成；${missing} 个镜头没有拿到可用的提示，仍按镜头字段估计。`;
+  return `第 ${sceneNo} 场的拍摄提示已生成；${missing} 个镜头没有拿到可用的提示，已略去（保留原来的提示或按镜头字段估计）。`;
 }
 
 // ----------------------------------------------------------------- confirm ---

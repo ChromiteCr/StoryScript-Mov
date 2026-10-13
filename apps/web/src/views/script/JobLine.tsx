@@ -119,7 +119,7 @@ export function JobLine({ slot, onSucceeded, onOpenDraft, successNote = '正在�
           {JOB_KIND_LABEL[data.kind]} {JOB_STATUS_LABEL[data.status]}
         </span>
         {data.actor && isOtherActor(data.actor, myId) ? <span className="text-xs text-graphite-300">{data.actor.name}的任务</span> : null}
-        <span className="text-xs text-graphite-300 tabular-nums">{attemptsText(data.attempts)}</span>
+        <span className="text-xs text-graphite-300 tabular-nums">{attemptsText(data.attempts, data.remote)}</span>
         {usage ? <span className="text-xs text-graphite-300 tabular-nums">{usage}</span> : null}
         {data.status === 'succeeded' ? <span className="text-xs text-graphite-300">{successNote}</span> : null}
         <span className="ml-auto flex items-center gap-1">

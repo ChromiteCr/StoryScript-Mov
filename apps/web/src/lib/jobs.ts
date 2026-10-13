@@ -56,8 +56,9 @@ export function formatProgress(progress: number | null): string | null {
   return `${Math.round(Math.min(1, Math.max(0, progress)) * 100)}%`;
 }
 
-/** "已外发 2 次（每步上限 3 次）" */
-export function attemptsText(attempts: number): string {
+/** "已外发 2 次（每步上限 3 次）"; a job that is not remote (the demo's replay) sent nothing */
+export function attemptsText(attempts: number, remote = true): string {
+  if (!remote) return '未外发';
   return attempts === 0 ? '尚未外发' : `已外发 ${attempts} 次（每步上限 ${MAX_ATTEMPTS} 次）`;
 }
 

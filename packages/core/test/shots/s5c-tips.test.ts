@@ -176,9 +176,13 @@ describe('normalizeShotTipsJson', () => {
     for (const d of ['难', '困难', '较难', '高', 'hard', 'HARD', 'difficult']) expect(one({ difficulty: d }).difficulty, d).toBe('hard');
     // level is another name for it
     expect(one({ difficulty: undefined, level: '难' }).difficulty).toBe('hard');
-    // anything else is left for zod to refuse
-    expect(one({ difficulty: '超难' }).difficulty).toBe('超难');
-    expect(ShotTipsOutput.safeParse(normalizeShotTipsJson({ shots: [{ ...ITEM, difficulty: '超难' }] })).success).toBe(false);
+    // anything else leaves that item out; the rest of the answer stays usable and validation asks for the shot again
+    const out = normalizeShotTipsJson({ shots: [{ ...ITEM, difficulty: '超难' }, { ...ITEM, ref: 's2' }] });
+    const parsed = ShotTipsOutput.safeParse(out);
+    expect(parsed.success).toBe(true);
+    expect(parsed.data!.shots.map((s) => s.ref)).toEqual(['s2']);
+    expect(validateShotTips(parsed.data!, ['s1', 's2']).errors).toEqual([expect.stringContaining('缺少 s1')]);
+    expect((normalizeShotTipsJson({ shots: [{ ...ITEM, difficulty: undefined }] }) as { shots: unknown[] }).shots).toEqual([]);
   });
 
   test('Chinese words for the gear', () => {
@@ -219,9 +223,11 @@ describe('normalizeShotTipsJson', () => {
     expect(one({ gear: undefined, equipment: ['稳定器'] }).gear).toEqual(['gimbal']);
   });
 
-  test('gear not in the list is left for zod to refuse', () => {
-    expect(one({ gear: ['摇臂'] }).gear).toEqual(['摇臂']);
-    expect(ShotTipsOutput.safeParse(normalizeShotTipsJson({ shots: [{ ...ITEM, gear: ['三脚架', '摇臂'] }] })).success).toBe(false);
+  test('gear not in the list is left out, so one odd word does not sink the answer', () => {
+    expect(one({ gear: ['摇臂'] }).gear).toEqual([]);
+    const parsed = ShotTipsOutput.safeParse(normalizeShotTipsJson({ shots: [{ ...ITEM, gear: ['三脚架', '摇臂', 7] }] }));
+    expect(parsed.success).toBe(true);
+    expect(parsed.data!.shots[0]!.gear).toEqual(['tripod']);
   });
 
   test('tips written as one string become a list (numbered lines, bullets, semicolons)', () => {
@@ -230,6 +236,8 @@ describe('normalizeShotTipsJson', () => {
     expect(one({ tips: '- 先对焦\n• 再锁曝光\n· 多拍两条' }).tips).toEqual(['先对焦', '再锁曝光', '多拍两条']);
     expect(one({ tips: '先对焦；再锁曝光;多拍两条' }).tips).toEqual(['先对焦', '再锁曝光', '多拍两条']);
     expect(one({ tips: '\n\n先对焦\n\n' }).tips).toEqual(['先对焦']);
+    // a number that starts the tip is not a list marker
+    expect(one({ tips: '1.5 米高架机位\n2. 锁定对焦' }).tips).toEqual(['1.5 米高架机位', '锁定对焦']);
     // advice is another name for it
     expect(one({ tips: undefined, advice: ['先对焦', '再锁曝光'] }).tips).toEqual(['先对焦', '再锁曝光']);
   });

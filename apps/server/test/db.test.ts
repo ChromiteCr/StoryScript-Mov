@@ -48,6 +48,8 @@ const EXPECTED_TABLES = [
   'paste_segment',
   'paste_applied',
   'todo',
+  // S5c
+  'shot_tip',
 ];
 
 let root: string;

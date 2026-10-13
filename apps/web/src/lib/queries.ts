@@ -8,6 +8,7 @@ import { textNotConfiguredReason, type ModelScope } from './models.ts';
 import { markSaved, markSaveFailed, markSaving } from './saveStatus.ts';
 import { markNoTeam, markSessionExpired } from './session.ts';
 import { mergeShots, reorderLocally } from './shots.ts';
+import { tipsKeys } from './queries-tips.ts';
 import { navigate } from './route.ts';
 
 export const keys = {
@@ -41,7 +42,7 @@ export function refetchOnConflict(qc: QueryClient, root: readonly string[]): (er
 }
 
 /** Query roots that belong to the open project; dropped when it changes. */
-const PROJECT_SCOPED_ROOTS: ReadonlySet<string> = new Set(['script', 'entities', 'shots', 'shot-revisions', 'drafts', 'jobs', 'boards', 'styles']);
+const PROJECT_SCOPED_ROOTS: ReadonlySet<string> = new Set(['script', 'entities', 'shots', 'shot-revisions', 'drafts', 'jobs', 'boards', 'styles', 'tips']);
 
 function dropProjectData(qc: QueryClient): void {
   qc.removeQueries({ predicate: (q) => PROJECT_SCOPED_ROOTS.has(String(q.queryKey[0])) });
@@ -278,6 +279,7 @@ export function useImportScript() {
       qc.setQueryData(keys.script, next);
       void qc.invalidateQueries({ queryKey: keys.scriptVersions });
       void qc.invalidateQueries({ queryKey: keys.shots });
+      void qc.invalidateQueries({ queryKey: tipsKeys.view });
       void qc.invalidateQueries({ queryKey: keys.drafts });
       // S5: the check places its items in the new version
       void qc.invalidateQueries({ queryKey: ['script', 'check'] });
@@ -361,6 +363,8 @@ export function shotsUpdated(qc: QueryClient, updated: readonly Shot[]): void {
   // GET /shots lists live shots only; an archived one leaves the table.
   qc.setQueryData<Shot[]>(keys.shots, (old) => mergeShots(old, updated).filter((s) => !s.archived));
   for (const s of updated) void qc.invalidateQueries({ queryKey: keys.shotRevisions(s.id) });
+  // S5c: an edit can leave the model's tips stale, a new shot gets a first guess (own writes are not refetched by the feed)
+  void qc.invalidateQueries({ queryKey: tipsKeys.view });
 }
 
 export function useCreateShot() {
@@ -454,6 +458,7 @@ export function useApplyBreakdown() {
       saving(() => api.call('applyBreakdown', input, { params: { id } })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: keys.shots });
+      void qc.invalidateQueries({ queryKey: tipsKeys.view });
       void qc.invalidateQueries({ queryKey: keys.drafts });
     },
   });

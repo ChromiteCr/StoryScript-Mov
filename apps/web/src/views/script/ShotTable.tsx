@@ -5,6 +5,8 @@ import { FileSearch, ListChecks, Plus, SlidersHorizontal, Sparkles, Square, Squa
 import { breakdownSlot, POLISH_SLOT, useTrackedJob } from '../../lib/jobs.ts';
 import { canPolish, polishBlockedReason, POLISH_MAX, sceneSelection } from '../../lib/polish.ts';
 import { useSetNarrativeOrder } from '../../lib/queries.ts';
+import { useShotTips } from '../../lib/queries-tips.ts';
+import { hardShotIds } from '../../lib/tips.ts';
 import { groupShotsByScene, moveId, narrativeOrderIds } from '../../lib/shots.ts';
 import { pageHref } from '../../lib/stages.ts';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
@@ -22,9 +24,11 @@ interface SceneGroupProps {
   shots: readonly Shot[];
   relinkOnly: boolean;
   selectedShotId: string | null;
+  /** S5c: shots whose tips say 难 */
+  hardIds: ReadonlySet<string>;
 }
 
-const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selectedShotId }: SceneGroupProps) {
+const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selectedShotId, hardIds }: SceneGroupProps) {
   const ws = useWorkspace();
   const order = useSetNarrativeOrder();
   const tracked = useTrackedJob(breakdownSlot(scene.id));
@@ -137,6 +141,7 @@ const SceneGroup = memo(function SceneGroup({ scene, shots, relinkOnly, selected
               selected={s.id === selectedShotId}
               reorderable={reorderable}
               dropTarget={dragFrom !== null && dragOver === i && dragOver !== dragFrom}
+              hard={hardIds.has(s.id)}
               onMove={move}
               onDragStart={setDragFrom}
               onDragOver={setDragOver}
@@ -172,6 +177,8 @@ export function ShotTable({ shotsQuery, relinkOnly, notice, onDismissNotice }: S
   const polishJob = useTrackedJob(POLISH_SLOT);
   const findDraft = useDraftFinder();
   const live = useMemo(() => (shotsQuery.data ?? []).filter((s) => !s.archived), [shotsQuery.data]);
+  const tips = useShotTips();
+  const hardIds = useMemo(() => hardShotIds(tips.data), [tips.data]);
   const grouped = useMemo(() => groupShotsByScene(live), [live]);
   const sceneIds = useMemo(() => new Set(ws.script.scenes.map((s) => s.id)), [ws.script.scenes]);
   const orphans = useMemo(() => live.filter((s) => !sceneIds.has(s.scene_id)), [live, sceneIds]);
@@ -252,7 +259,7 @@ export function ShotTable({ shotsQuery, relinkOnly, notice, onDismissNotice }: S
         ) : (
           <>
             {ws.script.scenes.map((scene) => (
-              <SceneGroup key={scene.id} scene={scene} shots={grouped.get(scene.id) ?? []} relinkOnly={relinkOnly} selectedShotId={selectedShotId} />
+              <SceneGroup key={scene.id} scene={scene} shots={grouped.get(scene.id) ?? []} relinkOnly={relinkOnly} selectedShotId={selectedShotId} hardIds={hardIds} />
             ))}
             {orphans.length > 0 ? (
               <div className="p-3">

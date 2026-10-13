@@ -58,9 +58,11 @@ export function ShotTipsGroup({ shot, scene, unsaved }: { shot: Shot; scene: Sce
 
   const onSucceeded = useCallback(async (job: Job) => {
     await qc.invalidateQueries({ queryKey: tipsKeys.view });
-    const note = tipsDoneNotice(sceneNo, sceneShotIds, tipsByShot(qc.getQueryData<ShotTipsView>(tipsKeys.view)), job.created_at);
+    // only the shots the job was sent: one made in the scene while it ran was never asked about
+    const sent = (shots.data ?? []).filter((s) => s.scene_id === sceneId && !s.archived && Date.parse(s.created_at) <= Date.parse(job.created_at)).map((s) => s.id);
+    const note = tipsDoneNotice(sceneNo, sent, tipsByShot(qc.getQueryData<ShotTipsView>(tipsKeys.view)), job.created_at);
     if (note) ws.notify(note);
-  }, [qc, sceneNo, sceneShotIds, ws]);
+  }, [qc, sceneNo, sceneId, shots.data, ws]);
 
   const launch = () => {
     start.mutate(sceneId, {

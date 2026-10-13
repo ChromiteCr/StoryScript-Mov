@@ -7,7 +7,7 @@ import { flagFilmClaims } from '../prompt/claims.ts';
  * ruleTips reads a first guess at a shot's difficulty and gear off its fields
  * (no model). A model's answer for a scene is normalised, checked (one item
  * per shot, 2–3 short tips, one common mistake, gear from the list, no film
- * claims) and finalised: usable items kept, long texts cut, the rest dropped.
+ * claims) and finalised: the items that pass are kept, the rest dropped.
  */
 
 export interface RuleTip {
@@ -98,11 +98,21 @@ const asList = (v: unknown): unknown => {
   return v;
 };
 
-function normRef(v: unknown): unknown {
+/**
+ * s1, S1, #1 or 1 → s1. The prompt pairs each position with the shot's code
+ * (「s1 镜 003」), so a ref that is one of the scene's codes means that shot,
+ * not the position with the same number: after a reorder 003 can be s1.
+ */
+function normRef(v: unknown, codes: readonly string[]): unknown {
   if (typeof v === 'number' && Number.isInteger(v)) return `s${v}`;
   if (typeof v !== 'string') return v;
-  const m = /^[#\s]*s?\s*(\d+)\s*$/i.exec(v.trim());
-  return m ? `s${Number(m[1])}` : v.trim();
+  const t = v.trim();
+  const positional = /^[#\s]*s\s*(\d+)\s*$/i.exec(t);
+  if (positional) return `s${Number(positional[1])}`;
+  const at = codes.indexOf(t);
+  if (at >= 0) return `s${at + 1}`;
+  const bare = /^[#\s]*(\d+)\s*$/.exec(t);
+  return bare ? `s${Number(bare[1])}` : t;
 }
 
 /** Gear words mapped to the list; anything off the list is left out (gear may be empty), so one odd word does not sink the scene's answer. */
@@ -115,18 +125,31 @@ function normGear(v: unknown): unknown {
   });
 }
 
+const LEVELS: readonly ShotDifficulty[] = ['easy', 'medium', 'hard'];
+
+/** The three words, then looser ones (较易, 偏难, 中等偏难, medium-hard: the harder word wins), then 1–3. */
 function normDifficulty(d: unknown): ShotDifficulty | null {
+  if (typeof d === 'number') return LEVELS[d - 1] ?? null;
   if (typeof d !== 'string') return null;
-  return DIFFICULTY_WORDS[key(d)] ?? DIFFICULTY_WORDS[d.trim()] ?? null;
+  const exact = DIFFICULTY_WORDS[key(d)] ?? DIFFICULTY_WORDS[d.trim()];
+  if (exact) return exact;
+  const s = key(d);
+  if (/^[123]$/.test(s)) return LEVELS[Number(s) - 1]!;
+  if (/不难/.test(s)) return 'easy';
+  if (/难|hard|difficult/.test(s)) return 'hard';
+  if (/中|一般|medium|moderate|normal/.test(s)) return 'medium';
+  if (/易|简单|easy|simple/.test(s)) return 'easy';
+  return null;
 }
 
 /**
  * Lenient pre-normalisation before zod: shapes, Chinese words for the enums, a
- * string where a list belongs. An item whose difficulty is not one of the
- * three is left out here (validation then asks for that shot again), so the
- * other items of the answer stay usable.
+ * string where a list belongs; `codes` are the scene's shot codes in prompt
+ * order, for a ref written as a code. An item whose difficulty cannot be read
+ * is left out here (validation then asks for that shot again), so the other
+ * items of the answer stay usable.
  */
-export function normalizeShotTipsJson(raw: unknown): unknown {
+export function normalizeShotTipsJson(raw: unknown, codes: readonly string[] = []): unknown {
   let list: unknown = raw;
   if (raw && typeof raw === 'object' && !Array.isArray(raw)) {
     const o = raw as Record<string, unknown>;
@@ -142,7 +165,7 @@ export function normalizeShotTipsJson(raw: unknown): unknown {
       const mistake = it.mistake ?? it.common_mistake ?? it.pitfall;
       return [
         {
-          ref: normRef(it.ref ?? it.shot ?? it.id),
+          ref: normRef(it.ref ?? it.shot ?? it.id, codes),
           difficulty,
           gear: normGear(it.gear ?? it.equipment),
           tips: asList(it.tips ?? it.advice),
@@ -156,7 +179,6 @@ export function normalizeShotTipsJson(raw: unknown): unknown {
 // ------------------------------------------------------------- validate ----
 
 const len = (s: string) => Array.from(s).length;
-const cut = (s: string, max: number) => (len(s) <= max ? s : `${Array.from(s).slice(0, max - 1).join('')}…`);
 const claims = (s: string) => flagFilmClaims(s).length > 0;
 
 /** Repair messages for a scene's answer; empty when it is usable as it is. `refs` are the scene's shots in prompt order. */
@@ -179,7 +201,7 @@ export function validateShotTips(out: ShotTipsOutput, refs: readonly string[]): 
     if ([...tips, it.mistake].some(claims)) errors.push(`${n}：不要写片名、导演或声称某部电影是这样拍的`);
   });
   const missing = refs.filter((r) => !seen.has(r));
-  if (missing.length) errors.push(`缺少 ${missing.join('、')} 的提示：每个镜头恰好一项`);
+  if (missing.length) errors.push(`缺少 ${missing.join('、')} 的提示：每个镜头恰好一项，difficulty 只能是 easy、medium、hard`);
   return { errors };
 }
 
@@ -193,29 +215,39 @@ export interface FinalizedTip {
 
 export interface FinalizedShotTips {
   items: FinalizedTip[];
-  /** items left out (unknown or repeated shot, too few usable tips, no mistake) */
+  /** items left out (unknown or repeated shot, or failing a check of validateShotTips) */
   dropped: number;
   /** shots of the scene without an item */
   missing: string[];
 }
 
-/** What is kept of an answer: one item per known shot, texts cut to the limit, film claims left out. */
+/**
+ * What is kept of an answer once the rounds are used up: the items that pass
+ * the checks of validateShotTips (one per known shot, 2–3 tips and a mistake
+ * within the limit, no film claims). The rest are dropped, never cut or
+ * patched, so their shots keep the earlier tips or the first guess.
+ */
 export function finalizeShotTips(out: ShotTipsOutput, refs: readonly string[]): FinalizedShotTips {
   const known = new Set(refs);
   const kept = new Map<string, FinalizedTip>();
   let dropped = 0;
   for (const it of out.shots) {
-    const tips = it.tips
-      .map((t) => t.trim())
-      .filter((t) => t && !claims(t))
-      .slice(0, TIPS_MAX)
-      .map((t) => cut(t, TIP_TEXT_MAX));
+    const tips = it.tips.map((t) => t.trim()).filter(Boolean);
     const mistake = it.mistake.trim();
-    if (!known.has(it.ref) || kept.has(it.ref) || tips.length < TIPS_MIN || !mistake || claims(mistake)) {
+    const usable =
+      known.has(it.ref) &&
+      !kept.has(it.ref) &&
+      tips.length >= TIPS_MIN &&
+      tips.length <= TIPS_MAX &&
+      tips.every((t) => len(t) <= TIP_TEXT_MAX) &&
+      !!mistake &&
+      len(mistake) <= TIP_TEXT_MAX &&
+      ![...tips, mistake].some(claims);
+    if (!usable) {
       dropped++;
       continue;
     }
-    kept.set(it.ref, { ref: it.ref, difficulty: it.difficulty, gear: [...new Set(it.gear)], tips, mistake: cut(mistake, TIP_TEXT_MAX) });
+    kept.set(it.ref, { ref: it.ref, difficulty: it.difficulty, gear: [...new Set(it.gear)], tips, mistake });
   }
   return { items: refs.filter((r) => kept.has(r)).map((r) => kept.get(r)!), dropped, missing: refs.filter((r) => !kept.has(r)) };
 }

@@ -34,6 +34,7 @@ export function startShotTips(deps: AppDeps, sceneId: string): Job {
   const time = timeOfDay(projectBoardContext(db).timeLabel(sceneId));
   const items = shots.map((s, i) => ({ ref: `s${i + 1}`, code: s.code, fields: s.fields, shot_id: s.id, basis: s.content_hash }));
   const refs = items.map((i) => i.ref);
+  const codes = items.map((i) => i.code);
   const messages = buildShotTipsMessages({ scene: { display_no: scene.display_no, heading: scene.heading }, time, shots: items });
   if (ai.remote) assertJobQuota(deps, db, 'llm');
   return jobs.enqueue({
@@ -49,7 +50,7 @@ export function startShotTips(deps: AppDeps, sceneId: string): Job {
         messages,
         schema: ShotTipsOutput,
         jsonSchemaName: 'shot_tips',
-        preprocess: normalizeShotTipsJson,
+        preprocess: (raw) => normalizeShotTipsJson(raw, codes),
         validate: (p) => {
           const errors = validateShotTips(p, refs).errors;
           return { ok: errors.length === 0, errors: errors.slice(0, REPAIR_ERRORS_MAX) };

@@ -62,6 +62,8 @@ export function Dialog({ onClose, title, description, variant = 'center', footer
       aria-describedby={description ? descId : undefined}
       onCancel={(e) => {
         e.preventDefault();
+        // React bubbles cancel to an enclosing <dialog> (the inspector drawer): Esc closes this one only
+        e.stopPropagation();
         if (!busy) onClose();
       }}
       onClick={(e) => {

@@ -216,7 +216,7 @@ describe('with a text model (the fake service)', () => {
     test('a gear word off the list or an unknown difficulty does not sink the scene: odd gear is left out, that item is asked for again', async () => {
       const odd = structuredClone(TIPS_1) as { shots: Record<string, unknown>[] };
       odd.shots[0]!.gear = ['三脚架', '摇臂'];
-      odd.shots[1]!.difficulty = '超难';
+      odd.shots[1]!.difficulty = '看情况';
       const job = await runTips(odd, TIPS_1);
       expect(job).toMatchObject({ status: 'succeeded', attempts: 2 });
       expect(fake.chatRequests().at(-1)!.body!.messages!.at(-1)!.content).toContain('缺少 s2');

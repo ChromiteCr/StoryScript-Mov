@@ -176,8 +176,12 @@ describe('normalizeShotTipsJson', () => {
     for (const d of ['难', '困难', '较难', '高', 'hard', 'HARD', 'difficult']) expect(one({ difficulty: d }).difficulty, d).toBe('hard');
     // level is another name for it
     expect(one({ difficulty: undefined, level: '难' }).difficulty).toBe('hard');
+    // looser words: the harder one wins; 1–3 as levels
+    for (const [d, want] of [['较易', 'easy'], ['较简单', 'easy'], ['不难', 'easy'], ['偏难', 'hard'], ['中等偏难', 'hard'], ['中等难度', 'hard'], ['中等偏易', 'medium'], ['medium-hard', 'hard'], ['超难', 'hard'], [1, 'easy'], ['2', 'medium'], [3, 'hard']] as const) {
+      expect(one({ difficulty: d }).difficulty, String(d)).toBe(want);
+    }
     // anything else leaves that item out; the rest of the answer stays usable and validation asks for the shot again
-    const out = normalizeShotTipsJson({ shots: [{ ...ITEM, difficulty: '超难' }, { ...ITEM, ref: 's2' }] });
+    const out = normalizeShotTipsJson({ shots: [{ ...ITEM, difficulty: '看情况' }, { ...ITEM, ref: 's2' }] });
     const parsed = ShotTipsOutput.safeParse(out);
     expect(parsed.success).toBe(true);
     expect(parsed.data!.shots.map((s) => s.ref)).toEqual(['s2']);
@@ -419,21 +423,29 @@ describe('finalizeShotTips', () => {
     expect(fin.missing).toEqual(['s2', 's3', 's4']);
   });
 
-  test('texts over 60 characters are cut with …; more than 3 tips keep the first 3', () => {
-    const fin = finalizeShotTips(withItem(clean(1), 0, { tips: [SIXTY_ONE, ` ${SIXTY} `, '三', '四'], mistake: '错'.repeat(80) }), ['s1']);
-    const it = fin.items[0]!;
-    expect(it.tips).toEqual([`${'机'.repeat(TIP_TEXT_MAX - 1)}…`, SIXTY, '三']);
-    expect(Array.from(it.tips[0]!)).toHaveLength(TIP_TEXT_MAX);
-    expect(it.mistake).toBe(`${'错'.repeat(TIP_TEXT_MAX - 1)}…`);
-    expect(Array.from(it.mistake)).toHaveLength(TIP_TEXT_MAX);
+  test('an item that fails a check is dropped, never cut: a text over 60 characters, more than 3 tips', () => {
+    const none = { items: [], dropped: 1, missing: ['s1'] };
+    expect(finalizeShotTips(withItem(clean(1), 0, { tips: [SIXTY_ONE, '三'] }), ['s1'])).toEqual(none);
+    expect(finalizeShotTips(withItem(clean(1), 0, { mistake: '错'.repeat(TIP_TEXT_MAX + 1) }), ['s1'])).toEqual(none);
+    expect(finalizeShotTips(withItem(clean(1), 0, { tips: ['一', '二', '三', '四'] }), ['s1'])).toEqual(none);
+    // exactly 60 characters, padded with spaces, is within the limit
+    const ok = finalizeShotTips(withItem(clean(1), 0, { tips: [` ${SIXTY} `, '三'] }), ['s1']);
+    expect(ok.items[0]!.tips).toEqual([SIXTY, '三']);
   });
 
-  test('tips with a film claim are left out; the item stays when two are left, else it is dropped', () => {
+  test('a film claim in any tip drops the item', () => {
     const three = finalizeShotTips(withItem(clean(1), 0, { tips: ['机位齐眼高', '参考《某片》的开场', '多拍两条'] }), ['s1']);
-    expect(three.items[0]!.tips).toEqual(['机位齐眼高', '多拍两条']);
-    expect(three.dropped).toBe(0);
-    const two = finalizeShotTips(withItem(clean(1), 0, { tips: ['机位齐眼高', '在电影里这一段是长镜头'] }), ['s1']);
-    expect(two).toEqual({ items: [], dropped: 1, missing: ['s1'] });
+    expect(three).toEqual({ items: [], dropped: 1, missing: ['s1'] });
+  });
+
+  test('a ref written as one of the scene\'s codes means that shot, not the position with the same number', () => {
+    const ITEM = { ref: 's1', difficulty: 'easy', gear: ['tripod'], tips: ['机位放在桌边', '对焦锁在脸上'], mistake: '曝光跳动' };
+    const codes = ['003', '001', '002'];
+    const out = normalizeShotTipsJson({ shots: [{ ...ITEM, ref: '003' }, { ...ITEM, ref: '001' }, { ...ITEM, ref: 's3' }] }, codes) as { shots: { ref: string }[] };
+    expect(out.shots.map((s) => s.ref)).toEqual(['s1', 's2', 's3']);
+    // without the codes (or for a number that is no code) it is a position
+    expect((normalizeShotTipsJson({ shots: [{ ...ITEM, ref: '003' }] }) as { shots: { ref: string }[] }).shots[0]!.ref).toBe('s3');
+    expect((normalizeShotTipsJson({ shots: [{ ...ITEM, ref: '7' }] }, codes) as { shots: { ref: string }[] }).shots[0]!.ref).toBe('s7');
   });
 
   test('blank tips are left out; gear is de-duplicated in its order', () => {

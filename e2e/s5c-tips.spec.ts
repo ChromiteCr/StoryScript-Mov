@@ -17,7 +17,8 @@ import { api, signInAnywhere, startApp, type RunningApp } from './support.ts';
  *    lists the tipped shots in shooting order, the changed one 可能过时;
  *  - 重新生成本场 clears the stale notice;
  *  - a scene without a recording fails with its reason and can be retried;
- *  - at phone width the shot editor drawer with tips does not scroll sideways.
+ *  - at phone width the shot editor drawer with tips does not scroll sideways,
+ *    and Esc on the confirmation leaves the drawer open.
  */
 
 let app: RunningApp;
@@ -261,6 +262,13 @@ test('S5c: 拍摄提示 — first guess, recorded tips, stale after an edit, 难
     const box = await phoneTips.boundingBox();
     expect(box!.x).toBeGreaterThanOrEqual(0);
     expect(box!.x + box!.width).toBeLessThanOrEqual(PHONE.width);
+    // Esc closes the confirmation only, not the shot drawer around it
+    await phoneTips.getByRole('button', { name: 'AI 生成本场拍摄提示' }).click();
+    const confirm = page.getByRole('dialog', { name: /生成本场拍摄提示/ });
+    await expect(confirm).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(confirm).toHaveCount(0);
+    await expect(phoneTips).toBeVisible();
     await page.setViewportSize(DESKTOP);
   });
 

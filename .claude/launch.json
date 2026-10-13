@@ -4,8 +4,31 @@
     {
       "name": "storyscript-dev",
       "runtimeExecutable": "npx",
-      "runtimeArgs": ["tsx", "apps/server/src/cli.ts", "start", "--dev", "--port", "4700", "--no-open"],
+      "runtimeArgs": [
+        "tsx",
+        "apps/server/src/cli.ts",
+        "start",
+        "--dev",
+        "--port",
+        "4700",
+        "--no-open"
+      ],
       "port": 4700
+    },
+    {
+      "name": "storyscript-demo",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": [
+        "tsx",
+        "apps/server/src/cli.ts",
+        "start",
+        "--dev",
+        "--demo",
+        "--port",
+        "4701",
+        "--no-open"
+      ],
+      "port": 4701
     }
   ]
 }

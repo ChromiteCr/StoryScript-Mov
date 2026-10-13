@@ -39,6 +39,16 @@ export function scriptReplayKey(paragraphs: readonly { text: string }[]): string
   return contentHash(['script', paragraphs.map((p) => normalizeForMatch(p.text))]);
 }
 
+/**
+ * Replay key of a scene's shot tips (S5c): the normalised heading and the shot
+ * codes in prompt order. The model names shots only by their position (s1 …),
+ * so a recording means the same thing only for the same shots; after an edit
+ * to the shot list the lookup misses instead of replaying tips for other shots.
+ */
+export function tipsReplayKey(heading: string, codes: readonly string[]): string {
+  return contentHash(['tips', normalizeForMatch(heading), [...codes]]);
+}
+
 /** Replay key of one pasted segment (S5a): hash of its normalised text. */
 export function pasteReplayKey(text: string): string {
   return contentHash(['paste', normalizeForMatch(text)]);

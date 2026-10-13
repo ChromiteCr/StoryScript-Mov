@@ -18,6 +18,7 @@ import { Take, TakeRating } from './take.ts';
 import { ScriptCheckView, ScriptRisk, SetRiskHandledInput } from './check.ts';
 import { SaveUsagePriceInput, UsagePrice, UsageReport } from './usage.ts';
 import { ApplyPasteInput, ApplyPasteResult, CreatePasteInput, CreateTodoInput, PasteNoteSummary, PasteNoteView, Todo, UpdateTodoInput } from './paste.ts';
+import { ShotTipsView } from './tips.ts';
 
 /**
  * Local REST API (prefix /api/v1). Internal, not a stable public API.
@@ -829,6 +830,9 @@ export const Api = {
   createTodo: { method: 'POST', path: '/api/v1/todos', input: CreateTodoInput, output: Todo },
   updateTodo: { method: 'PATCH', path: '/api/v1/todos/:id', input: UpdateTodoInput, output: Todo },
   deleteTodo: { method: 'DELETE', path: '/api/v1/todos/:id', output: z.object({ id: Uuid }) },
+  // S5c — shot tips
+  getShotTips: { method: 'GET', path: '/api/v1/tips', output: ShotTipsView },
+  startShotTips: { method: 'POST', path: '/api/v1/scenes/:id/tips', output: JobAccepted },
 
   // M3 — jobs
   getJob: { method: 'GET', path: '/api/v1/jobs/:id', output: Job },

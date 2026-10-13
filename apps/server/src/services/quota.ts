@@ -10,7 +10,7 @@ import { AppError } from '../http/errors.ts';
  * no cap.
  */
 
-export const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order', 'research_style', 'polish_shots', 'check_script', 'organize_paste'] as const;
+export const LLM_JOB_KINDS = ['extract_entities', 'breakdown_scene', 'suggest_order', 'research_style', 'polish_shots', 'check_script', 'organize_paste', 'shot_tips'] as const;
 export const IMAGE_JOB_KINDS = ['image_redraw'] as const;
 const DAY_MS = 24 * 3600 * 1000;
 

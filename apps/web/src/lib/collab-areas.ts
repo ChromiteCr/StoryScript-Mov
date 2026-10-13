@@ -17,6 +17,8 @@ export const AREA_ROOTS: Readonly<Record<CollabArea, readonly QueryRoot[]>> = {
   shots: [
     ['shots'],
     ['shot-revisions'],
+    // S5c: tips follow shot edits (stale) and the shot_tips job
+    ['tips'],
     ['boards', 'shots'],
     ['plan', 'shots'],
     ['m6', 'shots'],

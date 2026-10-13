@@ -11,6 +11,7 @@ export * from './prompt/claims.ts';
 export * from './prompt/image.ts';
 export * from './prompt/check.ts';
 export * from './prompt/paste.ts';
+export * from './prompt/tips.ts';
 export * from './media/probe-normalize.ts';
 export * from './schedule/index.ts';
 export * from './coverage/index.ts';
@@ -36,6 +37,7 @@ export * from './shots/validate.ts';
 export * from './shots/hash.ts';
 export * from './shots/eval-score.ts';
 export * from './shots/variety.ts';
+export * from './shots/tips.ts';
 export { padControlSvg, rasterPostSvg, RASTER_LEVELS, RASTER_POST_VERSION, type Box as ControlBox, type RasterPostInput } from './board/control.ts';
 
 // S1b: in-browser media facts

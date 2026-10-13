@@ -1,0 +1,76 @@
+{
+  "format": "storyscript-replay-v1",
+  "prompt_version": "tips-v1",
+  "key": "1f80d0187ad1fd1afe93b6c64bd4",
+  "origin": "handwritten",
+  "output_json": {
+    "shots": [
+      {
+        "ref": "s1",
+        "difficulty": "medium",
+        "gear": [
+          "gimbal",
+          "light"
+        ],
+        "tips": [
+          "拿稳定器跟在两人身后一步，膝盖微弯，脚跟先着地",
+          "先空走两遍熟悉路线，挪开纸箱留出机位通道",
+          "布帘后面光线暗，提前在后屋放一盏补光灯"
+        ],
+        "mistake": "跟得太近，布帘甩到了镜头上"
+      },
+      {
+        "ref": "s2",
+        "difficulty": "easy",
+        "gear": [
+          "tripod",
+          "phone_lens"
+        ],
+        "tips": [
+          "镜头正对照片，避免相框玻璃反出拍摄的人和窗",
+          "从侧面打光，比正面打光更能看出照片褪色的质感"
+        ],
+        "mistake": "相框玻璃反光，照片里映出手机和人影"
+      },
+      {
+        "ref": "s3",
+        "difficulty": "medium",
+        "gear": [
+          "slider"
+        ],
+        "tips": [
+          "从照片全貌慢慢推到两张脸，时长控制在四五秒",
+          "推近后颗粒会变明显，手动对焦锁在脸上",
+          "再拍一条不推的固定镜头备用"
+        ],
+        "mistake": "推到最后焦点跑掉，照片上的脸是糊的"
+      },
+      {
+        "ref": "s4",
+        "difficulty": "medium",
+        "gear": [
+          "tripod",
+          "external_mic",
+          "boom"
+        ],
+        "tips": [
+          "后屋纸箱多、回声少，收音杆可以离人近一点",
+          "两人之间留出半个身位，不要一个人挡住另一个"
+        ],
+        "mistake": "两人站成一条线，后面那个人只露出半张脸"
+      },
+      {
+        "ref": "s5",
+        "difficulty": "easy",
+        "gear": [
+          "tripod"
+        ],
+        "tips": [
+          "演员转身去搬纸箱时背对镜头，动作比台词更有分量",
+          "纸箱里提前装半箱书，搬起来才有真实的重量"
+        ],
+        "mistake": "空纸箱拿起来太轻，动作显得假"
+      }
+    ]
+  }
+}

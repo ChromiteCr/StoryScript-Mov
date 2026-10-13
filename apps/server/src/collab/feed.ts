@@ -91,6 +91,8 @@ export const AREA_OF: Record<WriteRoute, readonly CollabArea[] | 'ignore'> = {
   createTodo: ['plan'],
   updateTodo: ['plan'],
   deleteTodo: ['plan'],
+  // S5c
+  startShotTips: ['jobs'],
   cancelJob: ['jobs'],
   createResource: ['plan'],
   updateResource: ['plan'],
@@ -171,6 +173,7 @@ export const JOB_AREAS: Record<JobKind, readonly CollabArea[]> = {
   polish_shots: ['jobs', 'drafts'],
   check_script: ['jobs', 'script'],
   organize_paste: ['jobs', 'drafts'],
+  shot_tips: ['jobs', 'shots'],
 };
 
 const ALL_AREAS: readonly CollabArea[] = [

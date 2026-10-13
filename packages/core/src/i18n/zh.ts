@@ -15,6 +15,8 @@ import type {
   Pose,
   PropKind,
   ScreenPos,
+  ShotDifficulty,
+  ShotGear,
   ShotSize,
   SubjectMotion,
   TimeOfDay,
@@ -96,6 +98,23 @@ export const ZH_EMOTION: Record<Emotion, string> = {
   afraid: '害怕',
   surprised: '吃惊',
   tense: '紧张',
+};
+
+/** S5c */
+export const ZH_SHOT_DIFFICULTY: Record<ShotDifficulty, string> = { easy: '易', medium: '中', hard: '难' };
+
+/** S5c */
+export const ZH_SHOT_GEAR: Record<ShotGear, string> = {
+  tripod: '三脚架',
+  gimbal: '稳定器',
+  slider: '滑轨',
+  external_mic: '外接麦',
+  boom: '收音杆',
+  light: '补光灯',
+  reflector: '反光板',
+  phone_lens: '手机外接镜头',
+  drone: '无人机',
+  car_mount: '车载支架',
 };
 
 /** S5b */

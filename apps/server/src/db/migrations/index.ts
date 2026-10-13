@@ -9,6 +9,7 @@ import { REVISIONS_SQL } from './005_revisions.ts';
 import { COMMENTS_SQL } from './006_comments.ts';
 import { SCRIPT_CHECK_SQL } from './007_script_check.ts';
 import { PASTE_TODO_SQL } from './008_paste_todo.ts';
+import { SHOT_TIPS_SQL } from './009_shot_tips.ts';
 
 /**
  * Hand-written SQL migrations, embedded as TS strings so the bundle carries them.
@@ -31,6 +32,7 @@ export const MIGRATIONS: readonly Migration[] = [
   { version: 6, name: '006_comments', sql: COMMENTS_SQL },
   { version: 7, name: '007_script_check', sql: SCRIPT_CHECK_SQL },
   { version: 8, name: '008_paste_todo', sql: PASTE_TODO_SQL },
+  { version: 9, name: '009_shot_tips', sql: SHOT_TIPS_SQL },
 ];
 
 export const LATEST_VERSION = MIGRATIONS[MIGRATIONS.length - 1]!.version;

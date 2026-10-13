@@ -17,5 +17,6 @@ export * from './job.ts';
 export * from './check.ts';
 export * from './usage.ts';
 export * from './paste.ts';
+export * from './tips.ts';
 export * from './project.ts';
 export * from './api.ts';

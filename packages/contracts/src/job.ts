@@ -25,6 +25,8 @@ export const JobKind = z.enum([
   'polish_shots',
   'check_script',
   'organize_paste',
+  // S5c
+  'shot_tips',
 ]);
 export type JobKind = z.infer<typeof JobKind>;
 

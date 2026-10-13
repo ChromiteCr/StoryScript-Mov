@@ -6,6 +6,7 @@ import { ANGLE_LABEL, LENS_LABEL, MOVEMENT_LABEL, QUOTE_MATCH_LABEL, REQUIRED_ST
 import { polishAiReason } from '../../lib/polish.ts';
 import { useArchiveShot, useSetRequirement, useUpdateShot } from '../../lib/queries.ts';
 import { sourceState } from '../../lib/shots.ts';
+import { DIFFICULTY_LABEL, difficultyText } from '../../lib/tips.ts';
 import { CommentBadge } from '../../components/CommentsPanel.tsx';
 import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Menu, type MenuItem } from '../../components/Menu.tsx';
@@ -87,6 +88,17 @@ function CodeCell({ shot }: { shot: Shot }) {
   );
 }
 
+/** S5c: only hard shots are marked, next to the code; easy and medium say nothing. */
+function HardBadge() {
+  const text = difficultyText('hard');
+  return (
+    <Tag tone="warn" title={text}>
+      <span aria-hidden>{DIFFICULTY_LABEL.hard}</span>
+      <span className="sr-only">{text}</span>
+    </Tag>
+  );
+}
+
 function SourceCell({ shot }: { shot: Shot }) {
   const ws = useWorkspace();
   const s = sourceState(shot);
@@ -134,6 +146,8 @@ export interface ShotRowProps {
   selected: boolean;
   reorderable: boolean;
   dropTarget: boolean;
+  /** S5c: the shot's tips say 难 */
+  hard?: boolean;
   onMove: (from: number, to: number) => void;
   onDragStart: (index: number) => void;
   onDragOver: (index: number) => void;
@@ -148,6 +162,7 @@ export const ShotRow = memo(function ShotRow({
   selected,
   reorderable,
   dropTarget,
+  hard = false,
   onMove,
   onDragStart,
   onDragOver,
@@ -312,6 +327,7 @@ export const ShotRow = memo(function ShotRow({
       <div className="min-w-0">
         <div className="flex min-w-0 items-center gap-2">
           <CodeCell key={shot.code} shot={shot} />
+          {hard ? <HardBadge /> : null}
           <Spec shot={shot} />
           <span className="ml-auto shrink-0 text-xs text-graphite-300 tabular-nums">{Number.isFinite(f.est_seconds) ? `${f.est_seconds} 秒` : ''}</span>
         </div>

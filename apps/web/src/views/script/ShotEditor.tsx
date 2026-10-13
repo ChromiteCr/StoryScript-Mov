@@ -51,6 +51,7 @@ import { Button, IconButton, Notice, SelectInput, Tag, TextArea, TextInput } fro
 import { FormRow } from './SceneInspector.tsx';
 import { useWorkspace } from './context.ts';
 import { useGoneShotId } from './goneShot.ts';
+import { ShotTipsGroup } from './ShotTips.tsx';
 
 /**
  * Shot inspector: every ShotFields field (enums as Chinese dropdowns), saved
@@ -494,6 +495,9 @@ export function ShotEditor({ target }: { target: EditorTarget }) {
             <p className="text-xs text-graphite-300">手工镜头不需要模型，镜号留空时自动分配。</p>
           </Group>
         )}
+
+        {/* S5c: hints only, outside the fieldset (a locked shot still gets tips) */}
+        {base && !gone ? <ShotTipsGroup shot={base} scene={scene} unsaved={dirty} /> : null}
 
         <fieldset disabled={locked || pending} className="min-w-0 divide-y divide-graphite-800">
           <Group title="编号与构图">

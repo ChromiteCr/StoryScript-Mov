@@ -1,9 +1,13 @@
+import { useId, useMemo, useState } from 'react';
 import { ArrowLeft, Printer } from 'lucide-react';
 import type { PlanDetail } from '@storyscript/contracts';
+import { ErrorNotice } from '../../components/ErrorNotice.tsx';
 import { Button } from '../../components/ui.tsx';
 import { PaperCanvas } from '../../components/workspace.tsx';
 import { OUTCOME, UNPLACED_TEXT, approvalState } from '../../lib/labels-plan.ts';
-import { callSheetRows, isIdle, localTime, slateCards, type PlanLookup } from '../../lib/print-plan.ts';
+import { callSheetRows, isIdle, localTime, shotsInShootingOrder, slateCards, type PlanLookup } from '../../lib/print-plan.ts';
+import { useShotTips } from '../../lib/queries-tips.ts';
+import { tipsAppendix, tipsByShot } from '../../lib/tips.ts';
 import type { PlanData } from './data.ts';
 
 /**
@@ -122,6 +126,84 @@ export function UnplacedList({ detail, lookup }: { detail: PlanDetail; lookup: P
   );
 }
 
+/**
+ * S5c 附拍摄提示: after the call sheet, the model's tips for the plan's shots
+ * in the order the call sheet shoots them. Shots with only the first guess
+ * (no model tips) are left out and counted under the table.
+ */
+export function TipsAppendixSheet({ detail, lookup }: { detail: PlanDetail; lookup: PlanLookup }) {
+  const view = useShotTips();
+  const titleId = useId();
+  const appendix = useMemo(() => tipsAppendix(shotsInShootingOrder(detail.plan), lookup, tipsByShot(view.data)), [detail.plan, lookup, view.data]);
+  const { rows, without } = appendix;
+  return (
+    <section aria-labelledby={titleId} className="mt-8 border-t border-ink/30 pt-3">
+      <h3 id={titleId} className="text-base font-medium text-ink break-after-avoid">
+        附：拍摄提示
+      </h3>
+      <p className="text-xs text-ink/75 break-after-avoid">按拍摄顺序；提示由 AI 按镜头字段生成，只作参考。</p>
+      {view.isPending ? (
+        <p className="py-3 text-sm text-ink/75 print:hidden">正在读取拍摄提示…</p>
+      ) : view.isError ? (
+        <div className="py-3 print:hidden">
+          <ErrorNotice error={view.error} />
+        </div>
+      ) : rows.length === 0 ? (
+        <p className="py-3 text-sm text-ink/75">计划里的镜头还没有 AI 拍摄提示。可以在剧本页的镜头编辑器里按场生成。</p>
+      ) : (
+        <div className="-mx-1 mt-2 overflow-x-auto px-1 print:overflow-visible">
+          <table className="w-full min-w-[560px] border-collapse text-sm text-ink print:min-w-0">
+            <thead>
+              <tr className="border-b border-ink/40 text-left text-xs text-ink/75">
+                <th scope="col" className="py-1.5 pr-3 font-medium whitespace-nowrap">
+                  镜号
+                </th>
+                <th scope="col" className="py-1.5 pr-3 font-medium whitespace-nowrap">
+                  难度
+                </th>
+                <th scope="col" className="w-[7.5rem] py-1.5 pr-3 font-medium">
+                  器材
+                </th>
+                <th scope="col" className="py-1.5 pr-3 font-medium">
+                  提示
+                </th>
+                <th scope="col" className="w-[26%] py-1.5 font-medium">
+                  常见失误
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.shot_id} className="break-inside-avoid border-b border-ink/15 align-top">
+                  <td className="py-1.5 pr-3 tabular-nums">
+                    <span className="whitespace-nowrap">{r.ref}</span>
+                    {r.stale ? (
+                      <span className="block text-xs whitespace-nowrap text-ink/60" title="镜头改过，提示可能过时">
+                        可能过时
+                      </span>
+                    ) : null}
+                  </td>
+                  <td className="py-1.5 pr-3 whitespace-nowrap">{r.difficulty}</td>
+                  <td className="py-1.5 pr-3">{r.gear}</td>
+                  <td className="py-1.5 pr-3">
+                    <ol className="list-decimal pl-4">
+                      {r.tips.map((t, i) => (
+                        <li key={i}>{t}</li>
+                      ))}
+                    </ol>
+                  </td>
+                  <td className="py-1.5">{r.mistake}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {without > 0 && rows.length > 0 ? <p className="mt-2 text-xs text-ink/60">另有 {without} 个镜头还没有 AI 拍摄提示，未列出。</p> : null}
+    </section>
+  );
+}
+
 function SlateCardsSheet({ data, detail, lookup }: { data: PlanData; detail: PlanDetail; lookup: PlanLookup }) {
   const cards = slateCards(detail.plan, lookup, data.project.code_format);
   if (cards.length === 0) return <p className="text-sm text-ink/75">计划里没有排入的镜头，没有可打印的打板卡。</p>;
@@ -179,6 +261,8 @@ export function PrintPreview({
   backLabel?: string;
 }) {
   const title = mode === 'callsheet' ? '拍摄单' : '打板卡';
+  // S5c: off by default; the appendix prints after the call sheet
+  const [withTips, setWithTips] = useState(false);
   return (
     <div className="flex min-h-full flex-col gap-1 p-1 print:block print:p-0">
       <div className="flex flex-wrap items-center gap-2 rounded-panel bg-graphite-900 px-2 py-1.5 print:hidden">
@@ -190,10 +274,18 @@ export function PrintPreview({
           {title}打印预览 · {detail.plan.date}
         </h1>
         <p className="min-w-0 text-xs text-graphite-300">用浏览器打印；需要 PDF 时在打印对话框里选"存储为 PDF"。</p>
-        <Button size="sm" variant="primary" className="ml-auto" onClick={() => window.print()}>
-          <Printer aria-hidden className="size-3.5" />
-          打印
-        </Button>
+        <span className="ml-auto flex items-center gap-3">
+          {mode === 'callsheet' ? (
+            <label className="flex items-center gap-1.5 text-xs text-graphite-100" title="在拍摄单后面按拍摄顺序附上每个镜头的难度、器材、实拍提示和常见失误">
+              <input type="checkbox" checked={withTips} onChange={(e) => setWithTips(e.target.checked)} className="size-3.5 accent-graphite-100" />
+              附拍摄提示
+            </label>
+          ) : null}
+          <Button size="sm" variant="primary" onClick={() => window.print()}>
+            <Printer aria-hidden className="size-3.5" />
+            打印
+          </Button>
+        </span>
       </div>
       <div className="mx-auto w-full max-w-[860px] print:max-w-none">
         <PaperCanvas variant="fill" label={`${title}（打印预览）`}>
@@ -207,6 +299,7 @@ export function PrintPreview({
               <p className="mt-6 text-xs text-ink/60">
                 修订 r{detail.plan.revision} · 结果：{OUTCOME[detail.plan.result.outcome].label} · 生成于 {localTime(detail.plan.updated_at, detail.plan.timezone, detail.plan.date)}
               </p>
+              {withTips ? <TipsAppendixSheet detail={detail} lookup={lookup} /> : null}
             </>
           ) : (
             <>

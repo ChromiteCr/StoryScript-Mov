@@ -145,3 +145,5 @@ export const ENTITIES_SLOT = 'entities';
 export const STYLE_RESEARCH_SLOT = 'style-research';
 /** the AI polish job of the shot table (S3a) */
 export const POLISH_SLOT = 'polish';
+/** the shot tips job of a scene (S5c), followed in the shot editor */
+export const tipsSlot = (sceneId: string) => `tips:${sceneId}`;

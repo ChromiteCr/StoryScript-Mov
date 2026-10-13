@@ -41,6 +41,7 @@ import { mediaKeys } from '../src/lib/queries-media.ts';
 import { planKeys } from '../src/lib/queries-plan.ts';
 import { rasterKeys } from '../src/lib/queries-raster.ts';
 import { styleKeys } from '../src/lib/queries-style.ts';
+import { tipsKeys } from '../src/lib/queries-tips.ts';
 import { keys } from '../src/lib/queries.ts';
 import { DUR_KEYS, setupCommit, setupForm } from '../src/lib/setup-form.ts';
 import { hasConflict, isDirty, rebasedInit, rebasedReduce, type RebasedAction, type RebasedState } from '../src/lib/useRebasedForm.ts';
@@ -90,7 +91,7 @@ describe('area → query roots', () => {
   it('covers every query key the app uses', () => {
     const cases: [string, readonly unknown[]][] = [];
     const add = (name: string, k: unknown) => cases.push([name, (typeof k === 'function' ? (k as (...a: string[]) => unknown[])('x', 'y', 'z') : k) as unknown[]]);
-    const sources: Record<string, Record<string, unknown>> = { keys, planKeys, boardKeys, mediaKeys, deliverKeys, styleKeys, castKeys, rasterKeys, checkKeys, pasteKeys };
+    const sources: Record<string, Record<string, unknown>> = { keys, planKeys, boardKeys, mediaKeys, deliverKeys, styleKeys, castKeys, rasterKeys, checkKeys, pasteKeys, tipsKeys };
     for (const [group, obj] of Object.entries(sources)) {
       for (const [name, k] of Object.entries(obj)) {
         if (name === 'all' || name === 'plan') continue; // whole-page prefixes, not queries
